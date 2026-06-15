@@ -1,0 +1,37 @@
+{
+  "name": "muteval",
+  "version": "0.0.1",
+  "description": "Mutation testing for LLM eval suites — measure whether your evals would actually catch a regression. JS/TS port in progress; Python package available now.",
+  "keywords": [
+    "llm",
+    "evals",
+    "evaluation",
+    "mutation-testing",
+    "testing",
+    "prompt-engineering",
+    "ai",
+    "llmops"
+  ],
+  "license": "Apache-2.0",
+  "author": "Ashwin Ugale",
+  "homepage": "https://github.com/AshwinUgale/muteval#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AshwinUgale/muteval.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AshwinUgale/muteval/issues"
+  },
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node -e \"require('./index.js'); console.log('ok')\""
+  }
+}
