@@ -1,0 +1,73 @@
+from muteval import MutEvalConfig, run_mutation_testing
+
+
+def _make_config(evals, eval_names):
+    prompt = (
+        "You are a support bot.\n"
+        "- You must always cite the order ID.\n"
+        "- Do not promise refunds.\n"
+    )
+
+    def run(p, case):
+        out = []
+        if "must always cite the order id" in p.lower():
+            out.append(f"order {case['order_id']}")
+        if "do not promise refunds" in p.lower():
+            out.append("no refund promised")
+        else:
+            out.append("refund promised")
+        return " ".join(out)
+
+    return MutEvalConfig(
+        prompt=prompt,
+        cases=[{"input": "hi", "order_id": "X1"}],
+        run=run,
+        evals=evals,
+        eval_names=eval_names,
+    )
+
+
+def test_baseline_passes_when_evals_match_prompt():
+    cfg = _make_config(
+        evals=[lambda o, c: c["order_id"] in o],
+        eval_names=["cites_order_id"],
+    )
+    result = run_mutation_testing(cfg)
+    assert result.baseline_passed is True
+
+
+def test_strong_eval_kills_the_relevant_mutant():
+    # An eval that checks order-id citation should KILL the mutant that
+    # weakens the "must always cite" instruction.
+    cfg = _make_config(
+        evals=[lambda o, c: c["order_id"] in o],
+        eval_names=["cites_order_id"],
+    )
+    result = run_mutation_testing(cfg)
+    assert result.killed >= 1
+    assert 0.0 <= result.score <= 1.0
+
+
+def test_missing_eval_leaves_a_survivor():
+    # With NO eval for the refund behavior, the mutant that deletes
+    # "Do not promise refunds" must SURVIVE.
+    cfg = _make_config(
+        evals=[lambda o, c: bool(o.strip())],  # only checks non-empty
+        eval_names=["is_nonempty"],
+    )
+    result = run_mutation_testing(cfg)
+    assert len(result.survivors) >= 1
+    # A weak suite should score below perfect.
+    assert result.score < 1.0
+
+
+def test_score_is_one_when_no_mutants():
+    cfg = MutEvalConfig(
+        prompt="short",  # too short to mutate meaningfully
+        cases=[{"x": 1}],
+        run=lambda p, c: "ok",
+        evals=[lambda o, c: True],
+    )
+    result = run_mutation_testing(cfg)
+    # No mutants -> nothing to catch -> score defined as 1.0
+    assert result.score == 1.0
