@@ -71,3 +71,24 @@ def test_score_is_one_when_no_mutants():
     result = run_mutation_testing(cfg)
     # No mutants -> nothing to catch -> score defined as 1.0
     assert result.score == 1.0
+
+
+def test_eval_exception_is_contained_not_fatal():
+    # A flaky eval (timeout/API error) must mark the mutant errored and let the
+    # run finish, not crash the whole process.
+    def boom(output, case):
+        raise RuntimeError("api timeout")
+
+    cfg = MutEvalConfig(
+        prompt="You are a bot.\n- You must cite the order ID.\n- Do not lie.",
+        cases=[{"order_id": "X1"}],
+        run=lambda p, c: "order X1",
+        evals=[boom],
+        eval_names=["boom"],
+    )
+    result = run_mutation_testing(cfg)  # must NOT raise
+    assert result.baseline_error is not None
+    assert result.errored == result.total
+    assert result.evaluated == 0
+    # Errored mutants are excluded from the score denominator.
+    assert result.score == 1.0

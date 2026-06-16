@@ -19,7 +19,14 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     lines.append(c("muteval — mutation testing for your eval suite", "1"))
     lines.append("")
 
-    if not result.baseline_passed:
+    if result.baseline_error:
+        lines.append(c(f"⚠  Baseline ERRORED: {result.baseline_error}", "33"))
+        lines.append(
+            "   The eval suite raised on the original prompt; results below may "
+            "be unreliable."
+        )
+        lines.append("")
+    elif not result.baseline_passed:
         lines.append(
             c(
                 "⚠  Baseline FAILED: your eval suite does not pass on the "
@@ -42,13 +49,23 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     lines.append(
         f"Mutation score: {c(f'{pct:.0f}%', score_color)}  "
         f"[{_bar(result.score)}]  "
-        f"({result.killed}/{result.total} mutants killed)"
+        f"({result.killed}/{result.evaluated} mutants killed)"
     )
+    if result.errored:
+        lines.append(
+            c(
+                f"   {result.errored} mutant(s) errored and were excluded "
+                "(e.g. API timeouts). Re-run to retry them.",
+                "33",
+            )
+        )
     lines.append("")
 
     survivors = result.survivors
     if not survivors:
-        lines.append(c("✓ No survivors — your evals caught every injected regression.", "32"))
+        lines.append(
+            c("✓ No survivors — your evals caught every injected regression.", "32")
+        )
         return "\n".join(lines)
 
     lines.append(
