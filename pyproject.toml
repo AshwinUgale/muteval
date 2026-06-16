@@ -38,6 +38,7 @@ Issues = "https://github.com/AshwinUgale/muteval/issues"
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 examples = ["openai>=1.0"]
+deepeval = ["deepeval>=1.0"]
 
 [project.scripts]
 muteval = "muteval.cli:main"

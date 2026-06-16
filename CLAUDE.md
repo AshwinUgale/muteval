@@ -60,15 +60,20 @@ your system; muteval mutates your system to test your evals."
 ## Repo layout
 
 - `pyproject.toml`, `src/muteval/` — the real Python package.
-  - `mutators.py` — mutation operators (weaken_modals, drop_instruction_lines,
-    delete_sentences). Registered in the `OPERATORS` dict.
+  - `mutators.py` — 7 mutation operators (weaken_modals, flip_negation,
+    drop_instruction_lines, delete_sentences, truncate_prompt,
+    drop_few_shot_example, remove_emphasis). Registered in `OPERATORS`.
+  - `adapters/deepeval.py` — wrap deepeval metrics as muteval evals
+    (metric_to_eval / metrics_to_evals). Behind the `[deepeval]` extra.
   - `runner.py` — engine: baseline check -> generate mutants -> grade -> score.
   - `report.py` — terminal report (score bar + survivors).
   - `config.py` — `MutEvalConfig` (user-facing API) + `load_config`.
   - `cli.py` — `muteval run --config ... [--fail-under N] [--operators ...]`.
 - `examples/support_bot/` — runs offline (mock model, no API key); scores ~25%
   on purpose to demonstrate survivors.
-- `tests/` — pytest; all green.
+- `examples/openai_support_bot/` — real OpenAI-backed example (`[examples]`).
+- `examples/deepeval_rag/` — uses the deepeval adapter (`[deepeval]`).
+- `tests/` — pytest; all green (19 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 
@@ -90,7 +95,7 @@ your system; muteval mutates your system to test your evals."
 2. Mutate **tool outputs** for agent eval suites.
 3. Model-swap mutants (downgrade model, see if evals notice).
 4. LLM-driven semantic mutations (beyond rule-based edits).
-5. Adapters that consume existing promptfoo / deepeval suites.
+5. Adapters that consume existing promptfoo / deepeval suites. (deepeval adapter SHIPPED — src/muteval/adapters/deepeval.py; promptfoo next.)
 6. Statistical handling for non-deterministic suites (confidence intervals).
 7. Markdown/HTML report + shareable score badge.
 

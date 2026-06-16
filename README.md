@@ -123,6 +123,29 @@ evals fails the build.
 | `drop_few_shot_example` | removes one few-shot example block |
 | `remove_emphasis` | strips `**bold**` / `IMPORTANT:` cues |
 
+## Adapters
+
+Already have a suite in another tool? Reuse its metrics instead of rewriting
+them. The **deepeval** adapter wraps your existing metrics as muteval evals:
+
+```python
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
+from muteval import MutEvalConfig
+from muteval.adapters.deepeval import metrics_to_evals
+
+metrics = [AnswerRelevancyMetric(threshold=0.7), FaithfulnessMetric()]
+config = MutEvalConfig(
+    prompt=SYSTEM_PROMPT,
+    cases=[{"question": "...", "context": ["doc1", "doc2"]}],
+    run=my_run_fn,                       # how to regenerate output from a prompt
+    evals=metrics_to_evals(metrics, input_key="question",
+                           retrieval_context_key="context"),
+)
+```
+
+Install with `pip install "muteval[deepeval]"`. See
+`examples/deepeval_rag/`. (A promptfoo adapter is next.)
+
 ## Roadmap
 
 `muteval` v0 mutates **prompts**. The thesis scales well beyond that:
@@ -131,7 +154,7 @@ evals fails the build.
 - [ ] Mutate **tool outputs** for agent eval suites
 - [ ] Model-swap mutants (downgrade the model, see if evals notice)
 - [ ] LLM-driven semantic mutations (beyond rule-based string edits)
-- [ ] Adapters for promptfoo / deepeval test definitions
+- [x] **deepeval adapter** (done) — promptfoo adapter next
 - [ ] Statistical handling for non-deterministic suites (confidence intervals)
 - [ ] HTML / Markdown reports and a shareable score badge
 
