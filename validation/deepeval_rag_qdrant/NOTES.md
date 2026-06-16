@@ -31,3 +31,29 @@ ContextualRecall, ContextualRelevancy.
 If the score is low and the survivors are exactly the "no metric covers this"
 behaviours, that's the muteval value proposition demonstrated on a real,
 third-party suite — not a toy. That's checkpoint #1.
+
+---
+
+## RESULT — run 1 (Colab, gpt-4o-mini judge, 2 metrics, 2 cases)
+
+**Mutation score: 12% (1/8 evaluated mutants killed). 4 mutants errored
+(deepeval API timeouts, excluded). 7 survived.**
+
+Survivors (regressions the suite did NOT catch):
+- flip_negation: "cannot" -> "can"  (inverts the retrieval guard)
+- flip_negation: "do not" -> "do"   (inverts the anti-hallucination rule)
+- flip_negation: "don't" -> "do"    (corrupts the 'I don't know' refusal)
+- drop_instruction_lines: "Remember to:"
+- drop_instruction_lines: "Understand the user's question thoroughly."
+- drop_instruction_lines: "and avoid using the context from the documentation."
+- drop_instruction_lines: "extract the pertinent information."
+
+Headline: AnswerRelevancy + Faithfulness do not detect when the prompt's
+safety guardrails (don't hallucinate, refuse when unsure) are inverted or
+removed. The suite stays green while the system is told to make things up.
+
+### Caveats before publishing
+- Small sample: 8 evaluated mutants, 2 cases. Directional, not definitive.
+- 4 mutants errored on deepeval timeouts — re-run to recover a complete number.
+- Judge was gpt-4o-mini; re-run final numbers with gpt-4o for credibility.
+- Did not capture which single mutant was killed — note it next run.
