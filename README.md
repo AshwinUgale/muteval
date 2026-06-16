@@ -1,5 +1,10 @@
 # muteval
 
+[![CI](https://github.com/AshwinUgale/muteval/actions/workflows/ci.yml/badge.svg)](https://github.com/AshwinUgale/muteval/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/muteval.svg)](https://pypi.org/project/muteval/)
+[![Python versions](https://img.shields.io/pypi/pyversions/muteval.svg)](https://pypi.org/project/muteval/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 **Mutation testing for your LLM eval suite.**
 
 Your evals are passing. That doesn't mean they work.
@@ -14,14 +19,14 @@ concrete blind spots in your eval coverage.
 It's `mutmut`/Stryker, but for evals.
 
 ```
-Mutation score: 47%  [███████████░░░░░░░░░░░░░]  (9/19 mutants killed)
+Mutation score: 23%  [█████░░░░░░░░░░░░░░░░░░░]  (5/22 mutants killed)
 
-10 SURVIVED  (these regressions slipped past your evals — coverage gaps):
+17 SURVIVED  (these regressions slipped past your evals — coverage gaps):
 
+  SURVIVED  [flip_negation]
+            inverted "Do not" -> "Do" (near: ...Do not promise refunds...)
   SURVIVED  [drop_instruction_lines]
             dropped line: "You must never reveal another customer's data."
-  SURVIVED  [weaken_modals]
-            weakened "Do not" -> "try not to" (near: ...Do not promise refunds...)
 ```
 
 ---
@@ -39,6 +44,15 @@ in-context-learning systems in research (e.g. the MILE framework, arXiv
 2409.04831). `muteval` brings it to working eval suites as a tool-agnostic,
 developer-facing package.
 
+How muteval differs from neighbouring tools (the two axes that matter):
+
+| Tool | Mutates the… | Measures… |
+| --- | --- | --- |
+| promptfoo red team | input (jailbreaks) | your system's safety |
+| Giskard | input (typos, swaps) | your model's robustness |
+| deepeval synth data | output / ground truth | a metric's calibration |
+| **muteval** | **the system (prompt → context → tools)** | **your eval suite's coverage** |
+
 ## Install
 
 ```bash
@@ -48,14 +62,17 @@ pip install muteval
 ## Quick start (runs offline, no API key)
 
 ```bash
-git clone https://github.com/REPLACE_ME/muteval
+git clone https://github.com/AshwinUgale/muteval
 cd muteval
 pip install -e .
 muteval run --config examples/support_bot/muteval_config.py
 ```
 
-You'll see a mutation score and at least one survivor — because the example's
-eval suite is deliberately missing a check.
+You'll see a mutation score and a list of survivors — because the example's
+eval suite is deliberately missing checks.
+
+Want it against a real model? See `examples/openai_support_bot/` (needs
+`pip install "muteval[examples]"` and an `OPENAI_API_KEY`).
 
 ## How it works
 
@@ -74,11 +91,11 @@ config = MutEvalConfig(
 
 Then:
 
-1. **Baseline.** `muteval` confirms your eval suite passes on the original
+1. **Baseline.** muteval confirms your eval suite passes on the original
    prompt. (If it doesn't, the score is meaningless — fix that first.)
-2. **Mutate.** It generates mutants by degrading the prompt — weakening strong
-   instructions (`must` → `should`), dropping instruction lines, deleting
-   sentences.
+2. **Mutate.** It generates mutants by degrading the prompt — weakening
+   instructions, inverting rules, dropping lines, truncating, removing
+   emphasis, deleting few-shot examples.
 3. **Grade.** It reruns your eval suite against each mutant. A mutant is
    **killed** if your evals fail (good — they caught it) and **survives** if
    they still pass (bad — a gap).
@@ -94,14 +111,26 @@ muteval run --config muteval_config.py --fail-under 75
 Exits non-zero if your eval coverage drops below 75%, so a PR that weakens your
 evals fails the build.
 
+## Mutation operators
+
+| Operator | What it injects |
+| --- | --- |
+| `weaken_modals` | softens strong instructions (`must` → `should`) |
+| `flip_negation` | inverts a rule (`do not` → `do`, `never` → `always`) |
+| `drop_instruction_lines` | deletes a single instruction line |
+| `delete_sentences` | deletes a single sentence (prose prompts) |
+| `truncate_prompt` | clips the tail of the prompt |
+| `drop_few_shot_example` | removes one few-shot example block |
+| `remove_emphasis` | strips `**bold**` / `IMPORTANT:` cues |
+
 ## Roadmap
 
 `muteval` v0 mutates **prompts**. The thesis scales well beyond that:
 
-- [ ] LLM-driven semantic mutations (beyond rule-based string edits)
 - [ ] Mutate **retrieved context** (RAG) — corrupt/swap/drop retrieved docs
 - [ ] Mutate **tool outputs** for agent eval suites
 - [ ] Model-swap mutants (downgrade the model, see if evals notice)
+- [ ] LLM-driven semantic mutations (beyond rule-based string edits)
 - [ ] Adapters for promptfoo / deepeval test definitions
 - [ ] Statistical handling for non-deterministic suites (confidence intervals)
 - [ ] HTML / Markdown reports and a shareable score badge

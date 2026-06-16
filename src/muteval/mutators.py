@@ -111,11 +111,133 @@ def delete_sentences(prompt: str) -> List[Mutant]:
     return mutants
 
 
+# Pairs that INVERT meaning — a stronger regression than mere weakening.
+_NEGATION_FLIPS = [
+    ("must not", "must"),
+    ("should not", "should"),
+    ("cannot", "can"),
+    ("can not", "can"),
+    ("do not", "do"),
+    ("don't", "do"),
+    ("never", "always"),
+    ("always", "never"),
+]
+
+
+def flip_negation(prompt: str) -> List[Mutant]:
+    """Invert a rule (do not -> do, never -> always).
+
+    A meaning-inverting mutation — a far more dangerous regression than merely
+    weakening a modal, so any eval worth its salt should catch it.
+    """
+    mutants: List[Mutant] = []
+    for src, dst in _NEGATION_FLIPS:
+        pattern = re.compile(rf"\b{re.escape(src)}\b", re.IGNORECASE)
+        for match in pattern.finditer(prompt):
+            start, end = match.span()
+            mutated = prompt[:start] + dst + prompt[end:]
+            snippet = _context_snippet(prompt, start, end)
+            mutants.append(
+                Mutant(
+                    operator="flip_negation",
+                    description=f'inverted "{match.group(0)}" -> "{dst}" (near: {snippet})',
+                    prompt=mutated,
+                )
+            )
+    return mutants
+
+
+def truncate_prompt(prompt: str) -> List[Mutant]:
+    """Cut off the tail of the prompt (lossy truncation).
+
+    Models a prompt that got clipped — by a token budget, a bad edit, or
+    context-window pressure — silently dropping its later instructions.
+    """
+    lines = prompt.splitlines()
+    if len(lines) < 4:
+        return []
+    mutants: List[Mutant] = []
+    for frac in (0.5, 0.75):
+        keep = max(1, int(len(lines) * frac))
+        if keep >= len(lines):
+            continue
+        mutated = "\n".join(lines[:keep])
+        dropped = len(lines) - keep
+        mutants.append(
+            Mutant(
+                operator="truncate_prompt",
+                description=(
+                    f"truncated prompt — dropped the last {dropped} of "
+                    f"{len(lines)} lines"
+                ),
+                prompt=mutated,
+            )
+        )
+    return mutants
+
+
+# Markers that signal a few-shot example/demonstration block.
+_EXAMPLE_MARKER = re.compile(
+    r"(?im)(\bexample\b|input:|output:|^\s*q:|^\s*a:|user:|assistant:)"
+)
+
+
+def drop_few_shot_example(prompt: str) -> List[Mutant]:
+    """Remove a single few-shot example block at a time.
+
+    For few-shot prompts: drops one demonstration so you can see whether your
+    evals notice degraded in-context guidance.
+    """
+    blocks = re.split(r"\n\s*\n", prompt)
+    if len(blocks) < 2:
+        return []
+    mutants: List[Mutant] = []
+    for i, block in enumerate(blocks):
+        if not _EXAMPLE_MARKER.search(block):
+            continue
+        remaining = blocks[:i] + blocks[i + 1 :]
+        mutated = "\n\n".join(remaining).strip()
+        mutants.append(
+            Mutant(
+                operator="drop_few_shot_example",
+                description=f'dropped example block: "{_truncate(block.strip())}"',
+                prompt=mutated,
+            )
+        )
+    return mutants
+
+
+def remove_emphasis(prompt: str) -> List[Mutant]:
+    """Strip emphasis cues (**bold**, IMPORTANT:/CRITICAL: markers).
+
+    Tests whether your evals are sensitive to the *salience* of instructions,
+    not just their presence.
+    """
+    mutated = re.sub(r"\*\*(.+?)\*\*", r"\1", prompt)
+    mutated = re.sub(r"__(.+?)__", r"\1", mutated)
+    mutated = re.sub(
+        r"(?im)^\s*(IMPORTANT|CRITICAL|NOTE|WARNING|ATTENTION)\b:?\s*", "", mutated
+    )
+    if mutated == prompt:
+        return []
+    return [
+        Mutant(
+            operator="remove_emphasis",
+            description="removed emphasis cues (bold / IMPORTANT / CRITICAL markers)",
+            prompt=mutated,
+        )
+    ]
+
+
 # Registry of all operators. Keyed by name so they can be selected/filtered.
 OPERATORS: Dict[str, Callable[[str], List[Mutant]]] = {
     "weaken_modals": weaken_modals,
+    "flip_negation": flip_negation,
     "drop_instruction_lines": drop_instruction_lines,
     "delete_sentences": delete_sentences,
+    "truncate_prompt": truncate_prompt,
+    "drop_few_shot_example": drop_few_shot_example,
+    "remove_emphasis": remove_emphasis,
 }
 
 

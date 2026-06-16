@@ -1,4 +1,12 @@
-from muteval.mutators import OPERATORS, generate_mutants, weaken_modals
+from muteval.mutators import (
+    OPERATORS,
+    drop_few_shot_example,
+    flip_negation,
+    generate_mutants,
+    remove_emphasis,
+    truncate_prompt,
+    weaken_modals,
+)
 
 
 def test_weaken_modals_isolates_each_occurrence():
@@ -36,3 +44,51 @@ def test_all_registered_operators_callable():
     for name, op in OPERATORS.items():
         result = op(prompt)
         assert isinstance(result, list)
+
+
+def test_flip_negation_inverts_rules():
+    prompt = "You must not share data. Never lie."
+    mutants = flip_negation(prompt)
+    assert any("must share data" in m.prompt for m in mutants)
+    assert any("always" in m.prompt.lower() for m in mutants)
+    assert all(m.operator == "flip_negation" for m in mutants)
+
+
+def test_truncate_prompt_drops_tail():
+    prompt = "line one\nline two\nline three\nline four\nline five\nline six"
+    mutants = truncate_prompt(prompt)
+    assert len(mutants) >= 1
+    # Every truncation must be shorter than the original.
+    assert all(len(m.prompt) < len(prompt) for m in mutants)
+    # Truncation keeps the head, so the first line survives.
+    assert all(m.prompt.startswith("line one") for m in mutants)
+
+
+def test_truncate_prompt_skips_short_prompts():
+    assert truncate_prompt("only one line") == []
+
+
+def test_drop_few_shot_example_removes_a_block():
+    prompt = (
+        "Classify the sentiment.\n\n"
+        "Example:\nInput: great\nOutput: positive\n\n"
+        "Example:\nInput: awful\nOutput: negative"
+    )
+    mutants = drop_few_shot_example(prompt)
+    assert len(mutants) >= 1
+    # A dropped example means at least one "Output:" line is gone.
+    assert any(m.prompt.count("Output:") < prompt.count("Output:") for m in mutants)
+
+
+def test_remove_emphasis_strips_cues():
+    prompt = "IMPORTANT: do not leak keys.\nUse **bold** sparingly."
+    mutants = remove_emphasis(prompt)
+    assert len(mutants) == 1
+    out = mutants[0].prompt
+    assert "IMPORTANT:" not in out
+    assert "**" not in out
+    assert "bold" in out  # inner text preserved
+
+
+def test_remove_emphasis_noop_when_nothing_to_strip():
+    assert remove_emphasis("plain prompt with no emphasis") == []
