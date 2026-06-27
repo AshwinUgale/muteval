@@ -1,0 +1,40 @@
+# Copy this to .github/workflows/muteval.yml in your repo.
+# It fails a PR if your eval suite's mutation coverage drops below the threshold
+# — i.e. if a change would let a regression slip past your evals.
+#
+# Set OPENAI_API_KEY in: repo Settings -> Secrets and variables -> Actions.
+
+name: muteval
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  mutation-test-evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install muteval
+        run: pip install muteval
+
+      # Option A — zero-config: muteval owns the model call.
+      - name: Mutation-test the eval suite
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          muteval run \
+            --prompt-file prompts/system.txt \
+            --cases evals/cases.jsonl \
+            --model gpt-4o-mini \
+            --check not_contains:refund \
+            --judge "the answer is grounded in the provided context" \
+            --max-mutants 12 \
+            --fail-under 75
+
+      # Option B — full control: point at your Python config instead.
+      # run: muteval run --config muteval_config.py --fail-under 75

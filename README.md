@@ -69,6 +69,31 @@ That's the whole install. The core has no dependencies; optional adapters
 (`muteval[deepeval]`, `muteval[ragas]`) only matter if you already use those
 tools.
 
+## Quick start — no Python, one command
+
+You don't need a config file or a `run()` function. Give muteval a prompt, a
+cases file, and the checks you care about — it calls the model for you:
+
+```bash
+export OPENAI_API_KEY=sk-...
+
+muteval run \
+  --prompt-file system.txt \
+  --cases cases.jsonl \
+  --model gpt-4o-mini \
+  --check not_contains:refund \
+  --judge "the answer is grounded in the provided context" \
+  --fail-under 75
+```
+
+`cases.jsonl` is one JSON object per line, e.g.
+`{"question": "what port?", "context": ["The server listens on port 8080."]}`.
+
+Built-in checks: `contains:TEXT`, `not_contains:TEXT`, `contains_case:KEY`,
+`regex:PATTERN`, `is_json`, `equals`, and `judge:<rubric>` (LLM-as-judge, stdlib —
+no extra installs). Add `--dry-run` to validate your setup without spending a
+token. For custom pipelines/metrics, use `--config muteval_config.py` instead.
+
 ## Quick start (runs offline, no API key)
 
 ```bash
@@ -152,6 +177,9 @@ muteval run --config muteval_config.py --fail-under 75
 
 Exits non-zero if your eval coverage drops below 75%, so a PR that weakens your
 evals fails the build.
+
+Copy `examples/ci/github-actions.yml` to `.github/workflows/muteval.yml` and it
+runs on every PR automatically — set once, then it guards your eval suite forever.
 
 ## Mutation operators
 
