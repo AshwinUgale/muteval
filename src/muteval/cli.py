@@ -62,7 +62,7 @@ config = MutEvalConfig(
 
 def _load_cases(path: str) -> List[Any]:
     """Load cases from a .jsonl (one JSON object per line) or .json (a list)."""
-    text = Path(path).read_text(encoding="utf-8").strip()
+    text = Path(path).read_text(encoding="utf-8-sig").strip()
     if not text:
         raise ValueError(f"{path} is empty")
     # Try a single JSON document first (a list, or one object).
@@ -121,7 +121,7 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     from muteval.runners import openai_run
 
     if args.prompt_file:
-        prompt = Path(args.prompt_file).read_text(encoding="utf-8")
+        prompt = Path(args.prompt_file).read_text(encoding="utf-8-sig")
     else:
         prompt = args.prompt
     if not prompt or not prompt.strip():

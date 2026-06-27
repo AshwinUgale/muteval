@@ -76,3 +76,11 @@ def test_dry_run_builds_config_without_api(tmp_path, capsys):
 def test_run_requires_something(capsys):
     code = main(["run", "--dry-run"])
     assert code == 2
+
+
+def test_load_cases_tolerates_utf8_bom(tmp_path):
+    # PowerShell's `Out-File -Encoding utf8` writes a BOM; the loader must cope.
+    p = tmp_path / "cases.jsonl"
+    p.write_bytes(b'\xef\xbb\xbf{"question":"q1"}\n')
+    cases = _load_cases(str(p))
+    assert cases == [{"question": "q1"}]
