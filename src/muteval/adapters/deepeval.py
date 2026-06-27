@@ -11,6 +11,10 @@ system output from the (mutated) prompt, and the ``cases``. deepeval only
 stores the *metrics* and cached outputs, not how to call your system — and
 muteval's whole job is to re-run your system with a degraded prompt.
 
+Each wrapped eval returns an :class:`~muteval.evals.EvalOutcome` carrying the
+metric's ``score`` and ``threshold``, so muteval can report survivors that only
+*barely* passed as near misses.
+
 Example::
 
     from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
@@ -37,8 +41,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, List, Optional
 
-# A muteval eval: (output_text, case) -> bool  (True == passed)
-EvalFn = Callable[[str, Any], bool]
+from muteval.adapters.base import case_get
+from muteval.evals import EvalFn, EvalOutcome
 
 
 def _default_test_case_factory(
@@ -53,14 +57,7 @@ def _default_test_case_factory(
         # Imported lazily so muteval core never depends on deepeval.
         from deepeval.test_case import LLMTestCase
 
-        def pull(key: Optional[str]):
-            if key is None:
-                return None
-            if isinstance(case, dict):
-                return case.get(key)
-            return getattr(case, key, None)
-
-        user_input = pull(input_key)
+        user_input = case_get(case, input_key)
         if user_input is None:
             # Fall back to treating a non-dict case as the raw input.
             user_input = case if not isinstance(case, dict) else None
@@ -68,9 +65,9 @@ def _default_test_case_factory(
         return LLMTestCase(
             input=user_input,
             actual_output=output,
-            expected_output=pull(expected_output_key),
-            retrieval_context=pull(retrieval_context_key),
-            context=pull(context_key),
+            expected_output=case_get(case, expected_output_key),
+            retrieval_context=case_get(case, retrieval_context_key),
+            context=case_get(case, context_key),
         )
 
     return factory
@@ -89,7 +86,8 @@ def metric_to_eval(
 
     Args:
         metric: A deepeval metric instance (anything with ``.measure(tc)`` and
-            ``.is_successful()``).
+            ``.is_successful()``; ``.score`` and ``.threshold`` are used for
+            near-miss reporting if present).
         input_key / expected_output_key / retrieval_context_key / context_key:
             Which keys on each ``case`` dict map to the deepeval test-case
             fields. Only ``input_key`` is required; the rest are optional and
@@ -99,18 +97,24 @@ def metric_to_eval(
             or custom field mapping.
 
     Returns:
-        An eval function ``(output, case) -> bool``.
+        An eval function ``(output, case) -> EvalOutcome``.
     """
     factory = test_case_factory or _default_test_case_factory(
         input_key, expected_output_key, retrieval_context_key, context_key
     )
+    label = getattr(metric, "__name__", type(metric).__name__)
 
-    def _eval(output: str, case: Any) -> bool:
+    def _eval(output: str, case: Any) -> EvalOutcome:
         test_case = factory(output, case)
         metric.measure(test_case)
-        return bool(metric.is_successful())
+        return EvalOutcome(
+            passed=bool(metric.is_successful()),
+            score=getattr(metric, "score", None),
+            threshold=getattr(metric, "threshold", None),
+            name=label,
+        )
 
-    _eval.__name__ = getattr(metric, "__name__", type(metric).__name__)
+    _eval.__name__ = label
     return _eval
 
 

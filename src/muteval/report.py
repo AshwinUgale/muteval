@@ -76,6 +76,14 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     for o in survivors:
         lines.append(f"  {c('SURVIVED', '31')}  [{o.mutant.operator}]")
         lines.append(f"            {o.mutant.description}")
+        if o.min_margin is not None and o.closest_eval:
+            lines.append(
+                c(
+                    f"            ↳ near miss: passed {o.closest_eval} by only "
+                    f"+{o.min_margin:.3f}",
+                    "33",
+                )
+            )
     lines.append("")
     lines.append(
         "Each survivor is a change to your system your evals would NOT notice. "

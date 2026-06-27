@@ -1,5 +1,7 @@
 from muteval.mutators import (
     OPERATORS,
+    clear_context,
+    drop_context_doc,
     drop_few_shot_example,
     flip_negation,
     generate_mutants,
@@ -7,6 +9,7 @@ from muteval.mutators import (
     truncate_prompt,
     weaken_modals,
 )
+from muteval.system import System
 
 
 def test_weaken_modals_isolates_each_occurrence():
@@ -92,3 +95,38 @@ def test_remove_emphasis_strips_cues():
 
 def test_remove_emphasis_noop_when_nothing_to_strip():
     assert remove_emphasis("plain prompt with no emphasis") == []
+
+
+# --- context operators (RAG) -------------------------------------------------
+
+
+def test_drop_context_doc_removes_one_at_a_time():
+    system = System(prompt="answer from context", context=("doc A", "doc B", "doc C"))
+    mutants = drop_context_doc(system)
+    assert len(mutants) == 3
+    assert all(m.target == "context" for m in mutants)
+    # Each mutant has exactly one fewer doc.
+    assert all(len(m.system.context) == 2 for m in mutants)
+
+
+def test_clear_context_drops_everything():
+    system = System(prompt="p", context=("doc A", "doc B"))
+    mutants = clear_context(system)
+    assert len(mutants) == 1
+    assert mutants[0].system.context == ()
+
+
+def test_context_operators_noop_without_context():
+    # A plain prompt-only target (legacy) yields no context mutants.
+    assert drop_context_doc("just a prompt") == []
+    assert clear_context("just a prompt") == []
+
+
+def test_generate_mutants_accepts_system_and_includes_context_mutants():
+    system = System(
+        prompt="- You must cite the source.", context=("doc A", "doc B")
+    )
+    mutants = generate_mutants(system)
+    operators = {m.operator for m in mutants}
+    assert "drop_context_doc" in operators
+    assert "clear_context" in operators

@@ -74,6 +74,30 @@ eval suite is deliberately missing checks.
 Want it against a real model? See `examples/openai_support_bot/` (needs
 `pip install "muteval[examples]"` and an `OPENAI_API_KEY`).
 
+### Start from scratch
+
+No eval framework? Scaffold a config and grade with built-in checks in two lines:
+
+```bash
+muteval init                       # writes muteval_config.py you can edit
+muteval run --config muteval_config.py
+```
+
+```python
+from muteval import MutEvalConfig, checks
+
+config = MutEvalConfig(
+    prompt=SYSTEM_PROMPT,
+    cases=[{"input": "where is my order?", "order_id": "A123"}],
+    run=my_run_fn,
+    evals=[
+        checks.contains_case("order_id"),   # answer must cite the order id
+        checks.not_contains("refund"),      # never promise a refund
+        checks.llm_judge("is it polite?"),  # generic LLM-as-judge
+    ],
+)
+```
+
 ## How it works
 
 You describe your system and evals in a small Python config:
@@ -85,9 +109,14 @@ config = MutEvalConfig(
     prompt=MY_SYSTEM_PROMPT,        # the thing under test
     cases=[...],                    # inputs to your system
     run=lambda prompt, case: ...,   # call your LLM/app, return output text
-    evals=[...],                    # each: (output, case) -> bool  (True = pass)
+    evals=[...],                    # each: (output, case) -> bool | EvalOutcome
 )
 ```
+
+Evals may return a plain `bool` or a scored `EvalOutcome(passed, score,
+threshold)`. When a score is present, survivors that only *barely* passed are
+flagged as **near misses** (`↳ near miss: passed Faithfulness by only +0.020`) —
+your eval almost caught the regression.
 
 Then:
 
@@ -122,6 +151,28 @@ evals fails the build.
 | `truncate_prompt` | clips the tail of the prompt |
 | `drop_few_shot_example` | removes one few-shot example block |
 | `remove_emphasis` | strips `**bold**` / `IMPORTANT:` cues |
+| `drop_context_doc` | drops one retrieved document (RAG) |
+| `clear_context` | removes all retrieved context (retrieval failure) |
+
+## Mutating retrieved context (RAG)
+
+The mutation target isn't limited to a prompt string. Pass a `System` and your
+`run` receives the mutated system, so muteval can degrade the **retrieved
+context** and see whether your evals actually depend on retrieval quality:
+
+```python
+from muteval import MutEvalConfig, System
+
+config = MutEvalConfig(
+    system=System(prompt=SYSTEM_PROMPT, context=["doc1", "doc2"]),
+    cases=[{"question": "..."}],
+    run=lambda system, case: my_rag_answer(system.prompt, system.context, case),
+    evals=[...],
+)
+```
+
+The `drop_context_doc` and `clear_context` operators now produce mutants; if your
+suite still passes when a relevant doc is dropped, that's a survivor.
 
 ## Adapters
 
@@ -143,23 +194,49 @@ config = MutEvalConfig(
 )
 ```
 
-Install with `pip install "muteval[deepeval]"`. See
-`examples/deepeval_rag/`. (A promptfoo adapter is next.)
+Install with `pip install "muteval[deepeval]"`. See `examples/deepeval_rag/`.
+
+**RAGAS** works the same way (`pip install "muteval[ragas]"`). RAGAS metrics
+return a raw score, so you supply a threshold — and survivors get near-miss
+margins for free:
+
+```python
+from ragas.metrics import Faithfulness, ResponseRelevancy
+from muteval.adapters.ragas import metrics_to_evals
+
+evals = metrics_to_evals(
+    [Faithfulness(), ResponseRelevancy()],
+    threshold=0.7,
+    input_key="question",
+    retrieval_context_key="context",
+)
+```
+
+(A promptfoo adapter is next.) Writing a new adapter is small — see
+`src/muteval/adapters/base.py` for the contract.
 
 ## Roadmap
 
-`muteval` v0 mutates **prompts**. The thesis scales well beyond that:
+`muteval` started by mutating **prompts**. The thesis scales well beyond that:
 
-- [ ] Mutate **retrieved context** (RAG) — corrupt/swap/drop retrieved docs
+- [x] Mutate **retrieved context** (RAG) — `drop_context_doc`, `clear_context`
+      (corrupt/swap operators next)
+- [x] **Scored evals + near-miss reporting** (`EvalOutcome`)
+- [x] **deepeval** and **RAGAS** adapters — promptfoo adapter next
 - [ ] Mutate **tool outputs** for agent eval suites
 - [ ] Model-swap mutants (downgrade the model, see if evals notice)
 - [ ] LLM-driven semantic mutations (beyond rule-based string edits)
-- [x] **deepeval adapter** (done) — promptfoo adapter next
 - [ ] Statistical handling for non-deterministic suites (confidence intervals)
 - [ ] HTML / Markdown reports and a shareable score badge
 
 The endgame is the standard way teams *certify* their evals before trusting an
 AI system in production.
+
+## Does it work?
+
+See [FINDINGS.md](FINDINGS.md). In a controlled experiment the mutation score
+rises monotonically with eval-suite coverage (0% → 28% → 56% → 72%), and
+`validation/` holds reproducible runs against real deepeval and RAGAS metrics.
 
 ## Contributing
 

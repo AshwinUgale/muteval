@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 from muteval import __version__
@@ -11,6 +12,40 @@ from muteval.config import load_config
 from muteval.mutators import OPERATORS
 from muteval.report import format_report
 from muteval.runner import run_mutation_testing
+
+_STARTER_CONFIG = '''"""muteval config scaffold — edit the TODOs, then run:
+
+    muteval run --config muteval_config.py
+"""
+
+from muteval import MutEvalConfig
+from muteval import checks
+
+
+SYSTEM_PROMPT = """You are a helpful support assistant.
+- You must always cite the order ID in your answer.
+- Do not promise refunds.
+"""
+
+
+def run(prompt: str, case: dict) -> str:
+    # TODO: call your real LLM/app with `prompt` and return its text output.
+    # This stub just echoes so the scaffold runs out of the box.
+    return f"Order {case['order_id']}: here is your status."
+
+
+config = MutEvalConfig(
+    prompt=SYSTEM_PROMPT,
+    cases=[
+        {"input": "where is my order?", "order_id": "A123"},
+    ],
+    run=run,
+    evals=[
+        checks.contains_case("order_id"),   # answer must cite the order id
+        checks.not_contains("refund"),      # never promise a refund
+    ],
+)
+'''
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -53,11 +88,38 @@ def _build_parser() -> argparse.ArgumentParser:
         "(e.g. 75). Use this to gate CI.",
     )
     run.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
+
+    init = sub.add_parser(
+        "init", help="Scaffold a starter muteval_config.py you can edit."
+    )
+    init.add_argument(
+        "--path",
+        "-p",
+        default="muteval_config.py",
+        help="Where to write the scaffold (default: ./muteval_config.py).",
+    )
+    init.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the file if it already exists.",
+    )
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = _build_parser().parse_args(argv)
+
+    if args.command == "init":
+        dest = Path(args.path)
+        if dest.exists() and not args.force:
+            print(
+                f"muteval: {dest} already exists (use --force to overwrite).",
+                file=sys.stderr,
+            )
+            return 2
+        dest.write_text(_STARTER_CONFIG, encoding="utf-8")
+        print(f"muteval: wrote {dest}. Edit the TODOs, then:\n  muteval run --config {dest}")
+        return 0
 
     if args.command == "run":
         try:

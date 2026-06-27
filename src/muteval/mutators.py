@@ -1,14 +1,15 @@
 """Mutation operators.
 
-Each operator takes the original prompt and yields zero or more ``Mutant``s —
-a deliberately degraded version of the prompt plus a human description of what
-was broken. The runner then checks whether the user's eval suite catches the
-degradation.
+Each operator takes the mutation target (a ``System`` — or a bare prompt string,
+which is promoted to ``System(prompt=...)`` for backward compatibility) and
+yields zero or more ``Mutant``s: a deliberately degraded ``System`` plus a
+human description of what was broken. The runner then checks whether the user's
+eval suite catches the degradation.
 
-v0 operators are rule-based and deterministic (given a seed) so results are
-reproducible and require no API calls to generate. LLM-driven semantic
-mutations and non-prompt targets (retrieved context, tool outputs) are on the
-roadmap — see ROADMAP in the README.
+Prompt operators are rule-based and deterministic so results are reproducible
+and need no API calls. Context operators (``drop_context_doc``, ``clear_context``)
+mutate the *retrieved context* of a RAG system and only fire when the target
+actually carries context — the first step of the roadmap beyond prompts.
 """
 
 from __future__ import annotations
@@ -17,17 +18,25 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Dict, List
 
+from muteval.system import System, Target, as_system
+
 
 @dataclass(frozen=True)
 class Mutant:
-    """A single degraded version of the prompt."""
+    """A single degraded version of the system under test."""
 
     operator: str  # which mutation operator produced this
     description: str  # human-readable "what was broken"
-    prompt: str  # the mutated prompt text
+    system: System  # the fully mutated system
+    target: str = "prompt"  # which part of the system was mutated
+
+    @property
+    def prompt(self) -> str:
+        """The mutated prompt (back-compat shortcut for ``system.prompt``)."""
+        return self.system.prompt
 
 
-# --- Operators ---------------------------------------------------------------
+# --- Prompt operators --------------------------------------------------------
 
 # Pairs of (strong -> weak) wordings. Case-insensitive, whole-word matches.
 _MODAL_WEAKENINGS = [
@@ -44,12 +53,14 @@ _MODAL_WEAKENINGS = [
 ]
 
 
-def weaken_modals(prompt: str) -> List[Mutant]:
+def weaken_modals(target: Target) -> List[Mutant]:
     """Soften strong instructions (MUST -> should, never -> rarely, ...).
 
     Each replaceable occurrence becomes its own mutant so a single missed
     instruction is isolated.
     """
+    system = as_system(target)
+    prompt = system.prompt
     mutants: List[Mutant] = []
     for strong, weak in _MODAL_WEAKENINGS:
         pattern = re.compile(rf"\b{re.escape(strong)}\b", re.IGNORECASE)
@@ -61,18 +72,19 @@ def weaken_modals(prompt: str) -> List[Mutant]:
                 Mutant(
                     operator="weaken_modals",
                     description=f'weakened "{match.group(0)}" -> "{weak}" (near: {snippet})',
-                    prompt=mutated,
+                    system=system.with_prompt(mutated),
                 )
             )
     return mutants
 
 
-def drop_instruction_lines(prompt: str) -> List[Mutant]:
+def drop_instruction_lines(target: Target) -> List[Mutant]:
     """Delete a single instruction line/bullet at a time.
 
     Models "someone trimmed the prompt and silently removed a capability."
     """
-    lines = prompt.splitlines()
+    system = as_system(target)
+    lines = system.prompt.splitlines()
     mutants: List[Mutant] = []
     for i, line in enumerate(lines):
         stripped = line.strip()
@@ -84,15 +96,16 @@ def drop_instruction_lines(prompt: str) -> List[Mutant]:
             Mutant(
                 operator="drop_instruction_lines",
                 description=f'dropped line: "{_truncate(stripped)}"',
-                prompt=mutated,
+                system=system.with_prompt(mutated),
             )
         )
     return mutants
 
 
-def delete_sentences(prompt: str) -> List[Mutant]:
+def delete_sentences(target: Target) -> List[Mutant]:
     """Delete a single sentence at a time (for prose-style prompts)."""
-    sentences = _split_sentences(prompt)
+    system = as_system(target)
+    sentences = _split_sentences(system.prompt)
     if len(sentences) < 2:
         return []
     mutants: List[Mutant] = []
@@ -105,7 +118,7 @@ def delete_sentences(prompt: str) -> List[Mutant]:
             Mutant(
                 operator="delete_sentences",
                 description=f'deleted sentence: "{_truncate(sentence.strip())}"',
-                prompt=mutated,
+                system=system.with_prompt(mutated),
             )
         )
     return mutants
@@ -124,12 +137,14 @@ _NEGATION_FLIPS = [
 ]
 
 
-def flip_negation(prompt: str) -> List[Mutant]:
+def flip_negation(target: Target) -> List[Mutant]:
     """Invert a rule (do not -> do, never -> always).
 
     A meaning-inverting mutation — a far more dangerous regression than merely
     weakening a modal, so any eval worth its salt should catch it.
     """
+    system = as_system(target)
+    prompt = system.prompt
     mutants: List[Mutant] = []
     for src, dst in _NEGATION_FLIPS:
         pattern = re.compile(rf"\b{re.escape(src)}\b", re.IGNORECASE)
@@ -141,19 +156,20 @@ def flip_negation(prompt: str) -> List[Mutant]:
                 Mutant(
                     operator="flip_negation",
                     description=f'inverted "{match.group(0)}" -> "{dst}" (near: {snippet})',
-                    prompt=mutated,
+                    system=system.with_prompt(mutated),
                 )
             )
     return mutants
 
 
-def truncate_prompt(prompt: str) -> List[Mutant]:
+def truncate_prompt(target: Target) -> List[Mutant]:
     """Cut off the tail of the prompt (lossy truncation).
 
     Models a prompt that got clipped — by a token budget, a bad edit, or
     context-window pressure — silently dropping its later instructions.
     """
-    lines = prompt.splitlines()
+    system = as_system(target)
+    lines = system.prompt.splitlines()
     if len(lines) < 4:
         return []
     mutants: List[Mutant] = []
@@ -170,7 +186,7 @@ def truncate_prompt(prompt: str) -> List[Mutant]:
                     f"truncated prompt — dropped the last {dropped} of "
                     f"{len(lines)} lines"
                 ),
-                prompt=mutated,
+                system=system.with_prompt(mutated),
             )
         )
     return mutants
@@ -182,13 +198,14 @@ _EXAMPLE_MARKER = re.compile(
 )
 
 
-def drop_few_shot_example(prompt: str) -> List[Mutant]:
+def drop_few_shot_example(target: Target) -> List[Mutant]:
     """Remove a single few-shot example block at a time.
 
     For few-shot prompts: drops one demonstration so you can see whether your
     evals notice degraded in-context guidance.
     """
-    blocks = re.split(r"\n\s*\n", prompt)
+    system = as_system(target)
+    blocks = re.split(r"\n\s*\n", system.prompt)
     if len(blocks) < 2:
         return []
     mutants: List[Mutant] = []
@@ -201,18 +218,20 @@ def drop_few_shot_example(prompt: str) -> List[Mutant]:
             Mutant(
                 operator="drop_few_shot_example",
                 description=f'dropped example block: "{_truncate(block.strip())}"',
-                prompt=mutated,
+                system=system.with_prompt(mutated),
             )
         )
     return mutants
 
 
-def remove_emphasis(prompt: str) -> List[Mutant]:
+def remove_emphasis(target: Target) -> List[Mutant]:
     """Strip emphasis cues (**bold**, IMPORTANT:/CRITICAL: markers).
 
     Tests whether your evals are sensitive to the *salience* of instructions,
     not just their presence.
     """
+    system = as_system(target)
+    prompt = system.prompt
     mutated = re.sub(r"\*\*(.+?)\*\*", r"\1", prompt)
     mutated = re.sub(r"__(.+?)__", r"\1", mutated)
     mutated = re.sub(
@@ -224,13 +243,60 @@ def remove_emphasis(prompt: str) -> List[Mutant]:
         Mutant(
             operator="remove_emphasis",
             description="removed emphasis cues (bold / IMPORTANT / CRITICAL markers)",
-            prompt=mutated,
+            system=system.with_prompt(mutated),
+        )
+    ]
+
+
+# --- Context operators (RAG) -------------------------------------------------
+# These only fire when the target actually carries retrieved context, so they
+# are no-ops for plain prompt-only systems (and never affect legacy configs).
+
+
+def drop_context_doc(target: Target) -> List[Mutant]:
+    """Drop a single retrieved document at a time.
+
+    Models a retriever that silently lost a relevant doc. If your suite still
+    passes, your evals don't actually depend on retrieval quality.
+    """
+    system = as_system(target)
+    if not system.context:
+        return []
+    docs = list(system.context)
+    mutants: List[Mutant] = []
+    for i, doc in enumerate(docs):
+        remaining = docs[:i] + docs[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="drop_context_doc",
+                description=f'dropped retrieved doc #{i + 1}: "{_truncate(doc)}"',
+                system=system.replace(context=tuple(remaining)),
+                target="context",
+            )
+        )
+    return mutants
+
+
+def clear_context(target: Target) -> List[Mutant]:
+    """Remove ALL retrieved context (simulate total retrieval failure)."""
+    system = as_system(target)
+    if not system.context:
+        return []
+    return [
+        Mutant(
+            operator="clear_context",
+            description=(
+                f"cleared all retrieved context "
+                f"(dropped {len(system.context)} doc(s))"
+            ),
+            system=system.replace(context=()),
+            target="context",
         )
     ]
 
 
 # Registry of all operators. Keyed by name so they can be selected/filtered.
-OPERATORS: Dict[str, Callable[[str], List[Mutant]]] = {
+OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "weaken_modals": weaken_modals,
     "flip_negation": flip_negation,
     "drop_instruction_lines": drop_instruction_lines,
@@ -238,14 +304,18 @@ OPERATORS: Dict[str, Callable[[str], List[Mutant]]] = {
     "truncate_prompt": truncate_prompt,
     "drop_few_shot_example": drop_few_shot_example,
     "remove_emphasis": remove_emphasis,
+    "drop_context_doc": drop_context_doc,
+    "clear_context": clear_context,
 }
 
 
 def generate_mutants(
-    prompt: str,
+    target: Target,
     operators: List[str] | None = None,
 ) -> List[Mutant]:
     """Run the selected operators and return a de-duplicated list of mutants."""
+    original = as_system(target)
+    original_key = original.key()
     selected = operators or list(OPERATORS.keys())
     seen = set()
     mutants: List[Mutant] = []
@@ -255,11 +325,12 @@ def generate_mutants(
             raise ValueError(
                 f"Unknown operator '{name}'. Available: {list(OPERATORS)}"
             )
-        for mutant in op(prompt):
-            # Skip no-ops and exact-duplicate prompts.
-            if mutant.prompt == prompt or mutant.prompt in seen:
+        for mutant in op(original):
+            mkey = mutant.system.key()
+            # Skip no-ops (identical to the original) and exact duplicates.
+            if mkey == original_key or mkey in seen:
                 continue
-            seen.add(mutant.prompt)
+            seen.add(mkey)
             mutants.append(mutant)
     return mutants
 

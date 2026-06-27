@@ -2,10 +2,12 @@
 
 These use a stub metric and a custom test_case_factory so they run without
 deepeval installed — we're testing the adapter's wiring, not deepeval itself.
+The adapter now returns an EvalOutcome carrying score + threshold.
 """
 
 from types import SimpleNamespace
 
+from muteval.evals import EvalOutcome
 from muteval.adapters.deepeval import metric_to_eval, metrics_to_evals
 
 
@@ -30,14 +32,27 @@ def _factory(output, case):
     return SimpleNamespace(input=case.get("input"), actual_output=output)
 
 
-def test_passing_metric_yields_true():
+def test_passing_metric_yields_outcome():
     ev = metric_to_eval(StubMetric(score=0.9), test_case_factory=_factory)
-    assert ev("some output", {"input": "q"}) is True
+    outcome = ev("some output", {"input": "q"})
+    assert isinstance(outcome, EvalOutcome)
+    assert outcome.passed is True
+    assert outcome.score == 0.9
+    assert outcome.threshold == 0.5
 
 
 def test_failing_metric_yields_false():
     ev = metric_to_eval(StubMetric(score=0.1), test_case_factory=_factory)
-    assert ev("some output", {"input": "q"}) is False
+    outcome = ev("some output", {"input": "q"})
+    assert outcome.passed is False
+    # A failing metric just below threshold still carries its score.
+    assert outcome.score == 0.1
+
+
+def test_outcome_is_truthy_for_pass():
+    # EvalOutcome.__bool__ mirrors `passed`, so it drops into bool contexts.
+    ev = metric_to_eval(StubMetric(score=0.9), test_case_factory=_factory)
+    assert bool(ev("out", {"input": "q"})) is True
 
 
 def test_factory_receives_output_and_case():
@@ -52,7 +67,7 @@ def test_metrics_to_evals_wraps_each():
     metrics = [StubMetric(0.9), StubMetric(0.1)]
     evals = metrics_to_evals(metrics, test_case_factory=_factory)
     assert len(evals) == 2
-    results = [ev("out", {"input": "q"}) for ev in evals]
+    results = [ev("out", {"input": "q"}).passed for ev in evals]
     assert results == [True, False]
 
 
