@@ -143,7 +143,7 @@ top of their scale on answerable cases — every survivor is the identical
 remedy is the one demonstrated in Experiment 2: add a case + check that actually
 exercises the degraded behavior, and survivors convert to kills.
 
-## Experiment 4 — literal deepeval metrics (real adapter, run in Colab)
+## Experiment 4 — literal deepeval AND ragas metrics (real adapters, run in Colab)
 
 With deepeval actually installed (`pip install -e ".[deepeval]"`), muteval grades
 through deepeval's **real** `AnswerRelevancyMetric` + `FaithfulnessMetric` objects
@@ -154,15 +154,20 @@ framework code.
 | Suite | Metrics | Mutation score |
 |-------|---------|----------------|
 | deepeval RAG example (literal adapter, GPT-4o-mini, `--max-mutants 8`) | AnswerRelevancy + Faithfulness | **0%** (0/7, 1 errored) |
+| ragas RAG suite (literal adapter, GPT-4o-mini, `--max-mutants 6`) | Faithfulness + ResponseRelevancy | **0%** (0/6) |
 
 Baseline passed; every survivor was a `+0.500` near-miss (Answer Relevancy pinned
 at the top of its scale). The same blindness seen with the replicas holds with
 deepeval's genuine metrics: standard relevancy + faithfulness did not catch the
 injected prompt regressions on these answerable cases.
 
-The literal RAGAS run is, as of this writing, blocked by a dependency conflict
-*inside ragas's own langchain stack* (`langchain_community.chat_models.vertexai`),
-unrelated to muteval; the ragas-style replica in Experiment 3 stands in for it.
+Both runs use the frameworks' genuine metric objects. With **real ragas**,
+`ResponseRelevancy` stayed near the top of its scale on every mutant (survivors
+are ~+0.28 near-misses) — the same blindness deepeval showed. Getting real ragas
+to import at all required a *patched* ragas: the released version hard-imports a
+removed langchain module (issue #2741; fix in PR #2746). That the leading RAG-eval
+library doesn't currently import on a fresh install is itself a small data point
+on eval-tooling fragility.
 
 ## Real-metric validation (reproducible with an API key)
 

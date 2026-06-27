@@ -59,6 +59,17 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
                 "33",
             )
         )
+
+    # Honest score: drop inert (output-unchanged) survivors from the denominator.
+    inert = result.inert_survivors
+    if inert:
+        eff = result.effective_score * 100
+        eff_color = "32" if eff >= 80 else "33" if eff >= 50 else "31"
+        lines.append(
+            f"Effective score: {c(f'{eff:.0f}%', eff_color)}  "
+            f"({result.killed}/{result.evaluated - len(inert)} — excludes "
+            f"{len(inert)} inert mutant(s) whose output didn't change)"
+        )
     lines.append("")
 
     survivors = result.survivors
@@ -68,25 +79,40 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         )
         return "\n".join(lines)
 
-    lines.append(
-        c(f"{len(survivors)} SURVIVED", "31")
-        + "  (these regressions slipped past your evals — coverage gaps):"
-    )
-    lines.append("")
-    for o in survivors:
-        lines.append(f"  {c('SURVIVED', '31')}  [{o.mutant.operator}]")
-        lines.append(f"            {o.mutant.description}")
-        if o.min_margin is not None and o.closest_eval:
-            lines.append(
-                c(
-                    f"            ↳ near miss: passed {o.closest_eval} by only "
-                    f"+{o.min_margin:.3f}",
-                    "33",
+    real = result.real_survivors
+    if real:
+        lines.append(
+            c(f"{len(real)} SURVIVED", "31")
+            + "  (output changed but evals didn't notice — real coverage gaps):"
+        )
+        lines.append("")
+        for o in real:
+            lines.append(f"  {c('SURVIVED', '31')}  [{o.mutant.operator}]")
+            lines.append(f"            {o.mutant.description}")
+            if o.min_margin is not None and o.closest_eval:
+                lines.append(
+                    c(
+                        f"            ↳ near miss: passed {o.closest_eval} by only "
+                        f"+{o.min_margin:.3f}",
+                        "33",
+                    )
                 )
+
+    if inert:
+        lines.append("")
+        lines.append(
+            c(f"{len(inert)} inert", "2")
+            + "  (output identical to baseline — equivalent mutants, NOT eval "
+            "blind spots; excluded from the effective score):"
+        )
+        for o in inert:
+            lines.append(
+                f"  {c('inert', '2')}     [{o.mutant.operator}] {o.mutant.description}"
             )
+
     lines.append("")
     lines.append(
-        "Each survivor is a change to your system your evals would NOT notice. "
+        "Each real survivor is an output change your evals would NOT notice. "
         "Write an eval that fails on it, then re-run."
     )
     return "\n".join(lines)
