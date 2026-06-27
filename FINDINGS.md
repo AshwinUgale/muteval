@@ -143,6 +143,27 @@ top of their scale on answerable cases — every survivor is the identical
 remedy is the one demonstrated in Experiment 2: add a case + check that actually
 exercises the degraded behavior, and survivors convert to kills.
 
+## Experiment 4 — literal deepeval metrics (real adapter, run in Colab)
+
+With deepeval actually installed (`pip install -e ".[deepeval]"`), muteval grades
+through deepeval's **real** `AnswerRelevancyMetric` + `FaithfulnessMetric` objects
+— confirmed by deepeval's own "✨ running ... Metric" banners during the run. This
+upgrades Experiment 3's deepeval result from a stdlib replica to the actual
+framework code.
+
+| Suite | Metrics | Mutation score |
+|-------|---------|----------------|
+| deepeval RAG example (literal adapter, GPT-4o-mini, `--max-mutants 8`) | AnswerRelevancy + Faithfulness | **0%** (0/7, 1 errored) |
+
+Baseline passed; every survivor was a `+0.500` near-miss (Answer Relevancy pinned
+at the top of its scale). The same blindness seen with the replicas holds with
+deepeval's genuine metrics: standard relevancy + faithfulness did not catch the
+injected prompt regressions on these answerable cases.
+
+The literal RAGAS run is, as of this writing, blocked by a dependency conflict
+*inside ragas's own langchain stack* (`langchain_community.chat_models.vertexai`),
+unrelated to muteval; the ragas-style replica in Experiment 3 stands in for it.
+
 ## Real-metric validation (reproducible with an API key)
 
 To show the same machinery works on other frameworks' metrics, two more configs

@@ -6,6 +6,10 @@ return ready-made eval functions ``(output, case) -> EvalOutcome`` for the most
 common checks: substring presence, regex, JSON validity, exact match, and a
 generic LLM-as-judge.
 
+The LLM judge calls the OpenAI REST API using ONLY the Python standard library —
+no ``openai`` package, no heavy dependencies. muteval itself is dependency-free,
+so the whole zero-framework path is just ``pip install muteval`` + an API key.
+
 Example::
 
     from muteval import MutEvalConfig
@@ -22,10 +26,11 @@ Example::
     )
 """
 
-from __future__ import annotations
-
 import json
+import os
 import re
+import ssl
+import urllib.request
 from typing import Any, Callable, Optional
 
 from muteval.evals import EvalFn, EvalOutcome
@@ -39,7 +44,6 @@ def _case_get(case: Any, key: str) -> Any:
 
 def contains(substring: str, *, case_sensitive: bool = False) -> EvalFn:
     """Pass iff ``substring`` appears in the output."""
-
     needle = substring if case_sensitive else substring.lower()
 
     def _eval(output: str, case: Any) -> EvalOutcome:
@@ -51,7 +55,6 @@ def contains(substring: str, *, case_sensitive: bool = False) -> EvalFn:
 
 def not_contains(substring: str, *, case_sensitive: bool = False) -> EvalFn:
     """Pass iff ``substring`` does NOT appear in the output (a guardrail check)."""
-
     needle = substring if case_sensitive else substring.lower()
 
     def _eval(output: str, case: Any) -> EvalOutcome:
@@ -62,11 +65,7 @@ def not_contains(substring: str, *, case_sensitive: bool = False) -> EvalFn:
 
 
 def contains_case(key: str, *, case_sensitive: bool = False) -> EvalFn:
-    """Pass iff the value at ``case[key]`` appears in the output.
-
-    Handy for "the answer must cite the order id / account number / etc." where
-    the expected value lives on each case.
-    """
+    """Pass iff the value at ``case[key]`` appears in the output."""
 
     def _eval(output: str, case: Any) -> EvalOutcome:
         value = _case_get(case, key)
@@ -84,7 +83,6 @@ def contains_case(key: str, *, case_sensitive: bool = False) -> EvalFn:
 
 def regex_matches(pattern: str, *, flags: int = 0) -> EvalFn:
     """Pass iff the output matches ``pattern`` (``re.search`` semantics)."""
-
     compiled = re.compile(pattern, flags)
 
     def _eval(output: str, case: Any) -> EvalOutcome:
@@ -134,11 +132,11 @@ def llm_judge(
     """A generic LLM-as-judge check.
 
     Pass a ``judge(prompt) -> float in [0, 1]`` callable to stay dependency-free
-    and deterministic in tests. If you don't, a minimal OpenAI-backed judge is
-    used (requires ``openai`` and ``OPENAI_API_KEY``), asking the model to score
-    the output against ``rubric`` from 0 to 1.
+    and deterministic in tests. If you don't, a built-in judge calls the OpenAI
+    REST API using only the Python standard library (no ``openai`` package, no
+    extra installs) — it just needs ``OPENAI_API_KEY`` set. Install ``certifi``
+    if your Python's SSL store can't verify the endpoint.
     """
-
     judge_fn = judge or _default_openai_judge(model)
 
     def _eval(output: str, case: Any) -> EvalOutcome:
@@ -148,8 +146,8 @@ def llm_judge(
             f"Rubric: {rubric}\n\n"
             f"User input: {question}\n\n"
             f"Output to grade:\n{output}\n\n"
-            f"Return ONLY a number from 0 to 1 for how well the output satisfies "
-            f"the rubric."
+            f"Return ONLY an integer from 0 to 10 (10 = perfect) for how well "
+            f"the output satisfies the rubric."
         )
         score = float(judge_fn(prompt))
         return EvalOutcome(
@@ -162,18 +160,53 @@ def llm_judge(
     return _eval
 
 
+_OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+
+
+def _openai_chat_stdlib(prompt: str, model: str) -> str:
+    """Call OpenAI chat completions with only the standard library."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not set. Set it, or pass your own judge=... callable."
+        )
+    try:
+        import certifi  # optional; fixes SSL verification on bare Pythons
+
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 - fall back to the system trust store
+        ctx = ssl.create_default_context()
+
+    body = json.dumps(
+        {
+            "model": model,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        _OPENAI_ENDPOINT,
+        data=body,
+        headers={
+            "Authorization": "Bearer " + api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60, context=ctx) as resp:
+        return json.load(resp)["choices"][0]["message"]["content"] or ""
+
+
 def _default_openai_judge(model: str) -> Callable[[str], float]:
     def _judge(prompt: str) -> float:
-        from openai import OpenAI  # imported lazily; only needed if used
-
-        client = OpenAI()
-        resp = client.chat.completions.create(
-            model=model,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = (resp.choices[0].message.content or "0").strip()
-        match = re.search(r"[0-1](?:\.\d+)?", text)
-        return float(match.group(0)) if match else 0.0
+        text = _openai_chat_stdlib(prompt, model).strip()
+        # Parse the LAST number; normalize a 0-10 integer to [0, 1]; clamp.
+        nums = re.findall(r"\d+(?:\.\d+)?", text)
+        if not nums:
+            return 0.0
+        val = float(nums[-1])
+        if val > 1:
+            val = val / 10.0
+        return max(0.0, min(1.0, val))
 
     return _judge

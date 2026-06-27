@@ -18,6 +18,12 @@ concrete blind spots in your eval coverage.
 
 It's `mutmut`/Stryker, but for evals.
 
+**Zero dependencies, no eval framework required.** muteval is pure Python — `pip
+install muteval` and you're running; it never drags in heavy LLM SDKs. Use the
+built-in checks (including a standard-library LLM judge) with nothing else
+installed, or reuse your existing deepeval / RAGAS metrics if you already have
+them.
+
 ```
 Mutation score: 23%  [█████░░░░░░░░░░░░░░░░░░░]  (5/22 mutants killed)
 
@@ -56,8 +62,12 @@ How muteval differs from neighbouring tools (the two axes that matter):
 ## Install
 
 ```bash
-pip install muteval
+pip install muteval        # pure Python, zero required dependencies
 ```
+
+That's the whole install. The core has no dependencies; optional adapters
+(`muteval[deepeval]`, `muteval[ragas]`) only matter if you already use those
+tools.
 
 ## Quick start (runs offline, no API key)
 
@@ -76,7 +86,10 @@ Want it against a real model? See `examples/openai_support_bot/` (needs
 
 ### Start from scratch
 
-No eval framework? Scaffold a config and grade with built-in checks in two lines:
+No eval framework? You need nothing but muteval. Scaffold a config and grade
+with built-in checks in two lines (`checks.llm_judge` calls the model via the
+standard library — no `openai` package needed). See
+`examples/llm_judge_quickstart/` for a runnable end-to-end example:
 
 ```bash
 muteval init                       # writes muteval_config.py you can edit
@@ -93,7 +106,7 @@ config = MutEvalConfig(
     evals=[
         checks.contains_case("order_id"),   # answer must cite the order id
         checks.not_contains("refund"),      # never promise a refund
-        checks.llm_judge("is it polite?"),  # generic LLM-as-judge
+        checks.llm_judge("is it polite?"),  # generic LLM-as-judge (stdlib, no SDK)
     ],
 )
 ```
@@ -174,10 +187,11 @@ config = MutEvalConfig(
 The `drop_context_doc` and `clear_context` operators now produce mutants; if your
 suite still passes when a relevant doc is dropped, that's a survivor.
 
-## Adapters
+## Adapters (optional)
 
-Already have a suite in another tool? Reuse its metrics instead of rewriting
-them. The **deepeval** adapter wraps your existing metrics as muteval evals:
+**You don't need any framework to use muteval.** But if you already have a suite
+in another tool, reuse its metrics instead of rewriting them. The **deepeval**
+adapter wraps your existing metrics as muteval evals:
 
 ```python
 from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
@@ -236,7 +250,7 @@ AI system in production.
 
 See [FINDINGS.md](FINDINGS.md). In a controlled experiment the mutation score
 rises monotonically with eval-suite coverage (0% → 28% → 56% → 72%), and
-`validation/` holds reproducible runs against real deepeval and RAGAS metrics.
+`validation/` holds reproducible runs — including against real deepeval metrics.
 
 ## Contributing
 

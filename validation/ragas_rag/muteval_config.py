@@ -1,76 +1,116 @@
-"""muteval validation — against RAGAS metrics on a small RAG suite.
+"""muteval validation — REAL RAGAS metrics (Faithfulness, ResponseRelevancy).
 
-Mirror of validation/deepeval_rag_qdrant/, but reusing **RAGAS** metrics via
-``muteval.adapters.ragas``. muteval mutates the prompt (and, in system mode, the
-retrieved context) and reruns the RAGAS-graded suite to see which regressions
-the suite would miss.
+Works around ragas issue #2741: current ragas hard-imports
+`langchain_community.chat_models.vertexai`, a module recent langchain-community
+no longer ships, so `import ragas` crashes. We don't use VertexAI (we use
+OpenAI), so we register a tiny shim for that module path BEFORE importing ragas.
+This makes ragas import cleanly without pinning to ancient langchain versions.
 
-RAGAS metrics return a raw [0, 1] score with no built-in pass/fail threshold, so
-the adapter applies one (``threshold=``). Because the adapter forwards the score
-and threshold to muteval, survivors are reported with their near-miss margin.
-
-Setup:
-    pip install "muteval[ragas]" langchain-openai
+Setup (Colab or any Linux box with wheels — NOT a wheel-hostile local Python):
+    pip install ragas langchain-openai certifi
     export OPENAI_API_KEY=sk-...
 
 Run:
-    muteval run --config validation/ragas_rag/muteval_config.py --max-mutants 8
-
-NOTE: RAGAS's public API has moved across versions. This targets the
-``SingleTurnSample`` / ``single_turn_score`` interface (ragas >= 0.2) and an
-LLM-backed metric. If your version differs, the adapter accepts ``sample_factory``
-and ``score_fn`` overrides so you can adapt the wiring without changing muteval.
+    muteval run --config validation/ragas_rag/muteval_config.py --max-mutants 6
 """
 
+import json
 import os
+import ssl
+import sys
+import types
+import urllib.request
 
 from muteval import MutEvalConfig
 
 MODEL = os.environ.get("MUTEVAL_EXAMPLE_MODEL", "gpt-4o-mini")
 JUDGE_MODEL = os.environ.get("MUTEVAL_JUDGE_MODEL", "gpt-4o-mini")
+THRESHOLD = float(os.environ.get("MUTEVAL_THRESHOLD", "0.7"))
 
-# --- The system prompt (the mutation target) --------------------------------
+
+def _install_vertexai_shim() -> None:
+    """Satisfy ragas's hard `langchain_community.chat_models.vertexai` import
+    (ragas #2741) so `import ragas` doesn't crash. We never use VertexAI."""
+    name = "langchain_community.chat_models.vertexai"
+    if name in sys.modules:
+        return
+    try:
+        __import__(name)
+        return  # already importable; nothing to do
+    except Exception:
+        pass
+    shim = types.ModuleType(name)
+    try:
+        from langchain_google_vertexai import ChatVertexAI  # type: ignore
+    except Exception:  # noqa: BLE001
+        class ChatVertexAI:  # minimal stub; unused, just needs to be importable
+            pass
+    shim.ChatVertexAI = ChatVertexAI
+    sys.modules[name] = shim
+
+
+_install_vertexai_shim()
+
+try:
+    import certifi
+
+    _SSL = ssl.create_default_context(cafile=certifi.where())
+except Exception:  # noqa: BLE001
+    _SSL = ssl.create_default_context()
+
+
 PROMPT = """You are answering a user's question using the provided documentation.
 Provide a clear, concise answer grounded in the documentation.
-Remember to:
-If the question is general (e.g. "hi"), greet the user and do not use the docs.
-If the question is specific, locate the pertinent information in the context.
 Cite the relevant source from the context to support your answer.
-Use a friendly, professional tone.
 If the answer is not in the context, say "I don't know" — do not invent facts.
 """
 
 
-def run(prompt: str, case: dict) -> str:
-    """Generate an answer from the (mutated) prompt + retrieved context."""
-    from openai import OpenAI
-
-    client = OpenAI()
-    context_block = "\n\n---\n\n".join(case["context"])
-    user = f"Context:\n{context_block}\n\nQuestion: {case['question']}\nAnswer:"
-    resp = client.chat.completions.create(
-        model=MODEL,
-        temperature=0,
-        messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": user},
-        ],
+def run(prompt, case):
+    """Generate the answer (stdlib OpenAI call)."""
+    body = json.dumps(
+        {
+            "model": MODEL,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": prompt},
+                {
+                    "role": "user",
+                    "content": "Context:\n"
+                    + "\n\n---\n\n".join(case["context"])
+                    + "\n\nQuestion: "
+                    + case["question"],
+                },
+            ],
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=body,
+        headers={
+            "Authorization": "Bearer " + os.environ["OPENAI_API_KEY"],
+            "Content-Type": "application/json",
+        },
+        method="POST",
     )
-    return resp.choices[0].message.content or ""
+    with urllib.request.urlopen(req, timeout=60, context=_SSL) as resp:
+        return json.load(resp)["choices"][0]["message"]["content"] or ""
 
 
 def _build_evals():
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from ragas.embeddings import LangchainEmbeddingsWrapper
     from ragas.llms import LangchainLLMWrapper
     from ragas.metrics import Faithfulness, ResponseRelevancy
-    from langchain_openai import ChatOpenAI
 
     from muteval.adapters.ragas import metrics_to_evals
 
     llm = LangchainLLMWrapper(ChatOpenAI(model=JUDGE_MODEL, temperature=0))
-    metrics = [Faithfulness(llm=llm), ResponseRelevancy(llm=llm)]
+    emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings(model="text-embedding-3-small"))
+    metrics = [Faithfulness(llm=llm), ResponseRelevancy(llm=llm, embeddings=emb)]
     evals = metrics_to_evals(
         metrics,
-        threshold=0.7,
+        threshold=THRESHOLD,
         input_key="question",
         retrieval_context_key="context",
         reference_key="expected",
@@ -81,7 +121,6 @@ def _build_evals():
 
 _evals, _names = _build_evals()
 
-# --- Airtight, answerable cases so the BASELINE passes ----------------------
 config = MutEvalConfig(
     prompt=PROMPT,
     cases=[
@@ -89,21 +128,17 @@ config = MutEvalConfig(
             "question": "What port does the server listen on by default?",
             "context": [
                 "The server listens on port 8080 by default. source: config/server.md",
-                "Set the PORT environment variable to override the default port. "
-                "source: config/server.md",
+                "Set the PORT environment variable to override it. source: config/server.md",
             ],
-            "expected": "It listens on port 8080 by default; override it with PORT.",
+            "expected": "Port 8080 by default; override with the PORT env var.",
         },
         {
             "question": "How do I rotate API keys?",
             "context": [
-                "API keys are rotated from the dashboard under Settings > Keys. "
-                "source: security/keys.md",
-                "Rotating a key immediately invalidates the previous key. "
-                "source: security/keys.md",
+                "API keys are rotated from the dashboard under Settings > Keys. source: security/keys.md",
+                "Rotating a key immediately invalidates the previous key. source: security/keys.md",
             ],
-            "expected": "Rotate API keys from the dashboard under Settings > Keys; "
-            "the previous key is invalidated immediately.",
+            "expected": "Rotate from Settings > Keys; the old key is invalidated immediately.",
         },
     ],
     run=run,
