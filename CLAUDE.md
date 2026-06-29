@@ -124,6 +124,12 @@ Also shipped beyond the original roadmap: scored evals + near-miss reporting
 (EvalOutcome), framework-free `checks`, `muteval init`, and a controlled
 eval-quality experiment (validation/eval_quality_experiment/, see FINDINGS.md).
 
+## Active plan
+
+Next feature work (scoped/custom operators + context/tool/model
+mutation) is planned in `docs/PLAN-A-scope-B-system-mutation.md`.
+Start with B1 (the run(System) contract).
+
 ## What matters most right now
 
 Validate demand, not competitor speed. Get muteval running on 2-3 real eval
