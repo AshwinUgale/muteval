@@ -132,3 +132,23 @@ def test_cli_mutate_model_builds_system_with_model(tmp_path):
     cfg = _config_from_flags(args)
     assert cfg._system_mode is True
     assert cfg.system.model == "gpt-4o"
+
+
+def test_fail_on_severity_high_gates_when_high_survivors_exist():
+    from muteval.cli import main
+
+    # The offline support_bot example has unguarded high-severity survivors.
+    code = main([
+        "run", "--config", "examples/support_bot/muteval_config.py",
+        "--no-color", "--fail-on-severity", "high",
+    ])
+    assert code == 1
+
+
+def test_no_severity_gate_passes():
+    from muteval.cli import main
+
+    code = main([
+        "run", "--config", "examples/support_bot/muteval_config.py", "--no-color",
+    ])
+    assert code == 0

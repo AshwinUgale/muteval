@@ -27,6 +27,7 @@ from typing import List, Optional
 from muteval.config import MutEvalConfig
 from muteval.evals import EvalOutcome, coerce_outcome
 from muteval.mutators import Mutant, generate_mutants
+from muteval.severity import severity_of
 from muteval.system import System
 
 
@@ -45,6 +46,8 @@ class MutantOutcome:
     #   False -> output identical (inert / equivalent mutant)
     #   None  -> unknown (e.g. killed before all cases ran, or baseline errored)
     output_changed: Optional[bool] = None
+    # Ranked danger of this mutation: 'high' | 'medium' | 'low'.
+    severity: Optional[str] = None
 
 
 @dataclass
@@ -94,6 +97,12 @@ class MutationResult:
         """Survivors that actually changed the output but evals didn't catch —
         genuine coverage gaps. (Includes survivors with unknown diff status.)"""
         return [o for o in self.survivors if o.output_changed is not False]
+
+    @property
+    def high_severity_survivors(self) -> List[MutantOutcome]:
+        """Real coverage gaps ranked HIGH — the dangerous ones."""
+        from muteval.severity import HIGH
+        return [o for o in self.real_survivors if o.severity == HIGH]
 
     @property
     def score(self) -> float:
@@ -218,6 +227,7 @@ def run_mutation_testing(
                     closest_eval=closest_eval,
                     min_margin=min_margin,
                     output_changed=output_changed,
+                    severity=severity_of(mutant),
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -229,6 +239,7 @@ def run_mutation_testing(
                     killed=False,
                     errored=True,
                     error=f"{type(exc).__name__}: {exc}",
+                    severity=severity_of(mutant),
                 )
             )
 

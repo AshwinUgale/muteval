@@ -81,20 +81,34 @@ your system; muteval mutates your system to test your evals."
   - `adapters/ragas.py` — wrap RAGAS metrics (score + threshold). `[ragas]` extra.
   - `runner.py` — engine: baseline check -> generate mutants -> grade -> score;
     records near-miss margins for survivors. Works on `System` via `config.invoke`.
-  - `report.py` — terminal report (score bar + survivors + near-miss lines).
+  - `report.py` — terminal report (score bar + survivors + near-miss lines);
+    survivors are sorted by severity (HIGH first) with [HIGH]/[MED]/[LOW] tags.
+  - `severity.py` — ranks each mutant: `OPERATOR_SEVERITY` base (invert/corrupt
+    = high, drop/weaken = medium, cosmetic = low) escalated one level when the
+    change touches safety/correctness text (`CRITICAL_PATTERNS`). `severity_of`,
+    `severity_rank`. Outcomes carry `.severity`; result has `high_severity_survivors`.
   - `config.py` — `MutEvalConfig` (accepts `prompt=` legacy OR `system=`) +
     `load_config`.
-  - `cli.py` — `muteval run --config ... [--fail-under N] [--operators ...]`
-    and `muteval init` (scaffold a starter config).
+  - `cli.py` — `muteval run` (zero-config flags OR `--config`) with
+    `--fail-under N`, `--fail-on-severity {high,medium,low}` (gate on any
+    real survivor at/above that severity), `--operators`, `--sample/--seed`,
+    `--scope-include/--scope-exclude`, `--context/--context-file`,
+    `--mutate-model`, `--dry-run`; plus `muteval init`.
 - `examples/support_bot/` — runs offline (mock model, no API key); scores ~23%
   on purpose to demonstrate survivors.
 - `examples/openai_support_bot/` — real OpenAI-backed example (`[examples]`).
 - `examples/deepeval_rag/` — uses the deepeval adapter (`[deepeval]`).
+- `examples/rag_context_offline/` — OFFLINE System-mode demo (mock model, no
+  key): corrupt_context_doc flips an answer, a weak eval misses it ->
+  [HIGH] survivor. Proves context mutation + diffing + severity end-to-end.
 - `validation/deepeval_rag_qdrant/`, `validation/ragas_rag/` — real-metric
-  validation configs (need an API key).
+  validation configs, prompt mutation (need an API key).
+- `validation/deepeval_rag_system/` — System-mode: mutates CONTEXT + MODEL.
+  Grades Faithfulness against the *mutated* `used_context`, so a poisoned
+  retrieval survives (the stronger, less-gimmicky result). See its NOTES.md.
 - `validation/eval_quality_experiment/` — controlled, API-free experiment proving
   the mutation score tracks eval-suite quality (0→28→56→72%). See `FINDINGS.md`.
-- `tests/` — pytest; all green (100 tests).
+- `tests/` — pytest; all green (109 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 
@@ -111,21 +125,24 @@ your system; muteval mutates your system to test your evals."
 
 ## Roadmap (priority order)
 
-1. Mutate **retrieved context** (RAG) — STARTED: drop_context_doc + clear_context
-   shipped (src/muteval/mutators.py) via the `System` target. Corrupt/swap doc
-   operators next; this is the defensible moat.
-2. Mutate **tool outputs** for agent eval suites (System.tools is the hook).
-3. Model-swap mutants (downgrade model, see if evals notice; System.model hook).
-4. LLM-driven semantic mutations (beyond rule-based edits).
-5. Adapters that consume existing promptfoo / deepeval / ragas suites. (deepeval
-   + ragas SHIPPED; adapter contract in adapters/base.py; promptfoo next.)
-6. Statistical handling for non-deterministic suites (confidence intervals;
-   runs_per_mutant exists, CIs do not).
-7. Markdown/HTML report + shareable score badge.
+SHIPPED: context mutation (drop/clear/corrupt/swap/shuffle/duplicate/truncate),
+tool-output mutation (drop/corrupt/swap), model-swap (downgrade_model) — all via
+the `System` target. Adapters: deepeval + ragas (promptfoo next). Severity
+ranking + `--fail-on-severity` gate. Output-diffing (inert/equivalent mutants).
+
+Open:
+1. LLM-driven semantic mutations (beyond rule-based edits; behind an extra).
+2. promptfoo adapter (cross-tool generality for the writeup).
+3. Statistical handling for non-deterministic suites (confidence intervals;
+   `runs_per_mutant` exists, CIs do not).
+4. Markdown/HTML report + shareable score badge.
+5. User-supplied `CRITICAL_PATTERNS` / per-domain severity overrides via config.
 
 Also shipped beyond the original roadmap: scored evals + near-miss reporting
-(EvalOutcome), framework-free `checks`, `muteval init`, and a controlled
-eval-quality experiment (validation/eval_quality_experiment/, see FINDINGS.md).
+(EvalOutcome), framework-free `checks`, `muteval init`, severity ranking, the
+`--fail-on-severity` CI gate, an offline context-mutation demo
+(examples/rag_context_offline/), and a controlled eval-quality experiment
+(validation/eval_quality_experiment/, see FINDINGS.md).
 
 ## Active plan
 

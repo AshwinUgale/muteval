@@ -233,6 +233,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Exit non-zero if the mutation score is below this percent (gate CI).",
     )
     run.add_argument(
+        "--fail-on-severity", choices=["high", "medium", "low"], default=None,
+        help="Exit non-zero if any real survivor is at or above this severity "
+        "(e.g. 'high' fails on any unguarded high-severity gap, even if the "
+        "overall score looks fine).",
+    )
+    run.add_argument(
         "--dry-run", action="store_true",
         help="Build and validate the run WITHOUT calling the model.",
     )
@@ -296,14 +302,33 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         print(format_report(result, use_color=not args.no_color))
 
+        failed = False
         if args.fail_under is not None and result.score * 100 < args.fail_under:
             print(
                 f"\nmuteval: FAIL — score {result.score * 100:.0f}% is below "
                 f"--fail-under {args.fail_under:.0f}%",
                 file=sys.stderr,
             )
-            return 1
-        return 0
+            failed = True
+
+        if args.fail_on_severity is not None:
+            from muteval.severity import MEDIUM, severity_rank
+
+            threshold = severity_rank(args.fail_on_severity)
+            offending = [
+                o for o in result.real_survivors
+                if severity_rank(o.severity or MEDIUM) <= threshold
+            ]
+            if offending:
+                print(
+                    f"\nmuteval: FAIL — {len(offending)} survivor(s) at or above "
+                    f"'{args.fail_on_severity}' severity "
+                    f"(--fail-on-severity {args.fail_on_severity}).",
+                    file=sys.stderr,
+                )
+                failed = True
+
+        return 1 if failed else 0
 
     return 2
 

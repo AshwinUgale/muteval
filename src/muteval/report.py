@@ -81,13 +81,28 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
 
     real = result.real_survivors
     if real:
+        from muteval.severity import HIGH, LOW, MEDIUM, severity_rank
+
+        real = sorted(real, key=lambda o: severity_rank(o.severity or MEDIUM))
+        n_high = sum(1 for o in real if o.severity == HIGH)
+        header = c(f"{len(real)} SURVIVED", "31") + (
+            "  (output changed but evals didn't notice — real coverage gaps"
+        )
+        if n_high:
+            header += "; " + c(f"{n_high} HIGH-severity", "1;31")
+        lines.append(header + "):")
         lines.append(
-            c(f"{len(real)} SURVIVED", "31")
-            + "  (output changed but evals didn't notice — real coverage gaps):"
+            c("  ranked by severity: ", "2")
+            + c("HIGH", "31") + c(" › ", "2") + c("MED", "33") + c(" › ", "2")
+            + c("LOW", "2")
         )
         lines.append("")
+        _sev_color = {HIGH: "31", MEDIUM: "33", LOW: "2"}
+        _sev_label = {HIGH: "HIGH", MEDIUM: "MED ", LOW: "LOW "}
         for o in real:
-            lines.append(f"  {c('SURVIVED', '31')}  [{o.mutant.operator}]")
+            sev = o.severity or MEDIUM
+            tag = c(f"[{_sev_label[sev]}]", _sev_color[sev])
+            lines.append(f"  {tag} {c('SURVIVED', '31')}  [{o.mutant.operator}]")
             lines.append(f"            {o.mutant.description}")
             if o.min_margin is not None and o.closest_eval:
                 lines.append(
