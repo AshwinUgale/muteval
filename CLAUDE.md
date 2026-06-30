@@ -152,6 +152,12 @@ The A (scope/custom/sampling) and B (context/tool/model mutation) plan in
 Next candidates: LLM-driven semantic mutations (behind an extra), confidence
 intervals for noisy suites, HTML report + score badge, promptfoo adapter.
 
+## Outreach / go-to-market
+
+Target list + plan for running muteval against real OSS repos to find
+eval gaps, contribute, and publish: `docs/OUTREACH-targets-and-plan.md`.
+Lead with a gift not a pitch; filter outreach by HIGH severity.
+
 ## What matters most right now
 
 Validate demand, not competitor speed. Get muteval running on 2-3 real eval
