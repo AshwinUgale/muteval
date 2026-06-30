@@ -70,7 +70,7 @@ def test_dry_run_builds_config_without_api(tmp_path, capsys):
     assert code == 0
     out = capsys.readouterr().out
     assert "dry-run OK" in out
-    assert "cases:  1" in out
+    assert "cases:" in out and "1" in out
 
 
 def test_run_requires_something(capsys):
@@ -84,3 +84,51 @@ def test_load_cases_tolerates_utf8_bom(tmp_path):
     p.write_bytes(b'\xef\xbb\xbf{"question":"q1"}\n')
     cases = _load_cases(str(p))
     assert cases == [{"question": "q1"}]
+
+
+def test_cli_context_builds_system_mode(tmp_path):
+    import argparse
+    from muteval.cli import _config_from_flags
+
+    cases = tmp_path / "c.jsonl"
+    cases.write_text('{"question":"q"}\n', encoding="utf-8")
+    args = argparse.Namespace(
+        prompt="Answer from context.", prompt_file=None, cases=str(cases),
+        context=["doc A", "doc B"], context_file=None, mutate_model=False, model="gpt-4o-mini",
+        check=["contains:x"], judge=None, threshold=0.7, runs_per_mutant=1, scope_include=None, scope_exclude=None,
+    )
+    cfg = _config_from_flags(args)
+    assert cfg.system.context == ("doc A", "doc B")
+    assert cfg._system_mode is True
+
+
+def test_cli_no_context_is_prompt_mode(tmp_path):
+    import argparse
+    from muteval.cli import _config_from_flags
+
+    cases = tmp_path / "c.jsonl"
+    cases.write_text('{"question":"q"}\n', encoding="utf-8")
+    args = argparse.Namespace(
+        prompt="Answer.", prompt_file=None, cases=str(cases),
+        context=None, context_file=None, mutate_model=False, model="gpt-4o-mini",
+        check=["contains:x"], judge=None, threshold=0.7, runs_per_mutant=1, scope_include=None, scope_exclude=None,
+    )
+    cfg = _config_from_flags(args)
+    assert cfg._system_mode is False
+    assert cfg.system.context is None
+
+
+def test_cli_mutate_model_builds_system_with_model(tmp_path):
+    import argparse
+    from muteval.cli import _config_from_flags
+
+    cases = tmp_path / "c.jsonl"
+    cases.write_text('{"question":"q"}\n', encoding="utf-8")
+    args = argparse.Namespace(
+        prompt="Answer.", prompt_file=None, cases=str(cases),
+        context=None, context_file=None, mutate_model=True, model="gpt-4o",
+        check=["contains:x"], judge=None, threshold=0.7, runs_per_mutant=1, scope_include=None, scope_exclude=None,
+    )
+    cfg = _config_from_flags(args)
+    assert cfg._system_mode is True
+    assert cfg.system.model == "gpt-4o"

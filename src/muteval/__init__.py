@@ -12,7 +12,13 @@ catch are "survivors" — concrete blind spots in your eval coverage.
 
 from muteval.config import MutEvalConfig
 from muteval.evals import EvalOutcome, coerce_outcome
-from muteval.mutators import Mutant, generate_mutants
+from muteval.mutators import (
+    Mutant,
+    generate_mutants,
+    make_downgrade_model,
+    make_weaken_modals,
+    register_operator,
+)
 from muteval.runner import MutationResult, run_mutation_testing
 from muteval.system import System, as_system
 
@@ -26,6 +32,9 @@ __all__ = [
     "coerce_outcome",
     "Mutant",
     "generate_mutants",
+    "register_operator",
+    "make_weaken_modals",
+    "make_downgrade_model",
     "MutationResult",
     "run_mutation_testing",
     "__version__",

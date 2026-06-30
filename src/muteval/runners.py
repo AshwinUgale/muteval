@@ -1,14 +1,22 @@
 """Built-in ``run`` helpers so users don't have to write one.
 
-muteval's one irreducible requirement is a ``run(prompt, case) -> output`` —
-how to call the system with a (mutated) prompt. For the common "prompt + chat
-model" case, you shouldn't have to write that. ``openai_run`` provides it using
-only the standard library (no ``openai`` SDK), so the CLI can run a full
-mutation test from just a prompt file + a cases file + flags.
+muteval's one irreducible requirement is a ``run -> output`` — how to call the
+system with a (mutated) prompt/context. For the common "prompt + chat model"
+case, you shouldn't have to write that. ``openai_run`` provides it using only
+the standard library (no ``openai`` SDK).
 
-Custom pipelines (RAG retrievers, agents, non-OpenAI models) still use a Python
-config with their own ``run`` — this just removes the boilerplate for the
-majority case.
+It is **System-aware**: muteval calls ``run`` with either
+
+  * a prompt string — legacy ``run(prompt, case)`` mode, or
+  * a ``System`` — when the config is built with ``system=...`` (RAG/agent mode),
+
+and ``openai_run`` handles both. In System mode it uses the mutated
+``system.prompt``, the mutated ``system.context`` as the retrieval corpus, and
+``system.model`` — so context-drop and model-swap mutations actually flow
+through to the output.
+
+Custom pipelines (your own retriever/agent) still pass their own ``run`` in a
+Python config; this just removes the boilerplate for the majority case.
 """
 
 from __future__ import annotations
@@ -17,13 +25,11 @@ import json
 import os
 import ssl
 import urllib.request
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 _ENDPOINT = "https://api.openai.com/v1/chat/completions"
 
-# Case keys we'll look for, in order, to find the user's question/input.
 _QUESTION_KEYS = ("question", "input", "query", "prompt", "text")
-# Case key holding retrieved context (str or list of str), if any.
 _CONTEXT_KEY = "context"
 
 
@@ -67,15 +73,18 @@ def _case_question(case: Any, question_keys: Sequence[str]) -> str:
     return str(case)
 
 
+def _docs_to_text(docs: Optional[Sequence[str]]) -> str:
+    if not docs:
+        return ""
+    if isinstance(docs, (list, tuple)):
+        return "\n\n".join(str(d) for d in docs)
+    return str(docs)
+
+
 def _case_context(case: Any, context_key: str) -> str:
     if not isinstance(case, dict):
         return ""
-    ctx = case.get(context_key)
-    if not ctx:
-        return ""
-    if isinstance(ctx, (list, tuple)):
-        return "\n\n".join(str(c) for c in ctx)
-    return str(ctx)
+    return _docs_to_text(case.get(context_key))
 
 
 def openai_run(
@@ -84,25 +93,37 @@ def openai_run(
     question_keys: Sequence[str] = _QUESTION_KEYS,
     context_key: str = _CONTEXT_KEY,
     temperature: float = 0.0,
-) -> Callable[[str, Any], str]:
-    """Return a ``run(prompt, case)`` that calls an OpenAI chat model.
+) -> Callable[[Any, Any], str]:
+    """Return a System-aware ``run`` that calls an OpenAI chat model (stdlib).
 
-    The mutated ``prompt`` becomes the system message; the case's question
-    (first present of ``question_keys``) plus any retrieved ``context`` becomes
-    the user message. Stdlib only — needs ``OPENAI_API_KEY`` (and ``certifi`` if
-    your Python's SSL store is bare).
+    Called with a ``System`` (system mode) it uses ``system.prompt``, the
+    mutated ``system.context`` (falling back to the case's own context if the
+    system carries none), and ``system.model`` (falling back to ``model``).
+    Called with a prompt string (legacy mode) it uses that prompt + the case's
+    context + ``model``.
     """
 
-    def run(prompt: str, case: Any) -> str:
+    def run(target: Any, case: Any) -> str:
+        # Imported lazily to avoid a hard import cycle at module load.
+        from muteval.system import System
+
+        if isinstance(target, System):
+            prompt = target.prompt
+            use_model = target.model or model
+            context = _docs_to_text(target.context) or _case_context(case, context_key)
+        else:
+            prompt = target
+            use_model = model
+            context = _case_context(case, context_key)
+
         question = _case_question(case, question_keys)
-        context = _case_context(case, context_key)
-        user = (f"Context:\n{context}\n\nQuestion: {question}" if context else question)
+        user = f"Context:\n{context}\n\nQuestion: {question}" if context else question
         return _chat(
             [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user},
             ],
-            model=model,
+            model=use_model,
             temperature=temperature,
         )
 

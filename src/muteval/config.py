@@ -54,6 +54,9 @@ class MutEvalConfig:
     runs_per_mutant: int = 1
     eval_names: List[str] = field(default_factory=list)
     system: Optional[System] = None
+    operators: Optional[List[Any]] = None
+    scope_include: Optional[str] = None
+    scope_exclude: Optional[str] = None
 
     def __post_init__(self) -> None:
         # Which calling convention does the user's run expect?
@@ -73,6 +76,18 @@ class MutEvalConfig:
                 raise ValueError("config.system must be a muteval.System instance")
             # Keep `prompt` populated for any back-compat consumer/report.
             self.prompt = self.system.prompt
+
+        # A2 scoping: strip [[mutate]] markers from the prompt (the model must
+        # never see them) and build the Scope from markers + include/exclude.
+        from muteval.scope import make_scope, strip_markers
+
+        clean, ranges = strip_markers(self.system.prompt)
+        if clean != self.system.prompt:
+            self.system = self.system.with_prompt(clean)
+            self.prompt = clean
+        self.scope = make_scope(
+            ranges=ranges, include=self.scope_include, exclude=self.scope_exclude
+        )
 
         if not self.cases:
             raise ValueError("config.cases must contain at least one case")

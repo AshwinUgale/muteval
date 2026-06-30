@@ -130,3 +130,81 @@ def test_generate_mutants_accepts_system_and_includes_context_mutants():
     operators = {m.operator for m in mutants}
     assert "drop_context_doc" in operators
     assert "clear_context" in operators
+
+
+from muteval.mutators import (  # noqa: E402
+    corrupt_context_doc,
+    duplicate_context_doc,
+    shuffle_context,
+    swap_context_doc,
+    truncate_context_doc,
+)
+
+
+def test_corrupt_context_doc_changes_a_number():
+    s = System(prompt="answer from context", context=("The server uses port 8080.",))
+    ms = corrupt_context_doc(s)
+    assert len(ms) == 1
+    assert ms[0].target == "context"
+    assert "8080" not in ms[0].system.context[0]   # the fact was altered
+
+
+def test_swap_context_doc_replaces_each_doc():
+    s = System(prompt="p", context=("doc A", "doc B"))
+    ms = swap_context_doc(s)
+    assert len(ms) == 2
+    for m in ms:
+        assert any("cafeteria" in d.lower() for d in m.system.context)
+
+
+def test_shuffle_context_reverses_order():
+    s = System(prompt="p", context=("a", "b", "c"))
+    ms = shuffle_context(s)
+    assert len(ms) == 1
+    assert ms[0].system.context == ("c", "b", "a")
+
+
+def test_shuffle_context_skips_single_doc():
+    assert shuffle_context(System(prompt="p", context=("only one",))) == []
+
+
+def test_duplicate_context_doc_grows_context():
+    s = System(prompt="p", context=("a", "b"))
+    ms = duplicate_context_doc(s)
+    assert len(ms) == 2
+    assert all(len(m.system.context) == 3 for m in ms)
+
+
+def test_truncate_context_doc_clips_long_doc():
+    s = System(prompt="p", context=("one two three four five six seven eight",))
+    ms = truncate_context_doc(s)
+    assert len(ms) == 1
+    assert len(ms[0].system.context[0].split()) < 8
+
+
+def test_truncate_context_doc_skips_short_docs():
+    assert truncate_context_doc(System(prompt="p", context=("too short",))) == []
+
+
+def test_new_context_operators_noop_without_context():
+    for op in (
+        corrupt_context_doc, swap_context_doc, shuffle_context,
+        duplicate_context_doc, truncate_context_doc,
+    ):
+        assert op("just a prompt, no context") == []
+
+
+from muteval.mutators import downgrade_model  # noqa: E402
+
+
+def test_downgrade_model_emits_weaker_models():
+    ms = downgrade_model(System(prompt="p", model="gpt-4o"))
+    assert len(ms) == 2
+    assert all(m.target == "model" for m in ms)
+    assert {m.system.model for m in ms} == {"gpt-4o-mini", "gpt-3.5-turbo"}
+
+
+def test_downgrade_model_noop_when_weakest_or_unset():
+    assert downgrade_model(System(prompt="p", model="gpt-3.5-turbo")) == []
+    assert downgrade_model(System(prompt="p")) == []          # no model set
+    assert downgrade_model("just a prompt") == []             # prompt-only target

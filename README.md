@@ -94,6 +94,13 @@ Built-in checks: `contains:TEXT`, `not_contains:TEXT`, `contains_case:KEY`,
 no extra installs). Add `--dry-run` to validate your setup without spending a
 token. For custom pipelines/metrics, use `--config muteval_config.py` instead.
 
+Testing a RAG app? Add `--context-file knowledge.txt` (or `--context "doc"`,
+repeatable). muteval then also drops/clears retrieved docs (`drop_context_doc`,
+`clear_context`) and checks whether your evals notice the degraded retrieval.
+
+Using a specific model? Add `--mutate-model` to also swap it for a weaker one
+(`downgrade_model`) and see whether your evals catch the cheaper model.
+
 ## Quick start (runs offline, no API key)
 
 ```bash
@@ -181,6 +188,20 @@ evals fails the build.
 Copy `examples/ci/github-actions.yml` to `.github/workflows/muteval.yml` and it
 runs on every PR automatically — set once, then it guards your eval suite forever.
 
+## Advanced
+
+- **Choose what mutates** — `--operators weaken_modals flip_negation ...` runs a
+  subset. `--sample N --seed S` runs a reproducible random subset for cheap CI.
+- **Scope the prompt** — wrap mutable regions in `[[mutate]] ... [[/mutate]]`, or
+  use `--scope-include REGEX` / `--scope-exclude REGEX` (line-level) so muteval
+  only mutates the parts you care about.
+- **Bring your own operator** — `from muteval import register_operator` (or pass
+  a callable in `operators=[...]`). Operator factories let you parametrize the
+  built-ins: `make_weaken_modals(pairs)`, `make_downgrade_model(ladder)`.
+- **Mutate beyond the prompt** — `System(prompt, context=[...], tools=[...],
+  model=...)` makes retrieved context, tool outputs, and the model itself
+  mutable (RAG/agent suites).
+
 ## Mutation operators
 
 | Operator | What it injects |
@@ -194,6 +215,15 @@ runs on every PR automatically — set once, then it guards your eval suite fore
 | `remove_emphasis` | strips `**bold**` / `IMPORTANT:` cues |
 | `drop_context_doc` | drops one retrieved document (RAG) |
 | `clear_context` | removes all retrieved context (retrieval failure) |
+| `corrupt_context_doc` | injects a plausible-but-wrong fact into a doc |
+| `swap_context_doc` | replaces a doc with an irrelevant one (bad retrieval) |
+| `shuffle_context` | reverses doc order (position sensitivity) |
+| `duplicate_context_doc` | duplicates a doc (redundant noise) |
+| `truncate_context_doc` | clips a doc's tail (cut-off chunk) |
+| `downgrade_model` | swaps the model for a weaker one (model-swap) |
+| `drop_tool_output` | drops one tool output (agents) |
+| `corrupt_tool_output` | corrupts one tool output (wrong tool result) |
+| `swap_tool_output` | swaps a tool output for an irrelevant one |
 
 ## Mutating retrieved context (RAG)
 

@@ -66,10 +66,13 @@ your system; muteval mutates your system to test your evals."
     `coerce_outcome`. Evals may return `bool` OR `EvalOutcome`.
   - `checks.py` — framework-free eval factories (contains, not_contains,
     contains_case, regex_matches, is_json, equals, llm_judge).
-  - `mutators.py` — 9 operators: 7 prompt (weaken_modals, flip_negation,
+  - `mutators.py` — 18 operators: 7 prompt (weaken_modals, flip_negation,
     drop_instruction_lines, delete_sentences, truncate_prompt,
-    drop_few_shot_example, remove_emphasis) + 2 context (drop_context_doc,
-    clear_context). All accept `str | System`. `Mutant` carries a `System`
+    drop_few_shot_example, remove_emphasis) + 7 context (drop_context_doc,
+    clear_context, corrupt_context_doc, swap_context_doc, shuffle_context,
+    duplicate_context_doc, truncate_context_doc) + 1 model (downgrade_model)
+    + 3 tool (drop/corrupt/swap_tool_output). Custom ops via register_operator;
+    operator factories make_weaken_modals/make_downgrade_model. All accept `str | System`. `Mutant` carries a `System`
     (with `.prompt` back-compat property). Registered in `OPERATORS`.
   - `adapters/base.py` — the adapter contract + helpers (case_get,
     scorer_to_eval). Read this before writing a new adapter.
@@ -91,7 +94,7 @@ your system; muteval mutates your system to test your evals."
   validation configs (need an API key).
 - `validation/eval_quality_experiment/` — controlled, API-free experiment proving
   the mutation score tracks eval-suite quality (0→28→56→72%). See `FINDINGS.md`.
-- `tests/` — pytest; all green (54 tests).
+- `tests/` — pytest; all green (100 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 
@@ -126,9 +129,11 @@ eval-quality experiment (validation/eval_quality_experiment/, see FINDINGS.md).
 
 ## Active plan
 
-Next feature work (scoped/custom operators + context/tool/model
-mutation) is planned in `docs/PLAN-A-scope-B-system-mutation.md`.
-Start with B1 (the run(System) contract).
+The A (scope/custom/sampling) and B (context/tool/model mutation) plan in
+`docs/PLAN-A-scope-B-system-mutation.md` is COMPLETE. 18 operators; CLI has
+--operators/--sample/--seed/--scope-include/--scope-exclude/--context/--mutate-model.
+Next candidates: LLM-driven semantic mutations (behind an extra), confidence
+intervals for noisy suites, HTML report + score badge, promptfoo adapter.
 
 ## What matters most right now
 

@@ -18,6 +18,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Dict, List
 
+from muteval.scope import Scope, filter_mutants
 from muteval.system import System, Target, as_system
 
 
@@ -295,6 +296,303 @@ def clear_context(target: Target) -> List[Mutant]:
     ]
 
 
+# --- More context operators (B2): corrupt / swap / shuffle / duplicate / truncate
+
+_IRRELEVANT_DOC = (
+    "Reminder: the office cafeteria serves lunch from 12:00 to 13:00 on weekdays."
+)
+
+
+def _corrupt_doc(doc: str) -> "str | None":
+    """Deterministic, rule-based corruption: change the first number, else flip a
+    polarity verb. Returns a plausible-but-wrong doc, or None if uncorruptible."""
+    m = re.search(r"\d+", doc)
+    if m:
+        n = int(m.group(0))
+        wrong = str(n + 1 if n != 0 else 9)
+        return doc[: m.start()] + wrong + doc[m.end() :]
+    flip = re.search(r"\b(is|are|was|were|can|will|does|do)\b", doc)
+    if flip:
+        return doc[: flip.end()] + " not" + doc[flip.end() :]
+    return None
+
+
+def corrupt_context_doc(target: Target) -> List[Mutant]:
+    """Inject a plausible-but-wrong fact into one retrieved doc at a time.
+
+    Tests whether your evals catch a retriever returning subtly wrong content —
+    the answer may now be confidently incorrect."""
+    system = as_system(target)
+    if not system.context:
+        return []
+    docs = list(system.context)
+    mutants: List[Mutant] = []
+    for i, doc in enumerate(docs):
+        bad = _corrupt_doc(doc)
+        if bad is None or bad == doc:
+            continue
+        new = docs[:i] + [bad] + docs[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="corrupt_context_doc",
+                description=f'corrupted retrieved doc #{i + 1}: "{_truncate(bad)}"',
+                system=system.replace(context=tuple(new)),
+                target="context",
+            )
+        )
+    return mutants
+
+
+def swap_context_doc(target: Target) -> List[Mutant]:
+    """Replace one retrieved doc with an irrelevant one (a bad retrieval hit)."""
+    system = as_system(target)
+    if not system.context:
+        return []
+    docs = list(system.context)
+    mutants: List[Mutant] = []
+    for i in range(len(docs)):
+        if docs[i] == _IRRELEVANT_DOC:
+            continue
+        new = docs[:i] + [_IRRELEVANT_DOC] + docs[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="swap_context_doc",
+                description=f"swapped retrieved doc #{i + 1} for an irrelevant doc",
+                system=system.replace(context=tuple(new)),
+                target="context",
+            )
+        )
+    return mutants
+
+
+def shuffle_context(target: Target) -> List[Mutant]:
+    """Reverse the order of retrieved docs (tests position sensitivity)."""
+    system = as_system(target)
+    if not system.context or len(system.context) < 2:
+        return []
+    reordered = tuple(reversed(system.context))
+    if reordered == system.context:
+        return []
+    return [
+        Mutant(
+            operator="shuffle_context",
+            description=f"reversed the order of {len(system.context)} retrieved docs",
+            system=system.replace(context=reordered),
+            target="context",
+        )
+    ]
+
+
+def duplicate_context_doc(target: Target) -> List[Mutant]:
+    """Duplicate one retrieved doc (adds redundant noise to the context)."""
+    system = as_system(target)
+    if not system.context:
+        return []
+    docs = list(system.context)
+    mutants: List[Mutant] = []
+    for i, doc in enumerate(docs):
+        new = docs[: i + 1] + [doc] + docs[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="duplicate_context_doc",
+                description=f'duplicated retrieved doc #{i + 1}: "{_truncate(doc)}"',
+                system=system.replace(context=tuple(new)),
+                target="context",
+            )
+        )
+    return mutants
+
+
+def truncate_context_doc(target: Target) -> List[Mutant]:
+    """Clip the tail of one retrieved doc (a chunk that got cut off)."""
+    system = as_system(target)
+    if not system.context:
+        return []
+    docs = list(system.context)
+    mutants: List[Mutant] = []
+    for i, doc in enumerate(docs):
+        words = doc.split()
+        if len(words) < 6:
+            continue
+        keep = max(1, len(words) // 2)
+        clipped = " ".join(words[:keep])
+        if clipped == doc:
+            continue
+        new = docs[:i] + [clipped] + docs[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="truncate_context_doc",
+                description=f"truncated retrieved doc #{i + 1} to its first {keep} words",
+                system=system.replace(context=tuple(new)),
+                target="context",
+            )
+        )
+    return mutants
+
+
+# --- Model-swap operator (B3) ------------------------------------------------
+
+# Strong -> weak ladder. downgrade_model emits a mutant for each model weaker
+# than the System's current model. Only fires when System.model is set.
+_MODEL_LADDER = ("gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo")
+
+
+def downgrade_model(target: Target) -> List[Mutant]:
+    """Swap the model for a weaker one (does your suite notice a cheaper model?).
+
+    No-op unless ``System.model`` is set (so it never fires on prompt-only runs).
+    Emits one mutant per weaker model in the ladder.
+    """
+    system = as_system(target)
+    current = system.model
+    if not current:
+        return []
+    if current in _MODEL_LADDER:
+        weaker = _MODEL_LADDER[_MODEL_LADDER.index(current) + 1 :]
+    else:
+        weaker = _MODEL_LADDER  # unknown current: treat every ladder model as a downgrade
+    mutants: List[Mutant] = []
+    for model in weaker:
+        if model == current:
+            continue
+        mutants.append(
+            Mutant(
+                operator="downgrade_model",
+                description=f"downgraded model {current} -> {model}",
+                system=system.replace(model=model),
+                target="model",
+            )
+        )
+    return mutants
+
+
+# --- Tool-output operators (B4, agents) --------------------------------------
+# System.tools is treated as a tuple of tool OUTPUTS (strings). These fire only
+# when tools are present. Note: the built-in openai_run does not inject tools —
+# agent pipelines consume system.tools via their own run(system, case).
+
+_IRRELEVANT_TOOL = "tool_result: {\"status\": \"ok\", \"data\": \"unrelated\"}"
+
+
+def drop_tool_output(target: Target) -> List[Mutant]:
+    """Drop one tool output at a time (a tool silently returned nothing)."""
+    system = as_system(target)
+    if not system.tools:
+        return []
+    tools = list(system.tools)
+    mutants: List[Mutant] = []
+    for i in range(len(tools)):
+        new = tools[:i] + tools[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="drop_tool_output",
+                description=f'dropped tool output #{i + 1}: "{_truncate(str(tools[i]))}"',
+                system=system.replace(tools=tuple(new)),
+                target="tools",
+            )
+        )
+    return mutants
+
+
+def corrupt_tool_output(target: Target) -> List[Mutant]:
+    """Corrupt one tool output (a tool returned a plausible-but-wrong result)."""
+    system = as_system(target)
+    if not system.tools:
+        return []
+    tools = list(system.tools)
+    mutants: List[Mutant] = []
+    for i, tool in enumerate(tools):
+        bad = _corrupt_doc(str(tool))
+        if bad is None or bad == str(tool):
+            continue
+        new = tools[:i] + [bad] + tools[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="corrupt_tool_output",
+                description=f'corrupted tool output #{i + 1}: "{_truncate(bad)}"',
+                system=system.replace(tools=tuple(new)),
+                target="tools",
+            )
+        )
+    return mutants
+
+
+def swap_tool_output(target: Target) -> List[Mutant]:
+    """Replace one tool output with an irrelevant one (wrong tool / stale call)."""
+    system = as_system(target)
+    if not system.tools:
+        return []
+    tools = list(system.tools)
+    mutants: List[Mutant] = []
+    for i in range(len(tools)):
+        if tools[i] == _IRRELEVANT_TOOL:
+            continue
+        new = tools[:i] + [_IRRELEVANT_TOOL] + tools[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="swap_tool_output",
+                description=f"swapped tool output #{i + 1} for an irrelevant result",
+                system=system.replace(tools=tuple(new)),
+                target="tools",
+            )
+        )
+    return mutants
+
+
+# --- Operator factories (A4): parametrize built-in operators ----------------
+# Combine with register_operator to add a tuned variant, e.g.
+#   register_operator("weaken_modals_eu", make_weaken_modals([("shall","may")]))
+
+
+def make_weaken_modals(pairs: "List[tuple]") -> "Callable[[Target], List[Mutant]]":
+    """Build a weaken_modals-style operator with custom (strong, weak) pairs."""
+
+    def op(target: Target) -> List[Mutant]:
+        system = as_system(target)
+        prompt = system.prompt
+        mutants: List[Mutant] = []
+        for strong, weak in pairs:
+            pattern = re.compile(rf"\b{re.escape(strong)}\b", re.IGNORECASE)
+            for match in pattern.finditer(prompt):
+                start, end = match.span()
+                mutated = prompt[:start] + weak + prompt[end:]
+                mutants.append(
+                    Mutant(
+                        operator="weaken_modals",
+                        description=f'weakened "{match.group(0)}" -> "{weak}"',
+                        system=system.with_prompt(mutated),
+                    )
+                )
+        return mutants
+
+    op.__name__ = "weaken_modals_custom"
+    return op
+
+
+def make_downgrade_model(ladder: "List[str]") -> "Callable[[Target], List[Mutant]]":
+    """Build a downgrade_model operator with a custom strong->weak model ladder."""
+
+    def op(target: Target) -> List[Mutant]:
+        system = as_system(target)
+        current = system.model
+        if not current:
+            return []
+        weaker = ladder[ladder.index(current) + 1 :] if current in ladder else list(ladder)
+        return [
+            Mutant(
+                operator="downgrade_model",
+                description=f"downgraded model {current} -> {m}",
+                system=system.replace(model=m),
+                target="model",
+            )
+            for m in weaker
+            if m != current
+        ]
+
+    op.__name__ = "downgrade_model_custom"
+    return op
+
+
 # Registry of all operators. Keyed by name so they can be selected/filtered.
 OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "weaken_modals": weaken_modals,
@@ -306,25 +604,55 @@ OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "remove_emphasis": remove_emphasis,
     "drop_context_doc": drop_context_doc,
     "clear_context": clear_context,
+    "corrupt_context_doc": corrupt_context_doc,
+    "swap_context_doc": swap_context_doc,
+    "shuffle_context": shuffle_context,
+    "duplicate_context_doc": duplicate_context_doc,
+    "truncate_context_doc": truncate_context_doc,
+    "downgrade_model": downgrade_model,
+    "drop_tool_output": drop_tool_output,
+    "corrupt_tool_output": corrupt_tool_output,
+    "swap_tool_output": swap_tool_output,
 }
+
+
+def register_operator(name: str, fn: "Callable[[Target], List[Mutant]]") -> "Callable[[Target], List[Mutant]]":
+    """Register a custom mutation operator under ``name`` so it runs by default
+    and can be selected via ``--operators name`` / ``operators=[name]``.
+
+    The operator is ``fn(target) -> list[Mutant]`` (``target`` is a System or a
+    bare prompt string; use ``as_system(target)``). Returns ``fn`` so it can be
+    used as a decorator. Bring-your-own operators never touch the eval suite —
+    they only produce mutated Systems, preserving muteval's orthogonality.
+    """
+    OPERATORS[name] = fn
+    return fn
 
 
 def generate_mutants(
     target: Target,
-    operators: List[str] | None = None,
+    operators: "List[str | Callable] | None" = None,
+    scope: "Scope | None" = None,
 ) -> List[Mutant]:
-    """Run the selected operators and return a de-duplicated list of mutants."""
+    """Run the selected operators and return a de-duplicated list of mutants.
+
+    ``operators`` items may be registered operator NAMES (str) or operator
+    CALLABLES (``fn(target) -> list[Mutant]``) for bring-your-own operators.
+    """
     original = as_system(target)
     original_key = original.key()
-    selected = operators or list(OPERATORS.keys())
+    selected = operators if operators is not None else list(OPERATORS.keys())
     seen = set()
     mutants: List[Mutant] = []
-    for name in selected:
-        op = OPERATORS.get(name)
-        if op is None:
-            raise ValueError(
-                f"Unknown operator '{name}'. Available: {list(OPERATORS)}"
-            )
+    for item in selected:
+        if callable(item):
+            op = item
+        else:
+            op = OPERATORS.get(item)
+            if op is None:
+                raise ValueError(
+                    f"Unknown operator '{item}'. Available: {list(OPERATORS)}"
+                )
         for mutant in op(original):
             mkey = mutant.system.key()
             # Skip no-ops (identical to the original) and exact duplicates.
@@ -332,7 +660,7 @@ def generate_mutants(
                 continue
             seen.add(mkey)
             mutants.append(mutant)
-    return mutants
+    return filter_mutants(original.prompt, mutants, scope)
 
 
 # --- helpers -----------------------------------------------------------------

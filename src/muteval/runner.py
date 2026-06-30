@@ -164,8 +164,13 @@ def run_mutation_testing(
     config: MutEvalConfig,
     operators: List[str] | None = None,
     max_mutants: Optional[int] = None,
+    sample: Optional[int] = None,
+    seed: Optional[int] = None,
 ) -> MutationResult:
     """Run mutation testing for the given config and return a MutationResult."""
+    if operators is None:
+        operators = getattr(config, "operators", None)
+
     # Baseline — resilient: an error here shouldn't lose the whole run.
     baseline_passed = False
     baseline_error: Optional[str] = None
@@ -177,7 +182,13 @@ def run_mutation_testing(
     except Exception as exc:  # noqa: BLE001 - surface any failure to the user
         baseline_error = f"{type(exc).__name__}: {exc}"
 
-    mutants = generate_mutants(config.system, operators=operators)
+    mutants = generate_mutants(
+        config.system, operators=operators, scope=getattr(config, "scope", None)
+    )
+    if sample is not None and 0 <= sample < len(mutants):
+        import random
+
+        mutants = random.Random(seed).sample(mutants, sample)
     if max_mutants is not None:
         mutants = mutants[:max_mutants]
 

@@ -31,7 +31,7 @@ without ever coupling mutant generation to the user's evals.
 
 - [x] **A1 Operator selection** — DONE (`--operators`, `generate_mutants(operators=)`).
 
-- [ ] **A2 Scoping** (mutate only chosen regions of the prompt)
+- [x] **A2 DONE — Scoping** (mutate only chosen regions of the prompt)
   - Design: implement as a POST-generation FILTER, so we don't touch every
     operator. For each mutant, locate the changed span vs the original and keep
     it only if that span overlaps the scope.
@@ -45,7 +45,7 @@ without ever coupling mutant generation to the user's evals.
   - Tests: scoped prompt yields mutants only inside the region; exclude-regex
     drops mutants whose change lands on matching lines.
 
-- [ ] **A3 Custom operators** (bring your own)
+- [x] **A3 DONE — Custom operators** (bring your own)
   - Public API: `muteval.register_operator(name, fn)` AND config-level operators
     that accept callables (not just names).
   - `generate_mutants` currently takes operator NAMES; extend to accept callables.
@@ -54,10 +54,10 @@ without ever coupling mutant generation to the user's evals.
     export in `__init__.py`.
   - Tests: register a custom op, confirm it runs and shows in the report.
 
-- [ ] **A5 Sampling** — `--sample N` (+ `--seed`) deterministic random subset for
+- [x] **A5 DONE — Sampling** — `--sample N` (+ `--seed`) deterministic random subset for
   cheap runs. Files: `cli.py`, `mutators.py`/`runner.py`.
 
-- [ ] **A4 Per-operator params** (lower priority) — operator factories, e.g.
+- [x] **A4 DONE — Per-operator params** (lower priority) — operator factories, e.g.
   custom modal pairs, truncate fractions. Optional.
 
 ---
@@ -69,7 +69,11 @@ frontier (RAG/agents).
 
 - [x] **B0 System foundation** — DONE (system.py; operators take Target).
 
-- [ ] **B1 The `run()` contract is the linchpin** (do this FIRST — unblocks all of B)
+- [x] **B1 The `run()` contract is the linchpin** — DONE. `openai_run` is now
+  System-aware (uses `system.prompt`, mutated `system.context`, `system.model`);
+  config.invoke passes the System in `system=` mode. Decision: explicit mode
+  (prompt= -> run(prompt,case); system= -> run(system,case)) rather than
+  signature inspection — built-in run handles both via isinstance.
   - For context/tool/model mutation to change anything, `run()` must CONSUME the
     mutated System, not just the prompt. Today the contract is
     `run(prompt, case) -> output`.
@@ -81,22 +85,24 @@ frontier (RAG/agents).
     new contract), `runners.py` (`openai_run` should use `system.context` and
     `system.model`).
 
-- [ ] **B2 More context operators** (build on drop_context_doc / clear_context)
+- [x] **B2 More context operators** — DONE (corrupt_context_doc, swap_context_doc,
+  shuffle_context, duplicate_context_doc, truncate_context_doc; rule-based +
+  deterministic). LLM-driven semantic corruption still TODO behind an extra.
   - corrupt_context_doc (inject a plausible-but-wrong fact), swap_context_doc
     (replace with an irrelevant doc), shuffle_context (reorder — position
     sensitivity), duplicate_context_doc, truncate_context_doc.
   - Start rule-based; LLM-driven semantic corruption later (behind an extra).
   - Files: `mutators.py` + `OPERATORS`; a test per operator.
 
-- [ ] **B5 Zero-config CLI for context** — `--cases` JSONL may carry a per-case
+- [x] **B5 Zero-config CLI for context** — DONE. — `--cases` JSONL may carry a per-case
   `context`; `openai_run` injects it; enable context operators from the CLI.
   Files: `cli.py`, `runners.py`.
 
-- [ ] **B3 Model-swap operator** — `downgrade_model`: set `System.model` to a
+- [x] **B3 Model-swap operator** — DONE. `downgrade_model`: set `System.model` to a
   weaker model from a configurable ladder; `run`/`openai_run` must honor
   `system.model`. Files: `mutators.py`, `runners.py`, maybe `--model-ladder`.
 
-- [ ] **B4 Tool-output operators** (agents, after context) — define the
+- [x] **B4 DONE — Tool-output operators** (agents, after context) — define the
   tool-output shape in `System.tools`; operators: drop_tool_output,
   corrupt_tool_output, swap_tool_output.
 
@@ -114,6 +120,9 @@ frontier (RAG/agents).
 - Scope marker syntax: `[[mutate]]` vs an HTML-comment style?
 - run(System) detection: signature inspection vs an explicit `run_system` field?
 - corrupt_context_doc: rule-based vs LLM-driven (cost)? Start rule-based.
+- DECIDED: CLI `--context`/`--context-file` is a SHARED retrieval corpus
+  applied to every case (single knowledge base). Per-case differing context
+  stays in the Python-config path. This keeps a single mutable `System.context`.
 - Output-diff semantics for context mutants where the output *should* change
   (e.g. cleared context -> "I don't know"): inert-detection still holds (output
   changed), but document how killed/survived reads for context.
@@ -124,4 +133,4 @@ frontier (RAG/agents).
   must keep working.
 - Output-diffing (real vs inert) must apply to context/tool mutants too.
 - Core stays dependency-free; LLM-driven operators go behind optional extras.
-- Every new operator and public function gets a test (current: 64 passing).
+- Every new operator and public function gets a test (current: 70 passing).
