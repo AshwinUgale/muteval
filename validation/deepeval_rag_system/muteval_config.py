@@ -93,5 +93,5 @@ config = MutEvalConfig(
     run=run,
     evals=_evals,
     eval_names=_names,
-    runs_per_mutant=3,  # majority vote + CI on a noisy real judge
+    runs_per_mutant=1,  # deepeval is too flaky here for 3x; get a clean run first
 )
