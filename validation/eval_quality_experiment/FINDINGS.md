@@ -44,3 +44,18 @@ The relationship above is enforced in `tests/test_eval_quality.py`
 (monotonic increase + endpoints at 0% and 100%). If a change ever breaks the
 link between eval quality and muteval's score, CI fails. The core thesis is
 verified continuously, not just demonstrated once.
+
+## Generalization — a second, unrelated domain
+
+To rule out "you rigged one example", the same experiment on a **code-review
+assistant** (`run_experiment_codereview.py`) gives the same shape:
+
+| Suite | Effective score |
+| --- | --- |
+| S0 nonempty | **0%** |
+| S1 basic | **35%** |
+| S2 good | **71%** |
+| S3 complete | **100%** |
+
+Monotonic 0 -> 100 on a different system too. `tests/test_eval_quality.py`
+enforces the relationship on BOTH domains.

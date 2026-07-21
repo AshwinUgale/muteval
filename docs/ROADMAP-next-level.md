@@ -28,10 +28,10 @@ mutations) are Phase 1.5, after the trust gate.
   runs; report a confidence interval on the score. A real-judge re-run must not
   swing. Files: `runner.py` (aggregate verdicts), `report.py` (show CI).
   Done = same suite, re-run, same score within a stated interval.
-- [ ] **1.2 Second domain in the eval-quality experiment**
-  Add a different system + graded suites (e.g. code-gen or medical QA) and extend
-  `tests/test_eval_quality.py` to assert the 0→100 monotonic relationship there
-  too. Kills the "n=1, you rigged one example" doubt.
+- [x] **1.2 Second domain in the eval-quality experiment — DONE**
+  Code-review assistant (`run_experiment_codereview.py`): 0->35->71->100%,
+  monotonic. `tests/test_eval_quality.py` now enforces the 0->100 relationship
+  across BOTH domains (parametrized). Kills the "n=1" doubt.
 - [ ] **1.3 One real LLM-judge validation, finished end to end**
   Run `validation/deepeval_rag_system/` (and ragas) to completion in Colab with a
   gpt-4o judge; record effective score + survivor list in NOTES. Bridges the

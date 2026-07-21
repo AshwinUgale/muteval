@@ -93,5 +93,5 @@ config = MutEvalConfig(
     run=run,
     evals=_evals,
     eval_names=_names,
-    runs_per_mutant=1,
+    runs_per_mutant=3,  # majority vote + CI on a noisy real judge
 )

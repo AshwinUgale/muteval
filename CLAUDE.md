@@ -110,8 +110,10 @@ your system; muteval mutates your system to test your evals."
 - `validation/deepeval_rag_system/` — System-mode: mutates CONTEXT + MODEL.
   Grades Faithfulness against the *mutated* `used_context`, so a poisoned
   retrieval survives (the stronger, less-gimmicky result). See its NOTES.md.
-- `validation/eval_quality_experiment/` — controlled, API-free experiment proving
-  the mutation score tracks eval-suite quality (0→28→56→72%). See `FINDINGS.md`.
+- `validation/eval_quality_experiment/` — controlled, API-free proof that the
+  mutation score tracks eval-suite quality, on TWO domains (support bot
+  0→33→67→100%, code review 0→35→71→100%). Enforced in tests/test_eval_quality.py.
+  See `FINDINGS.md`.
 - `tests/` — pytest; all green (109 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
