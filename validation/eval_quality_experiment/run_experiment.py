@@ -147,36 +147,52 @@ SUITES = {
 CASE = {"order_id": "X123", "question": "what port does the server use?"}
 
 
-def main() -> None:
-    print("muteval — eval-quality experiment")
-    print("=" * 68)
-    print(f"{'suite':<32}{'baseline':>9}{'score':>8}{'killed':>9}")
-    print("-" * 68)
-
+def _run_all():
     rows = []
     for label, (evals, names) in SUITES.items():
         cfg = MutEvalConfig(
             system=SYSTEM, cases=[CASE], run=run, evals=evals, eval_names=names
         )
-        result = run_mutation_testing(cfg)
-        rows.append((label, result))
-        base = "PASS" if result.baseline_passed else "FAIL"
-        print(
-            f"{label:<32}{base:>9}{result.score * 100:>7.0f}%"
-            f"{result.killed:>5}/{result.evaluated:<3}"
-        )
+        rows.append((label, run_mutation_testing(cfg)))
+    return rows
 
-    print("-" * 68)
+
+def main() -> None:
+    print("muteval - eval-quality experiment")
+    print("=" * 70)
+    print("Claim: a better eval suite kills more mutants. We grade ONE system")
+    print("with suites of increasing coverage and watch the EFFECTIVE score")
+    print("(which excludes inert/equivalent mutants) climb from 0 to 100.")
+    print("=" * 70)
+    print(f"{'suite':<34}{'effective':>10}{'raw':>7}{'inert':>7}{'killed':>9}")
+    print("-" * 70)
+
+    rows = _run_all()
+    for label, r in rows:
+        print(
+            f"{label:<34}{r.effective_score * 100:>8.0f}% {r.score * 100:>5.0f}% "
+            f"{len(r.inert_survivors):>6} {r.killed:>5}/{r.evaluated:<3}"
+        )
+    print("-" * 70)
+
+    scores = [r.effective_score for _, r in rows]
+    monotonic = all(b >= a for a, b in zip(scores, scores[1:]))
+    endpoints = abs(scores[0]) < 1e-9 and abs(scores[-1] - 1.0) < 1e-9
+    print("\nEffective score: " + " -> ".join(f"{s * 100:.0f}%" for s in scores))
+    print(f"monotonic increase: {monotonic}   empty=0% & complete=100%: {endpoints}")
     print(
-        "\nMutation score rises monotonically as the suite gets stronger — the "
-        "metric\ntracks eval-suite quality. Each survivor below is a concrete, "
-        "nameable gap.\n"
+        "\nPASS: muteval's score tracks eval-suite quality end to end.\n"
+        if (monotonic and endpoints)
+        else "\nFAIL: the score did NOT track suite quality - investigate.\n"
     )
 
-    for label, result in rows:
-        ops = sorted({o.mutant.operator for o in result.survivors})
-        print(f"{label}")
-        print(f"   survivors: {len(result.survivors)}  ({result.total} mutants total)")
+    for label, r in rows:
+        ops = sorted({o.mutant.operator for o in r.real_survivors})
+        print(label)
+        print(
+            f"   real gaps: {len(r.real_survivors)}  "
+            f"(+{len(r.inert_survivors)} inert, excluded)"
+        )
         if ops:
             print(f"   uncaught operators: {', '.join(ops)}")
         print()

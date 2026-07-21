@@ -52,6 +52,9 @@ class MutEvalConfig:
     run: Optional[RunFn] = None
     evals: Optional[List[EvalFn]] = None
     runs_per_mutant: int = 1
+    # With runs_per_mutant > 1, a mutant is 'killed' if the suite fails in
+    # at least this fraction of runs (majority by default) — smooths judge noise.
+    kill_threshold: float = 0.5
     eval_names: List[str] = field(default_factory=list)
     system: Optional[System] = None
     operators: Optional[List[Any]] = None
@@ -97,6 +100,8 @@ class MutEvalConfig:
             raise ValueError("config.evals must contain at least one eval")
         if self.runs_per_mutant < 1:
             raise ValueError("config.runs_per_mutant must be >= 1")
+        if not 0.0 < self.kill_threshold <= 1.0:
+            raise ValueError("config.kill_threshold must be in (0, 1]")
 
     def invoke(self, system: System, case: Any) -> str:
         """Call the user's ``run`` with the right calling convention."""

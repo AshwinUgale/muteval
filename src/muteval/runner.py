@@ -48,6 +48,8 @@ class MutantOutcome:
     output_changed: Optional[bool] = None
     # Ranked danger of this mutation: 'high' | 'medium' | 'low'.
     severity: Optional[str] = None
+    # Fraction of runs in which the suite caught this mutant (judge-noise signal).
+    kill_rate: Optional[float] = None
 
 
 @dataclass
@@ -103,6 +105,28 @@ class MutationResult:
         """Real coverage gaps ranked HIGH — the dangerous ones."""
         from muteval.severity import HIGH
         return [o for o in self.real_survivors if o.severity == HIGH]
+
+    @property
+    def score_ci(self):
+        """Wilson 95% CI on the raw mutation score (killed / evaluated)."""
+        from muteval.stats import wilson_interval
+
+        return wilson_interval(self.killed, self.evaluated)
+
+    @property
+    def effective_score_ci(self):
+        """Wilson 95% CI on the effective score (excludes inert mutants)."""
+        from muteval.stats import wilson_interval
+
+        return wilson_interval(self.killed, max(self.evaluated - len(self.inert_survivors), 0))
+
+    @property
+    def flaky(self) -> List[MutantOutcome]:
+        """Mutants whose verdict flipped between runs (0 < kill_rate < 1)."""
+        return [
+            o for o in self.outcomes
+            if o.kill_rate is not None and 0.0 < o.kill_rate < 1.0
+        ]
 
     @property
     def score(self) -> float:
@@ -207,27 +231,32 @@ def run_mutation_testing(
 
     for mutant in mutants:
         try:
-            suite_run = _SuiteRun(failing_eval=None, outcomes=[], outputs=[])
-            for _ in range(config.runs_per_mutant):
-                suite_run = _run_suite(mutant.system, config)
-                if suite_run.failing_eval is not None:
-                    break
-            killed = suite_run.failing_eval is not None
+            runs = [
+                _run_suite(mutant.system, config)
+                for _ in range(config.runs_per_mutant)
+            ]
+            fails = sum(1 for r in runs if r.failing_eval is not None)
+            kill_rate = fails / len(runs)
+            killed = kill_rate >= config.kill_threshold
+            # A representative run consistent with the (majority) verdict.
+            rep = next(
+                (r for r in runs if (r.failing_eval is not None) == killed), runs[0]
+            )
             closest_eval = min_margin = None
             output_changed: Optional[bool] = None
             if not killed:
-                closest_eval, min_margin = _near_miss(suite_run.outcomes)
-                # Survivor ran all cases, so we can diff against baseline.
-                output_changed = _diff_outputs(baseline_outputs, suite_run.outputs)
+                closest_eval, min_margin = _near_miss(rep.outcomes)
+                output_changed = _diff_outputs(baseline_outputs, rep.outputs)
             result.outcomes.append(
                 MutantOutcome(
                     mutant=mutant,
                     killed=killed,
-                    failing_eval=suite_run.failing_eval,
+                    failing_eval=rep.failing_eval,
                     closest_eval=closest_eval,
                     min_margin=min_margin,
                     output_changed=output_changed,
                     severity=severity_of(mutant),
+                    kill_rate=kill_rate,
                 )
             )
         except Exception as exc:  # noqa: BLE001

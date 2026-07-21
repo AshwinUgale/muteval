@@ -83,6 +83,10 @@ your system; muteval mutates your system to test your evals."
     records near-miss margins for survivors. Works on `System` via `config.invoke`.
   - `report.py` — terminal report (score bar + survivors + near-miss lines);
     survivors are sorted by severity (HIGH first) with [HIGH]/[MED]/[LOW] tags.
+  - `stats.py` — Wilson confidence interval + min-sample-size (dependency-free).
+    Score is a proportion; reported as `X% [95% CI lo-hi]`. `runs_per_mutant`
+    now uses a MAJORITY vote (`config.kill_threshold`, default 0.5) so judge
+    noise doesn't flip verdicts; `MutationResult.flaky` lists mutants that did.
   - `severity.py` — ranks each mutant: `OPERATOR_SEVERITY` base (invert/corrupt
     = high, drop/weaken = medium, cosmetic = low) escalated one level when the
     change touches safety/correctness text (`CRITICAL_PATTERNS`). `severity_of`,
@@ -151,6 +155,12 @@ The A (scope/custom/sampling) and B (context/tool/model mutation) plan in
 --operators/--sample/--seed/--scope-include/--scope-exclude/--context/--mutate-model.
 Next candidates: LLM-driven semantic mutations (behind an extra), confidence
 intervals for noisy suites, HTML report + score badge, promptfoo adapter.
+
+## Next-level roadmap
+
+Phased plan — (1) best muteval [stability, agent/Trace, generalize],
+(2) eval-evaluator [probe report card], (3) adoption/UX — in
+`docs/ROADMAP-next-level.md`. Hard TRUST GATE between phase 1 and 2.
 
 ## Outreach / go-to-market
 

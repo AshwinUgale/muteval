@@ -46,10 +46,12 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
 
     pct = result.score * 100
     score_color = "32" if pct >= 80 else "33" if pct >= 50 else "31"
+    lo, hi = result.score_ci
     lines.append(
         f"Mutation score: {c(f'{pct:.0f}%', score_color)}  "
         f"[{_bar(result.score)}]  "
-        f"({result.killed}/{result.evaluated} mutants killed)"
+        f"({result.killed}/{result.evaluated} mutants killed, "
+        f"95% CI {lo * 100:.0f}-{hi * 100:.0f}%)"
     )
     if result.errored:
         lines.append(
@@ -65,10 +67,22 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     if inert:
         eff = result.effective_score * 100
         eff_color = "32" if eff >= 80 else "33" if eff >= 50 else "31"
+        elo, ehi = result.effective_score_ci
         lines.append(
             f"Effective score: {c(f'{eff:.0f}%', eff_color)}  "
             f"({result.killed}/{result.evaluated - len(inert)} — excludes "
-            f"{len(inert)} inert mutant(s) whose output didn't change)"
+            f"{len(inert)} inert mutant(s) whose output didn't change; "
+            f"95% CI {elo * 100:.0f}-{ehi * 100:.0f}%)"
+        )
+
+    flaky = result.flaky
+    if flaky:
+        lines.append(
+            c(
+                f"   {len(flaky)} mutant(s) flipped verdict between runs (judge "
+                "noise) — raise runs_per_mutant to stabilize.",
+                "33",
+            )
         )
     lines.append("")
 
