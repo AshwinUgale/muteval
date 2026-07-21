@@ -54,6 +54,16 @@ number yourself, do not broaden the product.
 
 New capabilities, only once the core is trusted. These add *scope*, not *trust*.
 
+**Decision (recorded): agent evals is the STRATEGIC DESTINATION, not the next
+build.** It's core to the grand vision — the thesis is strongest where evals are
+hardest (agents), the market is heading there, it's the least-saturated corner,
+and it's the deepest moat / a potential headline ("mutation testing for AGENT
+evals"). But it's a big, hard-to-validate build and few teams have agent eval
+suites *today*. So: build it when PULLED — by real user demand ("does this work
+for my agent?") or as a deliberate mindshare bet once we can demonstrate the gap
+convincingly (needs a believable agent + agent eval suite, harder than the RAG
+case). Do NOT let it leapfrog getting the trusted core in front of real users.
+
 - [ ] **Agent evals — the `Trace` extension.** `Trace` (final_output + steps),
   str-compatible so existing checks still work; trajectory-aware evals;
   trace-aware output-diffing; operators `mutate_tool_description` / `drop_tool`.
