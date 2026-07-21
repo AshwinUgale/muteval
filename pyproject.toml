@@ -40,6 +40,7 @@ dev = ["pytest>=7.0"]
 examples = ["openai>=1.0"]
 deepeval = ["deepeval>=1.0"]
 ragas = ["ragas>=0.2"]
+promptfoo = ["pyyaml>=6.0"]
 
 [project.scripts]
 muteval = "muteval.cli:main"

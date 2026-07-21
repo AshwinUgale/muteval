@@ -166,7 +166,11 @@ Bar: effortless to run, discoverable, sticky.
   operator-aware `fix:` line under each survivor (llm_judge rubric for prompt
   rules; structural eval for context/tool/model). Closes diagnostic -> fix.
 - [ ] **3.5 Docs site.**
-- [ ] **3.6 promptfoo adapter** — cross-tool reach for the writeup.
+- [x] **3.6 promptfoo adapter — DONE** (`adapters/promptfoo.py`): parses a
+  promptfooconfig.yaml (prompt + tests + assertions) into a MutEvalConfig;
+  translates contains/not-contains/equals/regex/icontains/llm-rubric. `[promptfoo]`
+  extra (pyyaml). Registered + tested. Cross-tool claim now complete
+  (deepeval + ragas + promptfoo + hand-written).
 - [ ] **3.7 Blog + outreach** — see `docs/OUTREACH-targets-and-plan.md`.
 
 ---

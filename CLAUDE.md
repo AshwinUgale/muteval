@@ -79,6 +79,8 @@ your system; muteval mutates your system to test your evals."
   - `adapters/deepeval.py` — wrap deepeval metrics; returns `EvalOutcome` with
     score/threshold. `[deepeval]` extra.
   - `adapters/ragas.py` — wrap RAGAS metrics (score + threshold). `[ragas]` extra.
+  - `adapters/promptfoo.py` — parse a promptfooconfig.yaml (prompt + tests +
+    assertions) into a MutEvalConfig. `[promptfoo]` extra (pyyaml). `from_promptfoo`.
   - `runner.py` — engine: baseline check -> generate mutants -> grade -> score;
     records near-miss margins for survivors. Works on `System` via `config.invoke`.
   - `report.py` — terminal report (score bar + survivors + near-miss lines);
