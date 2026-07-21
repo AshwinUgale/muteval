@@ -32,14 +32,17 @@ mutations) are Phase 1.5, after the trust gate.
   Code-review assistant (`run_experiment_codereview.py`): 0->35->71->100%,
   monotonic. `tests/test_eval_quality.py` now enforces the 0->100 relationship
   across BOTH domains (parametrized). Kills the "n=1" doubt.
-- [ ] **1.3 One real LLM-judge validation, finished end to end**
-  Run `validation/deepeval_rag_system/` (and ragas) to completion in Colab with a
-  gpt-4o judge; record effective score + survivor list in NOTES. Bridges the
-  controlled experiment to real metrics.
-- [ ] **1.4 LIMITATIONS doc / README section**
-  Honest scope: the re-run requirement, offline/CI-only, and where muteval does
-  NOT apply (model benchmarks, human/preference eval, production monitoring).
-  Documenting limits *increases* trust.
+- [~] **1.3 One real LLM-judge validation — MECHANISM CONFIRMED**
+  Ran `validation/deepeval_rag_system/` on real deepeval metrics (Colab, gpt-4o-mini).
+  The poisoned-retrieval survivor (drop/swap context) reproduced ~5x. A clean
+  GREEN baseline was blocked by deepeval's timeout instability (the baseline is
+  its heaviest call) — a deepeval issue, not muteval. muteval added baseline-retry
+  and behaved correctly (retried, flagged unreliable). See its NOTES.md. A clean
+  published number needs a stabler env; the *finding* is solid.
+- [x] **1.4 LIMITATIONS doc / README section — DONE**
+  `docs/LIMITATIONS.md` (+ README link): re-run requirement, when to distrust
+  the number (CI/baseline/effective/noise), third-party stability, what the
+  score does/doesn't mean.
 ### TRUST GATE (must all hold before Phase 2)
 stable score (1.1) · generalizes across ≥2 domains (1.2) · at least one real
 LLM-judge result (1.3) · limits documented (1.4). If you wouldn't trust the

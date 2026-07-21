@@ -310,6 +310,11 @@ See [FINDINGS.md](FINDINGS.md). In a controlled experiment the mutation score
 rises monotonically with eval-suite coverage (0% → 28% → 56% → 72%), and
 `validation/` holds reproducible runs — including against real deepeval metrics.
 
+## Limitations
+
+muteval is honest about what it can't do and when to distrust the number —
+see [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+
 ## Contributing
 
 This is an early, open project and contributions are very welcome — especially
