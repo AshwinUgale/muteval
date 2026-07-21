@@ -94,6 +94,8 @@ your system; muteval mutates your system to test your evals."
     Score is a proportion; reported as `X% [95% CI lo-hi]`. `runs_per_mutant`
     now uses a MAJORITY vote (`config.kill_threshold`, default 0.5) so judge
     noise doesn't flip verdicts; `MutationResult.flaky` lists mutants that did.
+  - `suggest.py` — `suggest_eval(outcome)`: operator-aware starter check for
+    each survivor (the `fix:` line in the report). Closes diagnostic -> fix.
   - `severity.py` — ranks each mutant: `OPERATOR_SEVERITY` base (invert/corrupt
     = high, drop/weaken = medium, cosmetic = low) escalated one level when the
     change touches safety/correctness text (`CRITICAL_PATTERNS`). `severity_of`,

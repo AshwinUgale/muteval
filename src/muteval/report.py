@@ -113,11 +113,14 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         lines.append("")
         _sev_color = {HIGH: "31", MEDIUM: "33", LOW: "2"}
         _sev_label = {HIGH: "HIGH", MEDIUM: "MED ", LOW: "LOW "}
+        from muteval.suggest import suggest_eval
+
         for o in real:
             sev = o.severity or MEDIUM
             tag = c(f"[{_sev_label[sev]}]", _sev_color[sev])
             lines.append(f"  {tag} {c('SURVIVED', '31')}  [{o.mutant.operator}]")
             lines.append(f"            {o.mutant.description}")
+            lines.append(c(f"            fix: {suggest_eval(o)}", "36"))
             if o.min_margin is not None and o.closest_eval:
                 lines.append(
                     c(

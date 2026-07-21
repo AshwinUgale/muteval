@@ -161,8 +161,9 @@ Bar: effortless to run, discoverable, sticky.
   `eval coverage: X%` README badge.
 - [ ] **3.3 HTML/Markdown report + JSON history** — the local "dashboard" (static,
   no SaaS).
-- [ ] **3.4 Suggested-eval-per-survivor** — each survivor → a starter check that
-  would kill it. Closes diagnostic → fix.
+- [x] **3.4 Suggested-eval-per-survivor — DONE** (`src/muteval/suggest.py`):
+  operator-aware `fix:` line under each survivor (llm_judge rubric for prompt
+  rules; structural eval for context/tool/model). Closes diagnostic -> fix.
 - [ ] **3.5 Docs site.**
 - [ ] **3.6 promptfoo adapter** — cross-tool reach for the writeup.
 - [ ] **3.7 Blog + outreach** — see `docs/OUTREACH-targets-and-plan.md`.
