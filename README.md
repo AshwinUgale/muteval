@@ -5,7 +5,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/muteval.svg)](https://pypi.org/project/muteval/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-**Mutation testing for your LLM eval suite.**
+**Mutation testing for your LLM evals — find out if they'd actually catch a regression.**
 
 Your evals are passing. That doesn't mean they work.
 

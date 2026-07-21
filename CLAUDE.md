@@ -15,6 +15,18 @@ evals fail to catch are **survivors** — concrete blind spots in eval coverage.
 
 One-liner: *"`mutmut`/Stryker, but for evals."*
 
+## Positioning (DECIDED — use everywhere)
+
+- Tagline: **"Mutation testing for your LLM evals — find out if they'd actually catch a regression."**
+- muteval IS the **mutation-testing tool for evals** — NOT the umbrella
+  "eval-quality tool". The name announces the technique; the tagline carries
+  the job. Do not rename.
+- The probes (`probes/`) are a **bonus eval-quality layer** for now. The full
+  **eval-evaluator / eval-quality category is a FUTURE SUPERSET** with its own
+  name (candidates: evalgrade / evalscore / trusteval), composing muteval.
+- So: market muteval as mutation testing; keep the probes' dependency direction
+  one-way (probes -> core, never core -> probes) so the superset lifts out clean.
+
 ## The core thesis (don't lose this)
 
 Two axes define the product and keep it distinct from look-alikes:
