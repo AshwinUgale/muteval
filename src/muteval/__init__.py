@@ -22,7 +22,12 @@ from muteval.mutators import (
 from muteval.runner import MutationResult, run_mutation_testing
 from muteval.system import System, as_system
 
-__version__ = "0.0.1"
+try:  # keep in sync with pyproject automatically
+    from importlib.metadata import PackageNotFoundError, version
+
+    __version__ = version("muteval")
+except Exception:  # noqa: BLE001 - dev tree without installed metadata
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "MutEvalConfig",
