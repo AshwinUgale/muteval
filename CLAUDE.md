@@ -83,6 +83,12 @@ your system; muteval mutates your system to test your evals."
     records near-miss margins for survivors. Works on `System` via `config.invoke`.
   - `report.py` — terminal report (score bar + survivors + near-miss lines);
     survivors are sorted by severity (HIGH first) with [HIGH]/[MED]/[LOW] tags.
+  - `probes/` — Phase 2 "eval evaluator": pluggable `Probe` registry (`PROBES`,
+    `register_probe`, `run_probes`) + `ProbeResult`. `statistical_adequacy`
+    (Wilson CI on case count) + `judge_reliability` (verdict-flip rate over N
+    re-runs) shipped. CLI: `muteval probe --config ...` prints
+    a report card (no composite score). More probes (reliability, discrimination)
+    are Phase 2 roadmap.
   - `stats.py` — Wilson confidence interval + min-sample-size (dependency-free).
     Score is a proportion; reported as `X% [95% CI lo-hi]`. `runs_per_mutant`
     now uses a MAJORITY vote (`config.kill_threshold`, default 0.5) so judge

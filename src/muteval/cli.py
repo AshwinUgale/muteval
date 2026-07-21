@@ -259,6 +259,16 @@ def _build_parser() -> argparse.ArgumentParser:
     init = sub.add_parser("init", help="Scaffold a starter muteval_config.py you can edit.")
     init.add_argument("--path", "-p", default="muteval_config.py", help="Where to write the scaffold.")
     init.add_argument("--force", action="store_true", help="Overwrite if it exists.")
+
+    probe = sub.add_parser(
+        "probe", help="Rate your eval suite's quality (a report card of probes)."
+    )
+    probe.add_argument("--config", "-c", required=True, help="Path to a config file.")
+    probe.add_argument(
+        "--probes", nargs="+", default=None,
+        help="Subset of probes to run (default: all).",
+    )
+    probe.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
     return parser
 
 
@@ -345,6 +355,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                 failed = True
 
         return 1 if failed else 0
+
+    if args.command == "probe":
+        try:
+            config = load_config(args.config)
+        except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
+            print(f"muteval: {exc}", file=sys.stderr)
+            return 2
+        from muteval.probes import run_probes
+        from muteval.report import format_probe_card
+
+        results = run_probes(config, probes=args.probes)
+        print(format_probe_card(results, use_color=not args.no_color))
+        return 0 if all(r.ok for r in results) else 1
 
     return 2
 

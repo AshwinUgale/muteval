@@ -145,3 +145,23 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         "Write an eval that fails on it, then re-run."
     )
     return "\n".join(lines)
+
+
+def format_probe_card(results, use_color: bool = True) -> str:
+    """Render probe results as an eval-quality report card (no composite score)."""
+
+    def c(text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if use_color else text
+
+    lines = ["", c("muteval — eval quality report card", "1"), ""]
+    if not results:
+        lines.append("No probes ran.")
+        return "\n".join(lines)
+    for r in results:
+        tag = c("PASS", "32") if r.ok else c("WARN", "33")
+        lines.append(f"  [{tag}] {c(r.name, '1')}")
+        lines.append(f"         {r.summary}")
+        if r.detail:
+            lines.append(c(f"         {r.detail}", "2"))
+        lines.append("")
+    return "\n".join(lines)

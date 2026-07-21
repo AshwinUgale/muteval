@@ -84,11 +84,14 @@ quality), stays tool-agnostic. **NOT a full eval framework.**
 Framing: **each probe detects a different way an eval can be bad.** Mutation
 catches "it wouldn't notice a regression"; the others catch other defects.
 
-- [ ] **2.1 Probe interface** — pluggable `Probe` registry mirroring `OPERATORS`;
-  each probe returns a scored, named finding. New `probes/` module. Report
-  aggregates them into a card (no single fake composite score).
+- [x] **2.1 Probe interface — DONE** — `src/muteval/probes/` (base + registry
+  `PROBES` / `register_probe` / `run_probes`), `ProbeResult`, `format_probe_card`,
+  and a `muteval probe --config ...` command. No composite score.
 
-- [ ] **2.2 Statistical-adequacy probe  [P0 — also powers Phase 1.1]**
+- [x] **2.2 Statistical-adequacy probe — DONE**  (`probes/statistical_adequacy.py`;
+  Wilson CI + `stats.min_samples_for_precision`; e.g. 2/2 cases -> "100% [34-100%],
+  add ~9 cases"). Original spec below:
+- [x] **2.2 Statistical-adequacy probe  [P0 — also powers Phase 1.1]**
   *Bad eval:* too few cases to trust the number (19/20 is not "95%"; the Wilson
   95% CI is ~[76%, 99%]).
   *Detect:* binomial confidence interval (Wilson; Clopper-Pearson exact) on the
@@ -97,11 +100,9 @@ catches "it wouldn't notice a regression"; the others catch other defects.
   show "need ~75 cases to defend >90%, you have 20". The mutation score and any
   judge pass-rate are proportions too, so this CI machinery is reused everywhere.
 
-- [ ] **2.3 Judge-reliability probe  [P0 — cheap + strong]**
-  *Bad eval:* the LLM-judge gives a different verdict on a re-run.
-  *Detect:* run each metric N times on the SAME fixed outputs; measure verdict-flip
-  rate / variance (a proportion -> CI applies).
-  *Rate:* "faithfulness flips its verdict on 18% of cases between runs."
+- [x] **2.3 Judge-reliability probe — DONE** (`probes/judge_reliability.py`):
+  holds output fixed, re-runs each eval N times, reports verdict-flip rate;
+  rule-based checks show 0%, noisy judges are flagged. Registered + tested.
 
 - [ ] **2.4 Discrimination / separability probe  [P0]**
   *Bad eval:* the metric can't tell a good answer from a bad one (useless at any

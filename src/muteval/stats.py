@@ -45,3 +45,17 @@ def min_samples_for_lower_bound(
         if low > target:
             return n
     return cap
+
+
+def min_samples_for_precision(
+    rate: float, half_width: float, confidence: float = 0.95, cap: int = 100000
+) -> int:
+    """Smallest n whose Wilson CI half-width <= `half_width` at `rate`.
+
+    e.g. how many cases you need for a +/-10% interval around an observed rate.
+    """
+    for n in range(1, cap + 1):
+        low, high = wilson_interval(round(rate * n), n, confidence)
+        if (high - low) / 2 <= half_width:
+            return n
+    return cap
