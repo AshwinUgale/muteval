@@ -71,6 +71,21 @@ def _changed_span(a: str, b: str) -> Optional[Tuple[int, int]]:
     return (i, max(i, ja))
 
 
+def _changed_hunks(a: str, b: str) -> List[Tuple[int, int]]:
+    """Per-edit changed char ranges in ``a`` (SequenceMatcher opcodes). A pure
+    insertion yields a zero-width range (i1 == i2) at the insertion point.
+
+    Unlike a single ``_changed_span`` envelope, this returns each edit
+    separately, so a mutant that edits two marker regions (with protected text
+    between them) can be judged region-by-region instead of as one span that
+    straddles the protected text."""
+    hunks: List[Tuple[int, int]] = []
+    for tag, i1, i2, _j1, _j2 in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag != "equal":
+            hunks.append((i1, i2))
+    return hunks
+
+
 def _affected_lines(original: str, mutant: str) -> List[str]:
     """Lines added or removed between original and mutant (the lines a line-level
     mutation actually touched).
@@ -100,16 +115,21 @@ class Scope:
         return bool(self.ranges or self.include or self.exclude)
 
     def keep(self, original_prompt: str, mutant_prompt: str) -> bool:
-        span = _changed_span(original_prompt, mutant_prompt)
-        if span is None:
+        hunks = _changed_hunks(original_prompt, mutant_prompt)
+        if not hunks:
             return False
-        start, end = span
         if self.ranges is not None:
-            # Require the changed hunk to be FULLY CONTAINED in a marked region.
-            # A mere overlap would let a mutation that straddles a marker
-            # boundary (partly editing protected text) slip through.
-            if not any(s <= start and end <= e for (s, e) in self.ranges):
-                return False
+            # EVERY changed hunk must be fully contained in a marked region.
+            # (Checking one first-to-last envelope would wrongly reject a mutant
+            # that makes separate valid edits in two regions with protected text
+            # between them; a mere overlap would wrongly accept one that straddles
+            # a boundary and edits protected text.)
+            for start, end in hunks:
+                if start == end:  # pure insertion: the point must sit in a region
+                    if not any(s <= start <= e for (s, e) in self.ranges):
+                        return False
+                elif not any(s <= start and end <= e for (s, e) in self.ranges):
+                    return False
         if self.include is not None or self.exclude is not None:
             lines = _affected_lines(original_prompt, mutant_prompt)
             if self.include is not None and not any(self.include.search(ln) for ln in lines):

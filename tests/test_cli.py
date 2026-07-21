@@ -216,3 +216,61 @@ def test_invalid_run_still_writes_json_with_status(tmp_path):
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["status"] == "baseline_failed"
     assert data["score"] is None
+
+
+_PARTIAL_ERROR_CONFIG = '''
+from muteval import MutEvalConfig
+
+def run(prompt, case):
+    if "KEEPLINE stable." not in prompt:
+        raise RuntimeError("boom")
+    return "ok"
+
+config = MutEvalConfig(
+    prompt="- Cite the order ID.\\n- KEEPLINE stable.\\n- Be polite.",
+    cases=[{"x": 1}],
+    run=run,
+    evals=[lambda o, c: True],
+)
+'''
+
+
+def test_partial_errors_fail_closed_and_no_badge(tmp_path):
+    cfg = _write_config(tmp_path, _PARTIAL_ERROR_CONFIG)
+    badge = tmp_path / "b.json"
+    out = tmp_path / "o.json"
+    code = main(["run", "--config", cfg, "--no-color", "--fail-under", "0",
+                 "--badge", str(badge), "--json", str(out)])
+    assert code == 2               # fails BEFORE the satisfiable --fail-under 0
+    assert not badge.exists()      # no green badge from a partly-errored run
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["status"] == "partial_errors"
+    assert data["error_rate"] > 0.0
+
+
+def test_allow_mutant_errors_makes_partial_run_pass(tmp_path):
+    cfg = _write_config(tmp_path, _PARTIAL_ERROR_CONFIG)
+    code = main(["run", "--config", cfg, "--no-color", "--allow-mutant-errors"])
+    assert code == 0
+
+
+def test_dry_run_applies_scope_like_the_real_run(tmp_path):
+    # scope_exclude drops every prompt line -> a real run makes 0 mutants, and
+    # --dry-run must report the SAME 0 (not ignore scope).
+    body = (
+        "from muteval import MutEvalConfig\n"
+        "config = MutEvalConfig(\n"
+        "    prompt='- one.\\n- two.\\n- three.',\n"
+        "    cases=[{'x': 1}], run=lambda p, c: 'ok',\n"
+        "    evals=[lambda o, c: True], scope_exclude='.*',\n"
+        ")\n"
+    )
+    cfg = _write_config(tmp_path, body, name="scoped.py")
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = main(["run", "--config", cfg, "--no-color", "--dry-run"])
+    assert code == 0
+    assert "mutants that would run: 0" in buf.getvalue()

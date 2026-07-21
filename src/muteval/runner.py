@@ -41,6 +41,9 @@ BASELINE_FAILED = "baseline_failed"
 BASELINE_ERRORED = "baseline_errored"
 NO_MUTANTS = "no_mutants"
 NO_EVALUATED_MUTANTS = "no_evaluated_mutants"
+# Some (but not all) mutants errored, above the allowed error budget. The score
+# is computed over a shrunken denominator, so it is NOT trustworthy for CI.
+PARTIAL_ERRORS = "partial_errors"
 
 
 @dataclass
@@ -144,6 +147,13 @@ class MutationResult:
         ]
 
     @property
+    def error_rate(self) -> float:
+        """Fraction of generated mutants that errored (0.0 when none generated)."""
+        if self.total == 0:
+            return 0.0
+        return self.errored / self.total
+
+    @property
     def score(self) -> Optional[float]:
         """Mutation score over evaluated mutants, or None when there is no
         evidence (0 evaluated) — no evidence is NOT a perfect score."""
@@ -210,6 +220,32 @@ def _diff_outputs(baseline: List[str], mutant: List[str]) -> Optional[bool]:
     return any(a != b for a, b in zip(baseline, mutant))
 
 
+def select_mutants(
+    config: MutEvalConfig,
+    operators: List[str] | None = None,
+    sample: Optional[int] = None,
+    seed: Optional[int] = None,
+    max_mutants: Optional[int] = None,
+) -> List[Mutant]:
+    """Generate the mutants a run would execute, applying (in order) operator
+    selection, scope, sampling, and the max-mutants cap. Shared by the real
+    runner AND ``--dry-run`` so the two can never drift apart.
+
+    ``operators=None`` falls back to ``config.operators`` (then to all operators).
+    """
+    selected = operators if operators is not None else getattr(config, "operators", None)
+    mutants = generate_mutants(
+        config.system, operators=selected, scope=getattr(config, "scope", None)
+    )
+    if sample is not None and 0 <= sample < len(mutants):
+        import random
+
+        mutants = random.Random(seed).sample(mutants, sample)
+    if max_mutants is not None:
+        mutants = mutants[:max_mutants]
+    return mutants
+
+
 def run_mutation_testing(
     config: MutEvalConfig,
     operators: List[str] | None = None,
@@ -218,9 +254,6 @@ def run_mutation_testing(
     seed: Optional[int] = None,
 ) -> MutationResult:
     """Run mutation testing for the given config and return a MutationResult."""
-    if operators is None:
-        operators = getattr(config, "operators", None)
-
     # Baseline — resilient: an error here shouldn't lose the whole run.
     baseline_passed = False
     baseline_error: Optional[str] = None
@@ -251,15 +284,9 @@ def run_mutation_testing(
         result.status = BASELINE_FAILED
         return result
 
-    mutants = generate_mutants(
-        config.system, operators=operators, scope=getattr(config, "scope", None)
+    mutants = select_mutants(
+        config, operators=operators, sample=sample, seed=seed, max_mutants=max_mutants
     )
-    if sample is not None and 0 <= sample < len(mutants):
-        import random
-
-        mutants = random.Random(seed).sample(mutants, sample)
-    if max_mutants is not None:
-        mutants = mutants[:max_mutants]
 
     if not mutants:
         result.status = NO_MUTANTS
@@ -285,7 +312,22 @@ def run_mutation_testing(
             output_changed: Optional[bool] = None
             if not killed:
                 closest_eval, min_margin = _near_miss(rep.outcomes)
-                output_changed = _diff_outputs(baseline_outputs, rep.outputs)
+                # Aggregate output-change evidence across EVERY surviving run,
+                # not just the representative one (raising runs_per_mutant must
+                # actually harden this): any observed change -> changed; any
+                # incomplete/absent comparison -> unknown (None, keeps the mutant
+                # in the effective denominator); "unchanged" only when every
+                # comparable run matched the baseline.
+                survivor_runs = [r for r in runs if r.failing_eval is None]
+                diffs = [
+                    _diff_outputs(baseline_outputs, r.outputs) for r in survivor_runs
+                ]
+                if any(d is True for d in diffs):
+                    output_changed = True
+                elif not diffs or any(d is None for d in diffs):
+                    output_changed = None
+                else:
+                    output_changed = False
             result.outcomes.append(
                 MutantOutcome(
                     mutant=mutant,
@@ -311,6 +353,10 @@ def run_mutation_testing(
                 )
             )
 
+    # Validity: no evidence at all is invalid; too many errors is invalid too
+    # (a score over a shrunken denominator is not trustworthy — fail closed).
     if result.evaluated == 0:
         result.status = NO_EVALUATED_MUTANTS
+    elif result.error_rate > config.max_error_rate:
+        result.status = PARTIAL_ERRORS
     return result

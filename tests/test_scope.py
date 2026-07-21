@@ -73,6 +73,33 @@ def test_affected_lines_ignores_coincidental_text_collision():
     assert "- Be polite." in touched  # the removed original is reported
 
 
+def test_markers_allow_edits_in_two_regions_with_protected_between():
+    # remove_emphasis edits BOTH mutable regions in one pass and leaves the
+    # protected line alone. Per-hunk containment must KEEP it; the old single
+    # first-to-last envelope (which crosses the protected line) rejected it.
+    prompt = (
+        "[[mutate]]IMPORTANT: **first**.[[/mutate]]\n"
+        "protected line.\n"
+        "[[mutate]]IMPORTANT: **second**.[[/mutate]]"
+    )
+    cfg = MutEvalConfig(
+        prompt=prompt, cases=[{"input": "x"}], run=lambda p, c: p,
+        evals=[lambda o, c: True],
+    )
+    ms = generate_mutants(cfg.system, scope=cfg.scope, operators=["remove_emphasis"])
+    assert ms  # the two-region edit is kept, not rejected
+    assert all("protected line." in m.prompt for m in ms)  # protected untouched
+
+
+def test_changed_hunks_returns_separate_edits():
+    from muteval.scope import _changed_hunks
+
+    a = "AAA keep BBB"
+    b = "XAA keep BBX"  # two separate 1-char edits, "keep" untouched
+    hunks = _changed_hunks(a, b)
+    assert len(hunks) == 2
+
+
 def test_scope_does_not_touch_context_mutants():
     from muteval.system import System
     sys_ = System(prompt="answer", context=("doc A", "doc B"))

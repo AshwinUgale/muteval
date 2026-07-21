@@ -61,13 +61,27 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         f"95% CI {lo * 100:.0f}-{hi * 100:.0f}%)"
     )
     if result.errored:
-        lines.append(
-            c(
-                f"   {result.errored} mutant(s) errored and were excluded "
-                "(e.g. API timeouts). Re-run to retry them.",
-                "33",
+        from muteval.runner import PARTIAL_ERRORS
+
+        if result.status == PARTIAL_ERRORS:
+            lines.append(
+                c(
+                    f"   ⚠  INVALID for CI — {result.errored}/{result.total} "
+                    f"mutant(s) errored ({result.error_rate * 100:.0f}% > allowed "
+                    "budget). Score above is over a SHRUNKEN denominator and is "
+                    "shown for diagnosis only; the CLI exits non-zero and the "
+                    "badge is n/a. Re-run, or raise --max-error-rate to accept it.",
+                    "1;31",
+                )
             )
-        )
+        else:
+            lines.append(
+                c(
+                    f"   {result.errored} mutant(s) errored and were excluded "
+                    "(e.g. API timeouts). Re-run to retry them.",
+                    "33",
+                )
+            )
 
     # Effective score: drop observationally-unchanged survivors from the
     # denominator (their output didn't change on the samples we ran).
@@ -207,6 +221,7 @@ def result_to_dict(result) -> dict:
         "evaluated": result.evaluated,
         "total": result.total,
         "errored": result.errored,
+        "error_rate": round(result.error_rate, 4),
         "inert": len(result.inert_survivors),
         "high_severity_survivors": len(result.high_severity_survivors),
         "survivors": [

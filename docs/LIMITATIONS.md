@@ -31,6 +31,12 @@ only applies when both exist:
 - **No mutants / no evaluated mutants.** If nothing could be mutated, or every
   mutant errored, there is no evidence — muteval reports `N/A` (not a perfect
   score). Use `--allow-empty` only if a zero-mutant run should pass CI.
+- **Partial mutant errors.** If *some* mutants error (timeouts/API blips), the
+  score is computed over a shrunken denominator and is not trustworthy. By
+  default muteval **fails closed**: any errored mutant makes the run
+  `partial_errors` (CLI exits non-zero, badge `n/a`, terminal shows the partial
+  score for diagnosis only). Set an error budget with `--max-error-rate` (or
+  `config.max_error_rate`), or `--allow-mutant-errors`, to accept it explicitly.
 - **The raw score, when there are observationally-unchanged mutants.** Read the
   **effective** score; the raw one counts mutants whose output didn't change and
   understates good suites.

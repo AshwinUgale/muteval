@@ -98,10 +98,17 @@ your system; muteval mutates your system to test your evals."
     VALIDITY GATE: a run only earns a score when the baseline PASSED and >=1
     mutant produced a clean verdict. Otherwise `MutationResult.status` is one of
     `baseline_failed` / `baseline_errored` / `no_mutants` / `no_evaluated_mutants`
-    and `score`/`effective_score` are `None` (NOT a vacuous 1.0). The baseline
-    gate early-returns before generating mutants. Verdict uses STRICT majority
-    when `kill_threshold is None` (ties survive). CLI exits 2 on invalid runs
-    (before writing any badge); `--allow-empty` lets a zero-mutant run pass.
+    and `score`/`effective_score` are `None` (NOT a vacuous 1.0). PARTIAL mutant
+    errors above `config.max_error_rate` (default 0.0 = fail closed) set status
+    `partial_errors` — score over a shrunken denominator is untrusted; CLI
+    `--max-error-rate`/`--allow-mutant-errors` accept it. The baseline gate
+    early-returns before generating mutants. Verdict uses STRICT majority when
+    `kill_threshold is None` (ties survive). `output_changed` aggregates ALL
+    survivor runs (any observed change wins) so `runs_per_mutant` hardens
+    equivalence detection. `select_mutants()` is shared by the runner and
+    `--dry-run` (operators/scope/sample/cap) so counts never drift. CLI exits 2
+    on invalid runs (before writing any badge); `--allow-empty` lets a
+    zero-mutant run pass.
   - `report.py` — terminal report (score bar + survivors + near-miss lines);
     survivors are sorted by severity (HIGH first) with [HIGH]/[MED]/[LOW] tags.
   - `probes/` — Phase 2 "eval evaluator": pluggable `Probe` registry (`PROBES`,
@@ -146,7 +153,7 @@ your system; muteval mutates your system to test your evals."
   mutation score tracks eval-suite quality, on TWO domains (support bot
   0→33→67→100%, code review 0→35→71→100%). Enforced in tests/test_eval_quality.py.
   See `FINDINGS.md`.
-- `tests/` — pytest; all green (155 tests).
+- `tests/` — pytest; all green (165 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 

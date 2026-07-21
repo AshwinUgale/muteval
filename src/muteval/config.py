@@ -42,7 +42,8 @@ class MutEvalConfig:
             being graded.
         runs_per_mutant: How many times to evaluate each mutant. >1 helps with
             non-deterministic systems. A mutant is "killed" if the suite fails
-            on *any* run (i.e. the evals managed to detect the degradation).
+            on a STRICT MAJORITY of runs by default (ties survive); set
+            ``kill_threshold`` to use an explicit fail-rate threshold instead.
         eval_names: Optional human labels for evals, used in reports.
         system: The full mutation target. Mutually exclusive with ``prompt``.
     """
@@ -55,6 +56,11 @@ class MutEvalConfig:
     # With runs_per_mutant > 1, how to aggregate: None (default) = STRICT
     # majority (ties survive). A float in (0, 1] = 'killed if fail-rate >= t'.
     kill_threshold: Optional[float] = None
+    # Fraction of mutants allowed to ERROR (timeout/API blip) before the whole
+    # run is treated as invalid. 0.0 (default) = FAIL CLOSED: any errored mutant
+    # makes the run `partial_errors` (no trustworthy score, CLI exits non-zero,
+    # badge = n/a). Raise it (e.g. 0.2) to tolerate a flaky judge interactively.
+    max_error_rate: float = 0.0
     eval_names: List[str] = field(default_factory=list)
     system: Optional[System] = None
     operators: Optional[List[Any]] = None
@@ -102,6 +108,8 @@ class MutEvalConfig:
             raise ValueError("config.runs_per_mutant must be >= 1")
         if self.kill_threshold is not None and not 0.0 < self.kill_threshold <= 1.0:
             raise ValueError("config.kill_threshold must be None or in (0, 1]")
+        if not 0.0 <= self.max_error_rate <= 1.0:
+            raise ValueError("config.max_error_rate must be in [0, 1]")
 
     def invoke(self, system: System, case: Any) -> str:
         """Call the user's ``run`` with the right calling convention."""

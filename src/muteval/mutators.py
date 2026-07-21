@@ -581,14 +581,30 @@ def make_weaken_modals(pairs: "List[tuple]") -> "Callable[[Target], List[Mutant]
 
 
 def make_downgrade_model(ladder: "List[str]") -> "Callable[[Target], List[Mutant]]":
-    """Build a downgrade_model operator with a custom strong->weak model ladder."""
+    """Build a downgrade_model operator with a custom strong->weak model ladder.
+
+    Conservative, like the built-in: if the current model is NOT in ``ladder``,
+    no downgrade can be inferred (guessing could produce an *upgrade*), so it
+    warns and emits nothing.
+    """
+    if len(ladder) < 2:
+        raise ValueError("model ladder must contain at least two models")
+    if len(ladder) != len(set(ladder)):
+        raise ValueError("model ladder must not contain duplicates")
 
     def op(target: Target) -> List[Mutant]:
         system = as_system(target)
         current = system.model
         if not current:
             return []
-        weaker = ladder[ladder.index(current) + 1 :] if current in ladder else list(ladder)
+        if current not in ladder:
+            warnings.warn(
+                f"downgrade_model: model {current!r} is not in the supplied "
+                f"ladder {tuple(ladder)}; no downgrade can be inferred.",
+                stacklevel=2,
+            )
+            return []
+        weaker = ladder[ladder.index(current) + 1 :]
         return [
             Mutant(
                 operator="downgrade_model",
@@ -597,7 +613,6 @@ def make_downgrade_model(ladder: "List[str]") -> "Callable[[Target], List[Mutant
                 target="model",
             )
             for m in weaker
-            if m != current
         ]
 
     op.__name__ = "downgrade_model_custom"

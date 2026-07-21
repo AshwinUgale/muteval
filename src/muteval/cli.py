@@ -26,15 +26,17 @@ from typing import Any, List, Optional
 
 from muteval import __version__
 from muteval.config import MutEvalConfig, load_config
-from muteval.mutators import OPERATORS, generate_mutants
+from muteval.mutators import OPERATORS
 from muteval.report import format_report
 from muteval.runner import (
     BASELINE_ERRORED,
     BASELINE_FAILED,
     NO_EVALUATED_MUTANTS,
     NO_MUTANTS,
+    PARTIAL_ERRORS,
     VALID,
     run_mutation_testing,
+    select_mutants,
 )
 from muteval.system import System
 
@@ -266,6 +268,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Treat a run that generates NO mutants as a pass (exit 0) instead "
         "of an invalid run. Baseline failures/errors are never rescued by this.",
     )
+    run.add_argument(
+        "--max-error-rate", type=float, default=None, metavar="FRAC",
+        help="Fraction of mutants allowed to error before the run is INVALID "
+        "(default 0.0 = fail closed on any errored mutant). Overrides the "
+        "config value.",
+    )
+    run.add_argument(
+        "--allow-mutant-errors", action="store_true",
+        help="Tolerate any number of errored mutants (equivalent to "
+        "--max-error-rate 1.0). Score is computed over the survivors.",
+    )
     run.add_argument("--json", metavar="PATH", default=None,
         help="Write machine-readable results (score, CI, survivors) to a JSON file.")
     run.add_argument("--badge", metavar="PATH", default=None,
@@ -324,8 +337,21 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"muteval: {exc}", file=sys.stderr)
             return 2
 
+        # CLI overrides for the error budget (config value is the default).
+        if args.allow_mutant_errors:
+            config.max_error_rate = 1.0
+        elif args.max_error_rate is not None:
+            if not 0.0 <= args.max_error_rate <= 1.0:
+                print("muteval: --max-error-rate must be in [0, 1]", file=sys.stderr)
+                return 2
+            config.max_error_rate = args.max_error_rate
+
         if args.dry_run:
-            mutants = generate_mutants(config.system, operators=args.operators)
+            # Use the SAME selection path as a real run so the counts can't drift.
+            mutants = select_mutants(
+                config, operators=args.operators, sample=args.sample,
+                seed=args.seed, max_mutants=args.max_mutants,
+            )
             ctx = config.system.context or ()
             print(
                 "muteval dry-run OK:\n"
@@ -334,7 +360,6 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"  cases:   {len(config.cases)}\n"
                 f"  evals:   {', '.join(config.eval_names) or len(config.evals)}\n"
                 f"  mutants that would run: {len(mutants)}"
-                + (f" (capped to {args.max_mutants})" if args.max_mutants else "")
             )
             return 0
 
@@ -365,6 +390,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 NO_MUTANTS: "no mutants were generated "
                 "(use --allow-empty to treat as a pass)",
                 NO_EVALUATED_MUTANTS: "every mutant errored — no verdict produced",
+                PARTIAL_ERRORS: f"{result.errored}/{result.total} mutant(s) errored "
+                f"({result.error_rate * 100:.0f}% > allowed "
+                f"{config.max_error_rate * 100:.0f}%); raise --max-error-rate "
+                "or --allow-mutant-errors to accept",
             }.get(result.status, result.status)
             print(
                 f"muteval: INVALID — {reason}. No mutation score produced.",

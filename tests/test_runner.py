@@ -1,5 +1,13 @@
+import itertools
+
 from muteval import MutEvalConfig, run_mutation_testing
-from muteval.runner import BASELINE_ERRORED, BASELINE_FAILED, NO_MUTANTS
+from muteval.runner import (
+    BASELINE_ERRORED,
+    BASELINE_FAILED,
+    NO_MUTANTS,
+    PARTIAL_ERRORS,
+    VALID,
+)
 
 
 def _make_config(evals, eval_names):
@@ -138,6 +146,65 @@ def test_even_run_ties_survive_strict_majority():
     for o in result.outcomes:
         if o.kill_rate == 0.5:
             assert o.killed is False  # ties survive under strict majority
+
+
+def _partial_error_config(max_error_rate=0.0):
+    # run() raises whenever the KEEPLINE rule is gone -> mutants that drop/edit
+    # that line ERROR, while other mutants evaluate normally. Baseline keeps it.
+    def run(prompt, case):
+        if "KEEPLINE stable." not in prompt:
+            raise RuntimeError("boom: keepline removed")
+        return "ok"
+
+    return MutEvalConfig(
+        prompt="- Cite the order ID.\n- KEEPLINE stable.\n- Be polite.",
+        cases=[{"x": 1}],
+        run=run,
+        evals=[lambda o, c: True],
+        max_error_rate=max_error_rate,
+    )
+
+
+def test_partial_mutant_errors_are_invalid_by_default():
+    # Some (not all) mutants error -> the run is PARTIAL_ERRORS, NOT valid, so a
+    # score over the shrunken denominator can't silently pass CI.
+    result = run_mutation_testing(_partial_error_config(max_error_rate=0.0))
+    assert result.errored >= 1
+    assert result.evaluated >= 1  # at least one mutant did produce a verdict
+    assert result.status == PARTIAL_ERRORS
+    assert result.error_rate > 0.0
+
+
+def test_error_budget_can_accept_partial_errors():
+    # With a permissive budget the same run is VALID (score over survivors).
+    result = run_mutation_testing(_partial_error_config(max_error_rate=1.0))
+    assert result.errored >= 1
+    assert result.status == VALID
+    assert result.score is not None
+
+
+def test_output_change_uses_all_runs_not_just_representative():
+    # A survivor whose output changes on SOME runs must be classified changed,
+    # not "observationally unchanged" from a single representative run.
+    outputs = itertools.cycle(["A", "B", "A"])
+
+    def run(prompt, case):
+        if "**" in prompt:      # baseline (unmutated) is stable "A"
+            return "A"
+        return next(outputs)    # mutant: A, B, A across 3 runs
+
+    cfg = MutEvalConfig(
+        prompt="Answer **now**.",
+        cases=[{"x": 1}],
+        run=run,
+        evals=[lambda o, c: True],
+        runs_per_mutant=3,
+    )
+    result = run_mutation_testing(cfg, operators=["remove_emphasis"])
+    o = result.outcomes[0]
+    assert o.killed is False
+    assert o.output_changed is True          # observed "B" is not discarded
+    assert result.inert_survivors == []      # so it is NOT misclassified inert
 
 
 def test_strict_majority_thresholds():
