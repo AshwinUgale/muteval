@@ -108,7 +108,10 @@ catches "it wouldn't notice a regression"; the others catch other defects.
   per-case `good`/`bad` exemplars -> mean score gap per eval; flags metrics that
   don't separate. Opt-in ('not assessed' without exemplars). Registered + tested.
 
-- [ ] **2.5 Threshold-calibration probe**
+- [x] **2.5 Redundancy probe — DONE** (`probes/redundancy.py`): Pearson-correlates
+  each eval's scores across cases; flags pairs > 0.9 as redundant (wasted cost).
+  Registered + tested. (Threshold-calibration probe below is now OPTIONAL/later.)
+- [ ] **(optional) Threshold-calibration probe**
   *Bad eval:* pass/fail line in the wrong place.
   *Detect:* sweep the threshold; watch the pass rate and where good/bad actually
   separate.

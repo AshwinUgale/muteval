@@ -114,3 +114,42 @@ def test_discrimination_not_assessed_without_exemplars():
     r = discrimination(_cfg(2))  # no good/bad on cases
     assert r.ok is True
     assert r.metrics["assessed"] is False
+
+
+def _score_cfg(score_lists):
+    from muteval.evals import EvalOutcome
+
+    n = len(score_lists[0])
+    evals = [
+        (lambda sl: (lambda o, c: EvalOutcome(passed=True, score=sl[c["i"]])))(sl)
+        for sl in score_lists
+    ]
+    return MutEvalConfig(
+        prompt="You are a bot.",
+        cases=[{"i": i} for i in range(n)],
+        run=lambda p, c: "ok",
+        evals=evals,
+        eval_names=[f"e{i}" for i in range(len(score_lists))],
+    )
+
+
+def test_redundant_metrics_are_flagged():
+    from muteval.probes.redundancy import redundancy
+
+    r = redundancy(_score_cfg([[0, 1, 2, 3, 4], [0, 1, 2, 3, 4]]))  # identical
+    assert r.ok is False
+    assert r.metrics["max_corr"] > 0.99
+
+
+def test_independent_metrics_ok():
+    from muteval.probes.redundancy import redundancy
+
+    r = redundancy(_score_cfg([[0, 0, 1, 1], [0, 1, 0, 1]]))  # pearson r == 0
+    assert r.ok is True
+
+
+def test_redundancy_not_assessed_with_one_eval():
+    from muteval.probes.redundancy import redundancy
+
+    r = redundancy(_score_cfg([[0, 1, 2, 3]]))
+    assert r.metrics["assessed"] is False
