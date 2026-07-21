@@ -158,8 +158,9 @@ intervals for noisy suites, HTML report + score badge, promptfoo adapter.
 
 ## Next-level roadmap
 
-Phased plan — (1) best muteval [stability, agent/Trace, generalize],
-(2) eval-evaluator [probe report card], (3) adoption/UX — in
+Phased plan — (1) best muteval [TRUST only: stability, generalize, one real
+judge, limits], (1.5) capability expansion [agents/Trace, LLM mutations —
+AFTER trust gate], (2) eval-evaluator [probe report card], (3) adoption — in
 `docs/ROADMAP-next-level.md`. Hard TRUST GATE between phase 1 and 2.
 
 ## Outreach / go-to-market

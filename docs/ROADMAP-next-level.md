@@ -14,8 +14,10 @@ trustworthy.** There is a hard TRUST GATE between Phase 1 and Phase 2.
 
 ## Phase 1 — Best muteval (make the mutation core trustworthy + complete)
 
-Bar: *you* would stake a claim on the number, and muteval covers the whole
-system-under-test (prompt/context/tools/model + trajectory).
+Bar: *you* would stake a claim on the number. This phase is about **trust in
+the EXISTING capability** (prompt/context/tool/model mutation) — reliability and
+honesty — NOT adding new capabilities. New capabilities (agents, LLM-driven
+mutations) are Phase 1.5, after the trust gate.
 
 - [x] **1.1 Statistical stability  [P0]  — DONE**
   Majority-vote verdicts (fixes the any-run-kills bias) + Wilson CI on
@@ -34,25 +36,29 @@ system-under-test (prompt/context/tools/model + trajectory).
   Run `validation/deepeval_rag_system/` (and ragas) to completion in Colab with a
   gpt-4o judge; record effective score + survivor list in NOTES. Bridges the
   controlled experiment to real metrics.
-- [ ] **1.4 Agent evals — the Trace extension (completes the target)**
-  `Trace` (final_output + steps), made str-compatible so existing string checks
-  still work; trajectory-aware evals; new operators `mutate_tool_description` and
-  `drop_tool`; trace-aware output-diffing. Prove it OFFLINE first:
-  `examples/agent_offline/` where a mutated tool description survives a weak eval
-  → [HIGH] survivor (mirror `rag_context_offline`). Files: new `trace.py`,
-  `mutators.py`, `runner.py`, `config.py`.
-- [ ] **1.5 LIMITATIONS doc / README section**
+- [ ] **1.4 LIMITATIONS doc / README section**
   Honest scope: the re-run requirement, offline/CI-only, and where muteval does
   NOT apply (model benchmarks, human/preference eval, production monitoring).
   Documenting limits *increases* trust.
-- [ ] **1.6 LLM-driven semantic mutations (behind a `[llm]` extra)**
-  More realistic regressions than rule-based edits — raises the credibility that
-  "these mutations are failures people actually hit."
-
 ### TRUST GATE (must all hold before Phase 2)
 stable score (1.1) · generalizes across ≥2 domains (1.2) · at least one real
-LLM-judge result (1.3) · limits documented (1.5). If you wouldn't trust the
+LLM-judge result (1.3) · limits documented (1.4). If you wouldn't trust the
 number yourself, do not broaden the product.
+
+---
+
+## Phase 1.5 — Capability expansion (AFTER the trust gate)
+
+New capabilities, only once the core is trusted. These add *scope*, not *trust*.
+
+- [ ] **Agent evals — the `Trace` extension.** `Trace` (final_output + steps),
+  str-compatible so existing checks still work; trajectory-aware evals;
+  trace-aware output-diffing; operators `mutate_tool_description` / `drop_tool`.
+  Prove OFFLINE first (`examples/agent_offline/`): a mutation changes the
+  tool-call trace, the final answer is unchanged, a weak eval misses it ->
+  [HIGH] survivor. (Groundwork exists: `System.tools` + tool-output operators.)
+- [ ] **LLM-driven semantic mutations (behind a `[llm]` extra).** More realistic
+  regressions than rule-based edits.
 
 ---
 
@@ -143,7 +149,8 @@ Bar: effortless to run, discoverable, sticky.
 ---
 
 ## Suggested execution order
-1.1 (stability) → 1.4 (offline agent proof) → 1.2 + 1.3 (generalize + real judge)
-→ **TRUST GATE** → 2.2 (reliability probe) → 2.3 (discrimination) → 2.6 (report
-card). Phase 3 (esp. 3.1 usability + 3.2 badge) can ride alongside once Phase 1
-is trusted — but the trust gate governs the *product* story.
+1.1 (stability, DONE) → 1.2 + 1.3 (generalize + one real judge) → 1.4 (limits)
+→ **TRUST GATE** → Phase 1.5 (agent/Trace evals, LLM mutations) and/or Phase 2
+probes (2.2 reliability → 2.3 discrimination → 2.6 report card). Phase 3
+(usability + badge) can ride alongside once Phase 1 is trusted. **Agents come
+AFTER the trust gate — they are expansion, not trust.**
