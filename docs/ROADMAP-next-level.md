@@ -146,9 +146,16 @@ catches "it wouldn't notice a regression"; the others catch other defects.
 
 Bar: effortless to run, discoverable, sticky.
 
-- [ ] **3.1 New-user path audit  [P0]** — fresh env → `pip install muteval` →
-  offline example → first meaningful result in < 2 min. Fix every friction point;
-  polish the README as the storefront.
+- [~] **3.1 New-user path audit  [P0] — AUDITED + FIXED (1 user action left)**
+  Empirical audit in a clean venv found: (a) [P0] `pip install muteval` returns
+  the stale 0.0.1 placeholder (no System/checks/adapters) — the README's
+  "pip install and run" is currently FALSE; (b) [P0] `muteval init` gave a
+  confusing 0%/all-inert first result (placeholder run ignored the prompt);
+  (c) [P1] bare `muteval` errored instead of showing help.
+  FIXED (b)+(c): scaffold run() now reflects the prompt -> meaningful keyless
+  first result (13%, 7 survivors); bare `muteval` prints help. Version bumped
+  0.0.1 -> 0.1.0.
+  REMAINING USER ACTION: republish to PyPI so `pip install muteval` works.
 - [ ] **3.2 GitHub Action + score badge** — one-line CI integration; a viral
   `eval coverage: X%` README badge.
 - [ ] **3.3 HTML/Markdown report + JSON history** — the local "dashboard" (static,

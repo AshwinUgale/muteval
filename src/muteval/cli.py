@@ -40,25 +40,37 @@ from muteval import MutEvalConfig
 from muteval import checks
 
 
-SYSTEM_PROMPT = """You are a helpful support assistant.
-- You must always cite the order ID in your answer.
-- Do not promise refunds.
+SYSTEM_PROMPT = """You are a support assistant for an online store.
+- You must always cite the order ID in your reply.
+- Do not promise refunds; a manager must approve them.
+- Reply in a polite, professional tone.
 """
 
 
 def run(prompt: str, case: dict) -> str:
-    # TODO: call your real LLM/app with `prompt` and return its text output.
-    return f"Order {case['order_id']}: here is your status."
+    # A tiny stand-in "model" so this runs with NO API key: it reflects the
+    # prompt, so mutating a rule changes the output (that is how muteval finds
+    # eval gaps). TODO: replace with a call to YOUR real LLM/app.
+    p = prompt.lower()
+    reply = []
+    if "polite" in p:
+        reply.append("Hi there!")
+    if "cite the order id" in p:
+        reply.append(f"Order {case['order_id']}:")
+    if "do not promise refunds" in p:
+        reply.append("I can't promise a refund; a manager will review it.")
+    else:
+        reply.append("Sure, refunding you now!")
+    return " ".join(reply)
 
 
 config = MutEvalConfig(
     prompt=SYSTEM_PROMPT,
     cases=[{"input": "where is my order?", "order_id": "A123"}],
     run=run,
-    evals=[
-        checks.contains_case("order_id"),
-        checks.not_contains("refund"),
-    ],
+    # DELIBERATELY incomplete — muteval will surface the gaps (nothing here
+    # checks the refund rule or the tone). Add checks to kill the survivors.
+    evals=[checks.contains_case("order_id")],
 )
 '''
 
@@ -184,7 +196,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "your evals would actually catch a regression.",
     )
     parser.add_argument("--version", action="version", version=f"muteval {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=False)
 
     run = sub.add_parser("run", help="Run mutation testing against an eval suite.")
     run.add_argument(
@@ -264,7 +276,11 @@ def _load_run_config(args: argparse.Namespace) -> MutEvalConfig:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 0
 
     if args.command == "init":
         dest = Path(args.path)
