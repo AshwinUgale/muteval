@@ -92,3 +92,25 @@ def test_eval_exception_is_contained_not_fatal():
     assert result.evaluated == 0
     # Errored mutants are excluded from the score denominator.
     assert result.score == 1.0
+
+
+def test_baseline_retries_past_a_transient_error():
+    # A flaky judge that errors on the FIRST baseline call must not poison the
+    # run — the baseline retries and succeeds.
+    state = {"n": 0}
+
+    def flaky(output, case):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise RuntimeError("api timeout on baseline")
+        return True
+
+    cfg = MutEvalConfig(
+        prompt="You **must** cite the order ID.",
+        cases=[{"x": 1}],
+        run=lambda p, c: "ok",
+        evals=[flaky],
+    )
+    result = run_mutation_testing(cfg, operators=["remove_emphasis"])
+    assert result.baseline_error is None
+    assert result.baseline_passed is True

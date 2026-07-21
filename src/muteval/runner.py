@@ -208,12 +208,19 @@ def run_mutation_testing(
     baseline_passed = False
     baseline_error: Optional[str] = None
     baseline_outputs: List[str] = []
-    try:
-        baseline_run = _run_suite(config.system, config)
-        baseline_passed = baseline_run.failing_eval is None
-        baseline_outputs = baseline_run.outputs
-    except Exception as exc:  # noqa: BLE001 - surface any failure to the user
-        baseline_error = f"{type(exc).__name__}: {exc}"
+    # The baseline gets one shot per attempt; a flaky judge (timeout / API error)
+    # must not poison the whole run, so retry a few times on *exceptions* only.
+    # A clean pass/fail verdict is a real result and is NOT retried.
+    for _ in range(max(config.runs_per_mutant, 3)):
+        try:
+            baseline_run = _run_suite(config.system, config)
+            baseline_passed = baseline_run.failing_eval is None
+            baseline_outputs = baseline_run.outputs
+            baseline_error = None
+            break
+        except Exception as exc:  # noqa: BLE001 - transient judge/API errors
+            baseline_error = f"{type(exc).__name__}: {exc}"
+            continue
 
     mutants = generate_mutants(
         config.system, operators=operators, scope=getattr(config, "scope", None)
