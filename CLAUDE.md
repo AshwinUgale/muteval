@@ -106,7 +106,8 @@ your system; muteval mutates your system to test your evals."
     `--fail-under N`, `--fail-on-severity {high,medium,low}` (gate on any
     real survivor at/above that severity), `--operators`, `--sample/--seed`,
     `--scope-include/--scope-exclude`, `--context/--context-file`,
-    `--mutate-model`, `--dry-run`; plus `muteval init`.
+    `--mutate-model`, `--json`/`--badge` (CI results + eval-coverage badge),
+    `--dry-run`; plus `muteval init` and `muteval probe`.
 - `examples/support_bot/` — runs offline (mock model, no API key); scores ~23%
   on purpose to demonstrate survivors.
 - `examples/openai_support_bot/` — real OpenAI-backed example (`[examples]`).

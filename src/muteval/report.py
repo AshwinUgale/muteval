@@ -168,3 +168,39 @@ def format_probe_card(results, use_color: bool = True) -> str:
             lines.append(c(f"         {r.detail}", "2"))
         lines.append("")
     return "\n".join(lines)
+
+
+def result_to_dict(result) -> dict:
+    """Machine-readable summary of a MutationResult (for --json / CI / reports)."""
+    from muteval.suggest import suggest_eval
+
+    return {
+        "baseline_passed": result.baseline_passed,
+        "baseline_error": result.baseline_error,
+        "score": round(result.score, 4),
+        "effective_score": round(result.effective_score, 4),
+        "score_ci": [round(x, 4) for x in result.score_ci],
+        "effective_score_ci": [round(x, 4) for x in result.effective_score_ci],
+        "killed": result.killed,
+        "evaluated": result.evaluated,
+        "total": result.total,
+        "errored": result.errored,
+        "inert": len(result.inert_survivors),
+        "high_severity_survivors": len(result.high_severity_survivors),
+        "survivors": [
+            {
+                "operator": o.mutant.operator,
+                "description": o.mutant.description,
+                "severity": o.severity,
+                "fix": suggest_eval(o),
+            }
+            for o in result.real_survivors
+        ],
+    }
+
+
+def badge_dict(result, label: str = "eval coverage") -> dict:
+    """A shields.io endpoint payload for the effective mutation score."""
+    pct = round(result.effective_score * 100)
+    color = "brightgreen" if pct >= 80 else "yellow" if pct >= 50 else "red"
+    return {"schemaVersion": 1, "label": label, "message": f"{pct}%", "color": color}

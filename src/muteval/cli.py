@@ -254,6 +254,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true",
         help="Build and validate the run WITHOUT calling the model.",
     )
+    run.add_argument("--json", metavar="PATH", default=None,
+        help="Write machine-readable results (score, CI, survivors) to a JSON file.")
+    run.add_argument("--badge", metavar="PATH", default=None,
+        help="Write a shields.io endpoint JSON for the eval-coverage badge.")
     run.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
 
     init = sub.add_parser("init", help="Scaffold a starter muteval_config.py you can edit.")
@@ -327,6 +331,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             sample=args.sample, seed=args.seed,
         )
         print(format_report(result, use_color=not args.no_color))
+
+        if args.json:
+            from muteval.report import result_to_dict
+
+            Path(args.json).write_text(
+                json.dumps(result_to_dict(result), indent=2), encoding="utf-8"
+            )
+        if args.badge:
+            from muteval.report import badge_dict
+
+            Path(args.badge).write_text(
+                json.dumps(badge_dict(result)), encoding="utf-8"
+            )
 
         failed = False
         if args.fail_under is not None and result.score * 100 < args.fail_under:

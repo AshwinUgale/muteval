@@ -188,6 +188,16 @@ evals fails the build.
 Copy `examples/ci/github-actions.yml` to `.github/workflows/muteval.yml` and it
 runs on every PR automatically — set once, then it guards your eval suite forever.
 
+### Eval-coverage badge
+
+`muteval run --json out.json --badge badge.json` writes machine-readable results
+and a [shields.io](https://shields.io) endpoint payload. The CI template publishes
+the badge on `main`; then add to your README (replace `OWNER/REPO`):
+
+```markdown
+[![eval coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OWNER/REPO/main/.github/badges/eval-coverage.json)](https://github.com/OWNER/REPO)
+```
+
 ## Advanced
 
 - **Choose what mutates** — `--operators weaken_modals flip_negation ...` runs a

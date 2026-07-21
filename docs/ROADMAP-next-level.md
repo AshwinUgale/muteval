@@ -157,8 +157,9 @@ Bar: effortless to run, discoverable, sticky.
   first result (13%, 7 survivors); bare `muteval` prints help. Version bumped
   0.0.1 -> 0.1.0.
   REMAINING USER ACTION: republish to PyPI so `pip install muteval` works.
-- [ ] **3.2 GitHub Action + score badge** — one-line CI integration; a viral
-  `eval coverage: X%` README badge.
+- [x] **3.2 GitHub Action + score badge — DONE** — `muteval run --json/--badge`
+  (machine-readable results + shields.io endpoint); CI template gates via
+  `--fail-under` and publishes the badge on main (git-auto-commit); README how-to.
 - [ ] **3.3 HTML/Markdown report + JSON history** — the local "dashboard" (static,
   no SaaS).
 - [x] **3.4 Suggested-eval-per-survivor — DONE** (`src/muteval/suggest.py`):

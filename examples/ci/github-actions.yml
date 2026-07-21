@@ -1,14 +1,25 @@
 # Copy this to .github/workflows/muteval.yml in your repo.
-# It fails a PR if your eval suite's mutation coverage drops below the threshold
-# — i.e. if a change would let a regression slip past your evals.
 #
-# Set OPENAI_API_KEY in: repo Settings -> Secrets and variables -> Actions.
+# It does two things:
+#   1. FAILS a PR if your eval suite's mutation coverage drops below the threshold
+#      (a change that would let a regression slip past your evals).
+#   2. Publishes an "eval coverage" badge you can put in your README (on main).
+#
+# Setup:
+#   - Add OPENAI_API_KEY in Settings -> Secrets and variables -> Actions.
+#   - Add this badge to your README (replace OWNER/REPO):
+#       [![eval coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OWNER/REPO/main/.github/badges/eval-coverage.json)](https://github.com/OWNER/REPO)
 
 name: muteval
 
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write        # needed to commit the badge on main
 
 jobs:
   mutation-test-evals:
@@ -22,19 +33,22 @@ jobs:
       - name: Install muteval
         run: pip install muteval
 
-      # Option A — zero-config: muteval owns the model call.
-      - name: Mutation-test the eval suite
+      - name: Mutation-test the eval suite (+ write badge/json)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          muteval run \
-            --prompt-file prompts/system.txt \
-            --cases evals/cases.jsonl \
-            --model gpt-4o-mini \
-            --check not_contains:refund \
-            --judge "the answer is grounded in the provided context" \
-            --max-mutants 12 \
+          muteval run --config muteval_config.py \
+            --badge .github/badges/eval-coverage.json \
+            --json muteval-result.json \
             --fail-under 75
+          # zero-config alternative (no config file):
+          # muteval run --prompt-file prompts/system.txt --cases evals/cases.jsonl \
+          #   --model gpt-4o-mini --judge "grounded in the context" \
+          #   --badge .github/badges/eval-coverage.json --fail-under 75
 
-      # Option B — full control: point at your Python config instead.
-      # run: muteval run --config muteval_config.py --fail-under 75
+      - name: Publish the eval-coverage badge (main only)
+        if: always() && github.ref == 'refs/heads/main'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update eval-coverage badge"
+          file_pattern: .github/badges/eval-coverage.json
