@@ -104,13 +104,9 @@ catches "it wouldn't notice a regression"; the others catch other defects.
   holds output fixed, re-runs each eval N times, reports verdict-flip rate;
   rule-based checks show 0%, noisy judges are flagged. Registered + tested.
 
-- [ ] **2.4 Discrimination / separability probe  [P0]**
-  *Bad eval:* the metric can't tell a good answer from a bad one (useless at any
-  threshold).
-  *Detect:* feed known-good and known-bad outputs; measure the score gap /
-  effect size / AUC.
-  *Rate:* "good avg 0.82 vs bad avg 0.79 — barely separates; not measuring
-  quality."
+- [x] **2.4 Discrimination / separability probe — DONE** (`probes/discrimination.py`):
+  per-case `good`/`bad` exemplars -> mean score gap per eval; flags metrics that
+  don't separate. Opt-in ('not assessed' without exemplars). Registered + tested.
 
 - [ ] **2.5 Threshold-calibration probe**
   *Bad eval:* pass/fail line in the wrong place.
@@ -138,8 +134,9 @@ catches "it wouldn't notice a regression"; the others catch other defects.
   and a STRONGER/ensemble judge ("judge-vs-reference agreement"). Cheap, but it is
   NOT human validity — label it honestly as a proxy.
 
-- [ ] **2.8 Report-card output** — aggregate probes into a card of
-  separately-interpretable signals. Mutation stays the headline section.
+- [x] **2.8 Report-card output — DONE (basic)** — `format_probe_card` +
+  `muteval probe` render probes as a PASS/WARN card, no composite score.
+  (Mutation-report integration + HTML can come with Phase 3.3.)
 
 ---
 

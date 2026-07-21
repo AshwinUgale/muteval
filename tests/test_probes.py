@@ -77,3 +77,40 @@ def test_flaky_judge_is_flagged():
     r = judge_reliability(cfg)  # 3 runs -> [T, F, T] -> flipped
     assert r.ok is False
     assert r.metrics["flip_rate"] > 0
+
+
+def _disc_cfg(evals):
+    return MutEvalConfig(
+        prompt="You are a bot.",
+        cases=[{
+            "i": 0,
+            "good": ["a good answer", "another good one"],
+            "bad": ["", "wrong nonsense"],
+        }],
+        run=lambda p, c: "ok",
+        evals=evals,
+        eval_names=["ev"],
+    )
+
+
+def test_discriminating_eval_passes():
+    from muteval.probes.discrimination import discrimination
+
+    r = discrimination(_disc_cfg([lambda o, c: "good" in o]))
+    assert r.ok is True
+    assert r.metrics["assessed"] is True
+
+
+def test_nondiscriminating_eval_is_flagged():
+    from muteval.probes.discrimination import discrimination
+
+    r = discrimination(_disc_cfg([lambda o, c: True]))  # passes good AND bad
+    assert r.ok is False
+
+
+def test_discrimination_not_assessed_without_exemplars():
+    from muteval.probes.discrimination import discrimination
+
+    r = discrimination(_cfg(2))  # no good/bad on cases
+    assert r.ok is True
+    assert r.metrics["assessed"] is False

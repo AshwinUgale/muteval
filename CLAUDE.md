@@ -86,7 +86,7 @@ your system; muteval mutates your system to test your evals."
   - `probes/` — Phase 2 "eval evaluator": pluggable `Probe` registry (`PROBES`,
     `register_probe`, `run_probes`) + `ProbeResult`. `statistical_adequacy`
     (Wilson CI on case count) + `judge_reliability` (verdict-flip rate over N
-    re-runs) shipped. CLI: `muteval probe --config ...` prints
+    re-runs) + `discrimination` (good-vs-bad score gap, opt-in exemplars) shipped. CLI: `muteval probe --config ...` prints
     a report card (no composite score). More probes (reliability, discrimination)
     are Phase 2 roadmap.
   - `stats.py` — Wilson confidence interval + min-sample-size (dependency-free).
