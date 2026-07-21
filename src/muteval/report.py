@@ -19,29 +19,36 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     lines.append(c("muteval — mutation testing for your eval suite", "1"))
     lines.append("")
 
+    # Invalid / empty runs are terminal — there is NO trustworthy score to show.
     if result.baseline_error:
-        lines.append(c(f"⚠  Baseline ERRORED: {result.baseline_error}", "33"))
+        lines.append(c("⚠  INVALID RUN — baseline ERRORED", "1;31"))
+        lines.append(f"   {result.baseline_error}")
         lines.append(
-            "   The eval suite raised on the original prompt; results below may "
-            "be unreliable."
+            "   The eval suite raised on the ORIGINAL system, so there is no "
+            "trustworthy score. Fix the error and re-run."
         )
-        lines.append("")
-    elif not result.baseline_passed:
+        return "\n".join(lines)
+    if not result.baseline_passed:
+        lines.append(c("⚠  INVALID RUN — baseline FAILED", "1;31"))
         lines.append(
-            c(
-                "⚠  Baseline FAILED: your eval suite does not pass on the "
-                "original prompt.",
-                "33",
-            )
+            "   Your eval suite does not pass on the ORIGINAL system, so a "
+            "mutation score would be meaningless (every mutant 'fails' too). "
+            "Fix the baseline, then re-run."
         )
-        lines.append(
-            "   Fix your evals/system so the baseline is green before trusting "
-            "the score below."
-        )
-        lines.append("")
-
+        return "\n".join(lines)
     if result.total == 0:
-        lines.append("No mutants were generated. Is your prompt long enough?")
+        lines.append(c("⚠  NO MUTANTS — nothing to test", "33"))
+        lines.append(
+            "   No mutants were generated (prompt too short, or operators/scope "
+            "filtered them all out). No score."
+        )
+        return "\n".join(lines)
+    if result.evaluated == 0:
+        lines.append(c("⚠  INVALID RUN — no mutant produced a clean verdict", "1;31"))
+        lines.append(
+            f"   All {result.total} mutant(s) errored (e.g. API failures). No "
+            "score — investigate the failures and re-run."
+        )
         return "\n".join(lines)
 
     pct = result.score * 100
@@ -62,9 +69,10 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
             )
         )
 
-    # Honest score: drop inert (output-unchanged) survivors from the denominator.
+    # Effective score: drop observationally-unchanged survivors from the
+    # denominator (their output didn't change on the samples we ran).
     inert = result.inert_survivors
-    if inert:
+    if inert and result.effective_score is not None:
         eff = result.effective_score * 100
         eff_color = "32" if eff >= 80 else "33" if eff >= 50 else "31"
         elo, ehi = result.effective_score_ci
@@ -73,6 +81,16 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
             f"({result.killed}/{result.evaluated - len(inert)} — excludes "
             f"{len(inert)} inert mutant(s) whose output didn't change; "
             f"95% CI {elo * 100:.0f}-{ehi * 100:.0f}%)"
+        )
+    elif inert:
+        # Every evaluated mutant was observationally unchanged -> no observed
+        # degradation to score. Say so rather than crash on a None effective score.
+        lines.append(
+            c(
+                f"Effective score: n/a  (all {len(inert)} evaluated mutant(s) "
+                "left the output unchanged on this run — nothing to score)",
+                "33",
+            )
         )
 
     flaky = result.flaky
@@ -133,9 +151,10 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     if inert:
         lines.append("")
         lines.append(
-            c(f"{len(inert)} inert", "2")
-            + "  (output identical to baseline — equivalent mutants, NOT eval "
-            "blind spots; excluded from the effective score):"
+            c(f"{len(inert)} observationally unchanged", "2")
+            + "  (output identical to baseline on this run — NOT eval blind "
+            "spots; excluded from the effective score. For a stochastic system "
+            "this is not proof of equivalence — raise runs_per_mutant):"
         )
         for o in inert:
             lines.append(
@@ -174,11 +193,14 @@ def result_to_dict(result) -> dict:
     """Machine-readable summary of a MutationResult (for --json / CI / reports)."""
     from muteval.suggest import suggest_eval
 
+    score = result.score
+    eff = result.effective_score
     return {
+        "status": result.status,
         "baseline_passed": result.baseline_passed,
         "baseline_error": result.baseline_error,
-        "score": round(result.score, 4),
-        "effective_score": round(result.effective_score, 4),
+        "score": round(score, 4) if score is not None else None,
+        "effective_score": round(eff, 4) if eff is not None else None,
         "score_ci": [round(x, 4) for x in result.score_ci],
         "effective_score_ci": [round(x, 4) for x in result.effective_score_ci],
         "killed": result.killed,
@@ -201,6 +223,10 @@ def result_to_dict(result) -> dict:
 
 def badge_dict(result, label: str = "eval coverage") -> dict:
     """A shields.io endpoint payload for the effective mutation score."""
-    pct = round(result.effective_score * 100)
+    eff = result.effective_score
+    if eff is None or result.status != "valid":
+        return {"schemaVersion": 1, "label": label, "message": "n/a",
+                "color": "lightgrey"}
+    pct = round(eff * 100)
     color = "brightgreen" if pct >= 80 else "yellow" if pct >= 50 else "red"
     return {"schemaVersion": 1, "label": label, "message": f"{pct}%", "color": color}

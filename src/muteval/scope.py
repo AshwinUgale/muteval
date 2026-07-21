@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import List, Optional, Pattern, Tuple
 
 _OPEN = "[[mutate]]"
@@ -72,12 +73,21 @@ def _changed_span(a: str, b: str) -> Optional[Tuple[int, int]]:
 
 def _affected_lines(original: str, mutant: str) -> List[str]:
     """Lines added or removed between original and mutant (the lines a line-level
-    mutation actually touched). Robust to deletions shifting neighbours."""
+    mutation actually touched).
+
+    Uses ``difflib.SequenceMatcher`` opcodes so the diff is OCCURRENCE-aware: if
+    a line ("- Do not lie.") appears twice and a mutation removes ONE copy, we
+    detect it. A set-based diff would miss that (the line still exists elsewhere)
+    and would also falsely ignore a changed line whose text happens to collide
+    with an unrelated line. Only the lines inside changed hunks are returned."""
     a, b = original.split("\n"), mutant.split("\n")
-    aset, bset = set(a), set(b)
-    removed = [ln for ln in a if ln not in bset]
-    added = [ln for ln in b if ln not in aset]
-    return removed + added
+    touched: List[str] = []
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        touched.extend(a[i1:i2])  # removed / replaced-from lines
+        touched.extend(b[j1:j2])  # added / replaced-to lines
+    return touched
 
 
 @dataclass
@@ -95,7 +105,10 @@ class Scope:
             return False
         start, end = span
         if self.ranges is not None:
-            if not any(s < end and start < e for (s, e) in self.ranges):
+            # Require the changed hunk to be FULLY CONTAINED in a marked region.
+            # A mere overlap would let a mutation that straddles a marker
+            # boundary (partly editing protected text) slip through.
+            if not any(s <= start and end <= e for (s, e) in self.ranges):
                 return False
         if self.include is not None or self.exclude is not None:
             lines = _affected_lines(original_prompt, mutant_prompt)

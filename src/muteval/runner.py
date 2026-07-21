@@ -8,12 +8,16 @@ Flow:
      PASSES (a potential blind spot in your evals).
   3. For survivors, we diff the mutant's outputs against the baseline outputs:
        - output CHANGED but evals still passed  -> a REAL coverage gap.
-       - output UNCHANGED (identical text)       -> an INERT/equivalent mutant;
-         no output-based eval could have caught it, so it is NOT counted as an
-         eval blind spot. (Standard mutation testing excludes equivalent mutants.)
+       - output UNCHANGED (identical text on this run) -> an OBSERVATIONALLY
+         UNCHANGED mutant; no output-based eval could have caught it on the
+         samples we saw, so it is NOT counted as an eval blind spot. (This is a
+         weaker claim than the classic "equivalent mutant": for a stochastic
+         system, identical output on a few samples does not PROVE equivalence —
+         see docs/LIMITATIONS.md. Raise runs_per_mutant to harden it.)
   4. Mutation score = killed / evaluated. The *effective* score additionally
-     drops inert survivors from the denominator — the honest "of the mutants
-     that actually degraded the output, how many did the evals catch?"
+     drops these observationally-unchanged survivors from the denominator:
+     "of the mutants that actually changed the output we observed, how many did
+     the evals catch?"
 
 Resilience: a single eval/model call raising (timeout, rate limit, blip) must
 NOT abort the whole run. Such a mutant is recorded as "errored" and excluded.
@@ -29,6 +33,14 @@ from muteval.evals import EvalOutcome, coerce_outcome
 from muteval.mutators import Mutant, generate_mutants
 from muteval.severity import severity_of
 from muteval.system import System
+
+# A run is only VALID when the baseline passed AND >= 1 mutant produced a
+# clean verdict. Anything else is invalid/empty — NOT a score of any kind.
+VALID = "valid"
+BASELINE_FAILED = "baseline_failed"
+BASELINE_ERRORED = "baseline_errored"
+NO_MUTANTS = "no_mutants"
+NO_EVALUATED_MUTANTS = "no_evaluated_mutants"
 
 
 @dataclass
@@ -65,6 +77,7 @@ class _SuiteRun:
 class MutationResult:
     baseline_passed: bool
     baseline_error: Optional[str] = None
+    status: str = VALID
     outcomes: List[MutantOutcome] = field(default_factory=list)
 
     @property
@@ -90,8 +103,10 @@ class MutationResult:
 
     @property
     def inert_survivors(self) -> List[MutantOutcome]:
-        """Survivors whose output was IDENTICAL to baseline — equivalent mutants,
-        not eval blind spots (no output-based eval could catch them)."""
+        """Survivors whose output was IDENTICAL to baseline on the samples we ran
+        — observationally unchanged, so not eval blind spots (no output-based
+        eval could catch them here). NOTE: for a stochastic system this is not
+        proof of true equivalence; raise runs_per_mutant to harden it."""
         return [o for o in self.survivors if o.output_changed is False]
 
     @property
@@ -129,20 +144,22 @@ class MutationResult:
         ]
 
     @property
-    def score(self) -> float:
-        """Mutation score in [0, 1] over evaluated mutants. 1.0 if none."""
+    def score(self) -> Optional[float]:
+        """Mutation score over evaluated mutants, or None when there is no
+        evidence (0 evaluated) — no evidence is NOT a perfect score."""
         if self.evaluated == 0:
-            return 1.0
+            return None
         return self.killed / self.evaluated
 
     @property
-    def effective_score(self) -> float:
-        """Mutation score with inert (output-unchanged) survivors removed from
-        the denominator — the honest 'of mutants that degraded the output, how
-        many did the evals catch?'. Falls back to ``score`` if nothing to drop."""
+    def effective_score(self) -> Optional[float]:
+        """Observed-degradation score: mutants whose OUTPUT changed but the
+        evals missed. Excludes single-sample "unchanged" survivors. None when
+        there is nothing to score. (Not provably exact for stochastic judges;
+        see LIMITATIONS.)"""
         effective = self.evaluated - len(self.inert_survivors)
         if effective <= 0:
-            return 1.0
+            return None
         return self.killed / effective
 
 
@@ -222,6 +239,18 @@ def run_mutation_testing(
             baseline_error = f"{type(exc).__name__}: {exc}"
             continue
 
+    result = MutationResult(
+        baseline_passed=baseline_passed, baseline_error=baseline_error
+    )
+    # BASELINE GATE: an invalid baseline makes every downstream number
+    # meaningless (a failing eval fails on every mutant too, faking 100%).
+    if baseline_error is not None:
+        result.status = BASELINE_ERRORED
+        return result
+    if not baseline_passed:
+        result.status = BASELINE_FAILED
+        return result
+
     mutants = generate_mutants(
         config.system, operators=operators, scope=getattr(config, "scope", None)
     )
@@ -232,9 +261,9 @@ def run_mutation_testing(
     if max_mutants is not None:
         mutants = mutants[:max_mutants]
 
-    result = MutationResult(
-        baseline_passed=baseline_passed, baseline_error=baseline_error
-    )
+    if not mutants:
+        result.status = NO_MUTANTS
+        return result
 
     for mutant in mutants:
         try:
@@ -244,7 +273,10 @@ def run_mutation_testing(
             ]
             fails = sum(1 for r in runs if r.failing_eval is not None)
             kill_rate = fails / len(runs)
-            killed = kill_rate >= config.kill_threshold
+            if config.kill_threshold is None:
+                killed = fails * 2 > len(runs)  # strict majority; ties survive
+            else:
+                killed = kill_rate >= config.kill_threshold
             # A representative run consistent with the (majority) verdict.
             rep = next(
                 (r for r in runs if (r.failing_eval is not None) == killed), runs[0]
@@ -279,4 +311,6 @@ def run_mutation_testing(
                 )
             )
 
+    if result.evaluated == 0:
+        result.status = NO_EVALUATED_MUTANTS
     return result

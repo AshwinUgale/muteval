@@ -95,6 +95,13 @@ your system; muteval mutates your system to test your evals."
     assertions) into a MutEvalConfig. `[promptfoo]` extra (pyyaml). `from_promptfoo`.
   - `runner.py` — engine: baseline check -> generate mutants -> grade -> score;
     records near-miss margins for survivors. Works on `System` via `config.invoke`.
+    VALIDITY GATE: a run only earns a score when the baseline PASSED and >=1
+    mutant produced a clean verdict. Otherwise `MutationResult.status` is one of
+    `baseline_failed` / `baseline_errored` / `no_mutants` / `no_evaluated_mutants`
+    and `score`/`effective_score` are `None` (NOT a vacuous 1.0). The baseline
+    gate early-returns before generating mutants. Verdict uses STRICT majority
+    when `kill_threshold is None` (ties survive). CLI exits 2 on invalid runs
+    (before writing any badge); `--allow-empty` lets a zero-mutant run pass.
   - `report.py` — terminal report (score bar + survivors + near-miss lines);
     survivors are sorted by severity (HIGH first) with [HIGH]/[MED]/[LOW] tags.
   - `probes/` — Phase 2 "eval evaluator": pluggable `Probe` registry (`PROBES`,
@@ -106,7 +113,8 @@ your system; muteval mutates your system to test your evals."
     are Phase 2 roadmap.
   - `stats.py` — Wilson confidence interval + min-sample-size (dependency-free).
     Score is a proportion; reported as `X% [95% CI lo-hi]`. `runs_per_mutant`
-    now uses a MAJORITY vote (`config.kill_threshold`, default 0.5) so judge
+    now uses a MAJORITY vote (`config.kill_threshold`, default None = STRICT
+    majority so ties survive) so judge
     noise doesn't flip verdicts; `MutationResult.flaky` lists mutants that did.
   - `suggest.py` — `suggest_eval(outcome)`: operator-aware starter check for
     each survivor (the `fix:` line in the report). Closes diagnostic -> fix.
@@ -138,7 +146,7 @@ your system; muteval mutates your system to test your evals."
   mutation score tracks eval-suite quality, on TWO domains (support bot
   0→33→67→100%, code review 0→35→71→100%). Enforced in tests/test_eval_quality.py.
   See `FINDINGS.md`.
-- `tests/` — pytest; all green (109 tests).
+- `tests/` — pytest; all green (155 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 

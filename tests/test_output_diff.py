@@ -17,9 +17,15 @@ def test_inert_mutants_when_output_ignores_prompt():
     assert len(result.survivors) > 0
     assert len(result.real_survivors) == 0
     assert len(result.inert_survivors) == len(result.survivors)
-    # Nothing actually degraded -> effective score is a clean 1.0.
-    assert result.effective_score == 1.0
+    # Nothing actually degraded the output -> there is NO observed-degradation
+    # evidence, so the effective score is undefined (None), not a vacuous 1.0.
+    assert result.effective_score is None
     assert all(o.output_changed is False for o in result.survivors)
+    # format_report must NOT crash when effective_score is None (all inert).
+    from muteval.report import format_report
+
+    text = format_report(result, use_color=False)
+    assert "Effective score: n/a" in text
 
 
 def test_real_survivors_when_output_depends_on_prompt():

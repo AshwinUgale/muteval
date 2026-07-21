@@ -15,6 +15,7 @@ actually carries context — the first step of the roadmap beyond prompts.
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass
 from typing import Callable, Dict, List
 
@@ -432,8 +433,10 @@ def truncate_context_doc(target: Target) -> List[Mutant]:
 
 # --- Model-swap operator (B3) ------------------------------------------------
 
-# Strong -> weak ladder. downgrade_model emits a mutant for each model weaker
-# than the System's current model. Only fires when System.model is set.
+# Strong -> weak ladder. downgrade_model emits a mutant for each model STRICTLY
+# WEAKER than the System's current model, using this known ordering. It only
+# fires when System.model is set AND the current model is on a known ladder —
+# we never *guess* that an arbitrary model is stronger/weaker than another.
 _MODEL_LADDER = ("gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo")
 
 
@@ -441,20 +444,28 @@ def downgrade_model(target: Target) -> List[Mutant]:
     """Swap the model for a weaker one (does your suite notice a cheaper model?).
 
     No-op unless ``System.model`` is set (so it never fires on prompt-only runs).
-    Emits one mutant per weaker model in the ladder.
+
+    Conservative by design: if the current model is NOT on muteval's known
+    ladder (``_MODEL_LADDER``), we do NOT invent an ordering — guessing that
+    e.g. ``gpt-3.5-turbo`` is a "downgrade" from an unknown model could be flat
+    wrong. Instead we warn and emit nothing; pass your own strong->weak ladder
+    via ``make_downgrade_model([...])`` to test provider-specific downgrades.
     """
     system = as_system(target)
     current = system.model
     if not current:
         return []
-    if current in _MODEL_LADDER:
-        weaker = _MODEL_LADDER[_MODEL_LADDER.index(current) + 1 :]
-    else:
-        weaker = _MODEL_LADDER  # unknown current: treat every ladder model as a downgrade
+    if current not in _MODEL_LADDER:
+        warnings.warn(
+            f"downgrade_model: model {current!r} is not on muteval's known "
+            f"ladder {_MODEL_LADDER}; refusing to guess a downgrade. Use "
+            f"make_downgrade_model([...]) with your own strong->weak ladder.",
+            stacklevel=2,
+        )
+        return []
+    weaker = _MODEL_LADDER[_MODEL_LADDER.index(current) + 1 :]
     mutants: List[Mutant] = []
     for model in weaker:
-        if model == current:
-            continue
         mutants.append(
             Mutant(
                 operator="downgrade_model",

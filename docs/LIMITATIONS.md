@@ -24,12 +24,16 @@ only applies when both exist:
 - **Too few mutants/cases → wide CI.** The score is a proportion; a handful of
   mutants gives a near-useless interval (e.g. `50% [9-91%]`). **Trust the CI, not
   the point estimate.** Add cases/mutants for a tighter number.
-- **A red/errored baseline.** If the suite errors on the original system (e.g. a
-  flaky judge timeout), muteval flags the run as unreliable — the score is not
-  trustworthy until the baseline is green.
-- **The raw score, when there are inert mutants.** Read the **effective** score;
-  the raw one counts equivalent (output-unchanged) mutants and understates good
-  suites.
+- **A red/errored baseline.** If the suite fails or errors on the *original*
+  system, muteval **refuses to emit a score**: it reports the run as `INVALID`,
+  writes no badge, and the CLI exits non-zero. It does **not** report a
+  misleading 100%. Fix the baseline first.
+- **No mutants / no evaluated mutants.** If nothing could be mutated, or every
+  mutant errored, there is no evidence — muteval reports `N/A` (not a perfect
+  score). Use `--allow-empty` only if a zero-mutant run should pass CI.
+- **The raw score, when there are observationally-unchanged mutants.** Read the
+  **effective** score; the raw one counts mutants whose output didn't change and
+  understates good suites.
 - **A noisy LLM judge with `runs_per_mutant=1`.** A single flaky verdict can
   flip a mutant. Use `runs_per_mutant > 1` (majority vote) for real judges; watch
   the `flaky` count.
@@ -43,6 +47,19 @@ only applies when both exist:
 - **Rule-based mutations are approximations.** Current operators are synthetic
   string/context edits. They model real regressions but aren't identical to them;
   LLM-driven semantic mutations (roadmap) are more realistic.
+- **"Observationally unchanged" ≠ provably equivalent.** A survivor whose output
+  matched the baseline is dropped from the effective score. For a *deterministic*
+  system that is a true equivalent mutant. For a *stochastic* one (an LLM at
+  temperature > 0, a flaky judge), identical output on a few samples does not
+  prove the mutant is harmless — it may differ on an unseen sample. Raise
+  `runs_per_mutant` to shrink this risk; muteval labels these "observationally
+  unchanged," not "equivalent," on purpose.
+- **`downgrade_model` only knows a small model ladder.** It will not guess an
+  ordering for models it doesn't recognize (it warns and emits nothing). Pass
+  your own strong→weak ladder via `make_downgrade_model([...])`.
+- **`downgrade_model` doesn't re-run inference by itself.** Like all System-mode
+  operators, it only changes behavior if your `run(system, case)` actually reads
+  `system.model` and calls that model.
 - **Cost & time.** Real-judge runs cost API money and run sequentially; total
   work scales with mutants × cases × metrics × `runs_per_mutant`.
 - **Non-prompt targets need System mode + a compatible `run()`.** Context/tool/

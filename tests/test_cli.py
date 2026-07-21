@@ -152,3 +152,67 @@ def test_no_severity_gate_passes():
         "run", "--config", "examples/support_bot/muteval_config.py", "--no-color",
     ])
     assert code == 0
+
+
+# --- validity gate: invalid/empty runs must fail closed (exit 2) -------------
+
+_BASELINE_FAIL_CONFIG = '''
+from muteval import MutEvalConfig
+
+config = MutEvalConfig(
+    prompt="You are a bot.\\n- You must cite the order ID.\\n- Do not lie.",
+    cases=[{"order_id": "X1"}],
+    run=lambda p, c: "order X1",
+    evals=[lambda o, c: False],  # never passes -> baseline FAILS
+)
+'''
+
+_NO_MUTANTS_CONFIG = '''
+from muteval import MutEvalConfig
+
+config = MutEvalConfig(
+    prompt="short",  # too short to mutate -> no mutants
+    cases=[{"x": 1}],
+    run=lambda p, c: "ok",
+    evals=[lambda o, c: True],
+)
+'''
+
+
+def _write_config(tmp_path, body, name="cfg.py"):
+    p = tmp_path / name
+    p.write_text(body, encoding="utf-8")
+    return str(p)
+
+
+def test_invalid_baseline_exits_2_and_writes_no_badge(tmp_path, capsys):
+    cfg = _write_config(tmp_path, _BASELINE_FAIL_CONFIG)
+    badge = tmp_path / "badge.json"
+    code = main(["run", "--config", cfg, "--no-color", "--badge", str(badge),
+                 "--fail-under", "0"])
+    assert code == 2  # fail closed BEFORE the (satisfiable) --fail-under 0 gate
+    assert not badge.exists()  # never emit a green badge from an invalid run
+    err = capsys.readouterr().err
+    assert "INVALID" in err
+
+
+def test_no_mutants_exits_2_by_default(tmp_path):
+    cfg = _write_config(tmp_path, _NO_MUTANTS_CONFIG)
+    code = main(["run", "--config", cfg, "--no-color"])
+    assert code == 2
+
+
+def test_no_mutants_allow_empty_exits_0(tmp_path):
+    cfg = _write_config(tmp_path, _NO_MUTANTS_CONFIG)
+    code = main(["run", "--config", cfg, "--no-color", "--allow-empty"])
+    assert code == 0
+
+
+def test_invalid_run_still_writes_json_with_status(tmp_path):
+    cfg = _write_config(tmp_path, _BASELINE_FAIL_CONFIG)
+    out = tmp_path / "out.json"
+    code = main(["run", "--config", cfg, "--no-color", "--json", str(out)])
+    assert code == 2
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["status"] == "baseline_failed"
+    assert data["score"] is None

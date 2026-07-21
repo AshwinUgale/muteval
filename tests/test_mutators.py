@@ -208,3 +208,15 @@ def test_downgrade_model_noop_when_weakest_or_unset():
     assert downgrade_model(System(prompt="p", model="gpt-3.5-turbo")) == []
     assert downgrade_model(System(prompt="p")) == []          # no model set
     assert downgrade_model("just a prompt") == []             # prompt-only target
+
+
+def test_downgrade_model_refuses_to_guess_unknown_model():
+    import warnings
+
+    # An off-ladder model must NOT be silently mapped onto the gpt ladder —
+    # guessing that gpt-3.5-turbo is a "downgrade" from it could be wrong.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        ms = downgrade_model(System(prompt="p", model="claude-3-opus"))
+    assert ms == []
+    assert any("not on muteval's known ladder" in str(w.message) for w in caught)

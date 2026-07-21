@@ -28,7 +28,14 @@ from muteval import __version__
 from muteval.config import MutEvalConfig, load_config
 from muteval.mutators import OPERATORS, generate_mutants
 from muteval.report import format_report
-from muteval.runner import run_mutation_testing
+from muteval.runner import (
+    BASELINE_ERRORED,
+    BASELINE_FAILED,
+    NO_EVALUATED_MUTANTS,
+    NO_MUTANTS,
+    VALID,
+    run_mutation_testing,
+)
 from muteval.system import System
 
 _STARTER_CONFIG = '''"""muteval config scaffold — edit the TODOs, then run:
@@ -254,6 +261,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true",
         help="Build and validate the run WITHOUT calling the model.",
     )
+    run.add_argument(
+        "--allow-empty", action="store_true",
+        help="Treat a run that generates NO mutants as a pass (exit 0) instead "
+        "of an invalid run. Baseline failures/errors are never rescued by this.",
+    )
     run.add_argument("--json", metavar="PATH", default=None,
         help="Write machine-readable results (score, CI, survivors) to a JSON file.")
     run.add_argument("--badge", metavar="PATH", default=None,
@@ -332,12 +344,35 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         print(format_report(result, use_color=not args.no_color))
 
+        # JSON is always safe to write — it carries "status" and None-aware
+        # scores, so it is useful precisely when the run is invalid.
         if args.json:
             from muteval.report import result_to_dict
 
             Path(args.json).write_text(
                 json.dumps(result_to_dict(result), indent=2), encoding="utf-8"
             )
+
+        # Validity gate. An invalid or empty run has NO trustworthy score, so we
+        # fail closed (exit 2) BEFORE writing a badge or applying score/severity
+        # gates — a green CI must never come from a vacuous run.
+        if result.status != VALID:
+            if result.status == NO_MUTANTS and args.allow_empty:
+                return 0
+            reason = {
+                BASELINE_ERRORED: "baseline suite ERRORED on the original system",
+                BASELINE_FAILED: "baseline suite did not pass on the original system",
+                NO_MUTANTS: "no mutants were generated "
+                "(use --allow-empty to treat as a pass)",
+                NO_EVALUATED_MUTANTS: "every mutant errored — no verdict produced",
+            }.get(result.status, result.status)
+            print(
+                f"muteval: INVALID — {reason}. No mutation score produced.",
+                file=sys.stderr,
+            )
+            return 2
+
+        # From here the run is VALID and result.score is a real number.
         if args.badge:
             from muteval.report import badge_dict
 

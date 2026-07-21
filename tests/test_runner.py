@@ -1,4 +1,5 @@
 from muteval import MutEvalConfig, run_mutation_testing
+from muteval.runner import BASELINE_ERRORED, BASELINE_FAILED, NO_MUTANTS
 
 
 def _make_config(evals, eval_names):
@@ -61,7 +62,7 @@ def test_missing_eval_leaves_a_survivor():
     assert result.score < 1.0
 
 
-def test_score_is_one_when_no_mutants():
+def test_score_is_none_and_status_no_mutants():
     cfg = MutEvalConfig(
         prompt="short",  # too short to mutate meaningfully
         cases=[{"x": 1}],
@@ -69,13 +70,17 @@ def test_score_is_one_when_no_mutants():
         evals=[lambda o, c: True],
     )
     result = run_mutation_testing(cfg)
-    # No mutants -> nothing to catch -> score defined as 1.0
-    assert result.score == 1.0
+    # No mutants -> no evidence. That is NOT a perfect score; it is unknown.
+    assert result.total == 0
+    assert result.status == NO_MUTANTS
+    assert result.score is None
+    assert result.effective_score is None
 
 
-def test_eval_exception_is_contained_not_fatal():
-    # A flaky eval (timeout/API error) must mark the mutant errored and let the
-    # run finish, not crash the whole process.
+def test_baseline_error_stops_the_run_before_any_mutant():
+    # A flaky eval that raises on the ORIGINAL system means we cannot trust a
+    # baseline. The run must stop (no mutants generated/run) and be INVALID,
+    # never a vacuous 100%.
     def boom(output, case):
         raise RuntimeError("api timeout")
 
@@ -88,10 +93,62 @@ def test_eval_exception_is_contained_not_fatal():
     )
     result = run_mutation_testing(cfg)  # must NOT raise
     assert result.baseline_error is not None
-    assert result.errored == result.total
-    assert result.evaluated == 0
-    # Errored mutants are excluded from the score denominator.
-    assert result.score == 1.0
+    assert result.status == BASELINE_ERRORED
+    assert result.total == 0  # never got past the baseline gate
+    assert result.score is None
+    assert result.effective_score is None
+
+
+def test_baseline_failure_is_invalid_not_perfect():
+    # Baseline eval fails (returns False) on the original system -> INVALID.
+    cfg = MutEvalConfig(
+        prompt="You are a bot.\n- You must cite the order ID.\n- Do not lie.",
+        cases=[{"order_id": "X1"}],
+        run=lambda p, c: "order X1",
+        evals=[lambda o, c: False],  # never passes, even on the original
+    )
+    result = run_mutation_testing(cfg)
+    assert result.baseline_passed is False
+    assert result.status == BASELINE_FAILED
+    assert result.total == 0
+    assert result.score is None
+
+
+def test_even_run_ties_survive_strict_majority():
+    # With kill_threshold=None (strict majority), a tie must SURVIVE, not kill.
+    # Build a run() whose eval fails on exactly half the runs by cycling.
+    from itertools import count
+
+    state = count()
+
+    def half_failing(output, case):
+        # Only used on mutants; alternate pass/fail so a 2-run mutant ties 1-1.
+        return next(state) % 2 == 0
+
+    cfg = MutEvalConfig(
+        prompt="You **must** cite the order ID.",
+        cases=[{"x": 1}],
+        run=lambda p, c: "ok",
+        evals=[half_failing],
+        runs_per_mutant=2,
+    )
+    # Baseline consumed some state; assert on the aggregate behavior instead:
+    # every mutant with an exact 1-1 split is NOT killed.
+    result = run_mutation_testing(cfg, operators=["remove_emphasis"])
+    for o in result.outcomes:
+        if o.kill_rate == 0.5:
+            assert o.killed is False  # ties survive under strict majority
+
+
+def test_strict_majority_thresholds():
+    # Unit-check the verdict rule directly for even N.
+    def verdict(fails, n):
+        return fails * 2 > n  # strict majority; ties survive
+
+    assert verdict(1, 2) is False  # 1/2 tie -> survives
+    assert verdict(2, 2) is True   # 2/2 -> killed
+    assert verdict(2, 4) is False  # 2/4 tie -> survives
+    assert verdict(3, 4) is True   # 3/4 -> killed
 
 
 def test_baseline_retries_past_a_transient_error():

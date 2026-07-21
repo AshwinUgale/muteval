@@ -51,6 +51,28 @@ def test_scope_include_keeps_only_matching_lines():
     assert ms  # the polite line did produce mutants
 
 
+def test_affected_lines_is_occurrence_aware():
+    from muteval.scope import _affected_lines
+
+    # A duplicated line, one copy removed: a set-based diff would MISS this
+    # (the line still exists in the mutant); the opcode diff must catch it.
+    original = "- Do not lie.\n- Be nice.\n- Do not lie."
+    mutant = "- Do not lie.\n- Be nice."  # dropped the second "Do not lie."
+    touched = _affected_lines(original, mutant)
+    assert "- Do not lie." in touched
+
+
+def test_affected_lines_ignores_coincidental_text_collision():
+    from muteval.scope import _affected_lines
+
+    # Changing line 1 must NOT be masked just because its NEW text equals an
+    # unrelated existing line (a set diff would treat it as "already present").
+    original = "- Be polite.\n- Be nice."
+    mutant = "- Be nice.\n- Be nice."  # line 1 rewritten to match line 2
+    touched = _affected_lines(original, mutant)
+    assert "- Be polite." in touched  # the removed original is reported
+
+
 def test_scope_does_not_touch_context_mutants():
     from muteval.system import System
     sys_ = System(prompt="answer", context=("doc A", "doc B"))
