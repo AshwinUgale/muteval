@@ -161,7 +161,7 @@ your system; muteval mutates your system to test your evals."
   mutation score tracks eval-suite quality, on TWO domains (support bot
   0→33→67→100%, code review 0→35→71→100%). Enforced in tests/test_eval_quality.py.
   See `FINDINGS.md`.
-- `tests/` — pytest; all green (172 tests).
+- `tests/` — pytest; all green (177 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 
