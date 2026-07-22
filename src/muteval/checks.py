@@ -127,17 +127,25 @@ def llm_judge(
     judge: Optional[Callable[[str], float]] = None,
     threshold: float = 0.5,
     model: str = "gpt-4o-mini",
+    base_url: Optional[str] = None,
     input_key: str = "input",
 ) -> EvalFn:
     """A generic LLM-as-judge check.
 
     Pass a ``judge(prompt) -> float in [0, 1]`` callable to stay dependency-free
-    and deterministic in tests. If you don't, a built-in judge calls the OpenAI
-    REST API using only the Python standard library (no ``openai`` package, no
-    extra installs) — it just needs ``OPENAI_API_KEY`` set. Install ``certifi``
-    if your Python's SSL store can't verify the endpoint.
+    and deterministic in tests. If you don't, a built-in judge calls an
+    OpenAI-**compatible** chat API using only the Python standard library (no
+    ``openai`` package, no extra installs) — it needs ``OPENAI_API_KEY`` set.
+
+    Point it at ANY OpenAI-compatible endpoint (Groq, Gemini's OpenAI-compat API,
+    GitHub Models, Ollama, a local vLLM/server) via ``base_url=`` or the
+    ``OPENAI_BASE_URL`` env var, e.g. ``base_url="https://api.groq.com/openai/v1"``
+    with ``model="openai/gpt-oss-20b"``. The built-in judge asks for a plain 0-10
+    score (not a structured/`json_schema` response), so it works on models that
+    don't support strict structured outputs. Install ``certifi`` if your Python's
+    SSL store can't verify the endpoint.
     """
-    judge_fn = judge or _default_openai_judge(model)
+    judge_fn = judge or _default_openai_judge(model, base_url)
 
     def _eval(output: str, case: Any) -> EvalOutcome:
         question = _case_get(case, input_key)
@@ -160,11 +168,25 @@ def llm_judge(
     return _eval
 
 
-_OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 
-def _openai_chat_stdlib(prompt: str, model: str) -> str:
-    """Call OpenAI chat completions with only the standard library."""
+def _judge_endpoint(base_url: Optional[str] = None) -> str:
+    """Resolve the chat-completions endpoint from base_url / OPENAI_BASE_URL.
+
+    Accepts an OpenAI-style base ("…/v1") and appends "/chat/completions", or a
+    full endpoint (already ending in "/chat/completions"), so any OpenAI-compatible
+    provider works: OpenAI, Groq, Gemini (openai-compat), GitHub Models, Ollama…
+    """
+    base = base_url or os.environ.get("OPENAI_BASE_URL") or _DEFAULT_BASE_URL
+    endpoint = base.rstrip("/")
+    if not endpoint.endswith("/chat/completions"):
+        endpoint += "/chat/completions"
+    return endpoint
+
+
+def _openai_chat_stdlib(prompt: str, model: str, base_url: Optional[str] = None) -> str:
+    """Call an OpenAI-compatible chat completions endpoint with only the stdlib."""
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError(
@@ -185,7 +207,7 @@ def _openai_chat_stdlib(prompt: str, model: str) -> str:
         }
     ).encode("utf-8")
     req = urllib.request.Request(
-        _OPENAI_ENDPOINT,
+        _judge_endpoint(base_url),
         data=body,
         headers={
             "Authorization": "Bearer " + api_key,
@@ -197,9 +219,9 @@ def _openai_chat_stdlib(prompt: str, model: str) -> str:
         return json.load(resp)["choices"][0]["message"]["content"] or ""
 
 
-def _default_openai_judge(model: str) -> Callable[[str], float]:
+def _default_openai_judge(model: str, base_url: Optional[str] = None) -> Callable[[str], float]:
     def _judge(prompt: str) -> float:
-        text = _openai_chat_stdlib(prompt, model).strip()
+        text = _openai_chat_stdlib(prompt, model, base_url).strip()
         # Parse the LAST number; normalize a 0-10 integer to [0, 1]; clamp.
         nums = re.findall(r"\d+(?:\.\d+)?", text)
         if not nums:

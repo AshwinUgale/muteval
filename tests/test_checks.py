@@ -53,3 +53,32 @@ def test_llm_judge_with_injected_judge():
     assert out.threshold == 0.7
     # margin enables near-miss reporting.
     assert round(out.margin, 4) == round(0.8 - 0.7, 4)
+
+
+def test_judge_endpoint_resolution(monkeypatch):
+    from muteval.checks import _judge_endpoint
+
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    # default -> OpenAI
+    assert _judge_endpoint() == "https://api.openai.com/v1/chat/completions"
+    # an OpenAI-style base ("/v1") gets "/chat/completions" appended
+    assert _judge_endpoint("https://api.groq.com/openai/v1") == \
+        "https://api.groq.com/openai/v1/chat/completions"
+    # trailing slash tolerated
+    assert _judge_endpoint("https://api.groq.com/openai/v1/") == \
+        "https://api.groq.com/openai/v1/chat/completions"
+    # a full endpoint is left as-is
+    assert _judge_endpoint("https://x/v1/chat/completions") == \
+        "https://x/v1/chat/completions"
+    # OPENAI_BASE_URL env is honored when no explicit base_url
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    assert _judge_endpoint() == "http://localhost:11434/v1/chat/completions"
+    # explicit base_url overrides the env
+    assert _judge_endpoint("https://api.openai.com/v1") == \
+        "https://api.openai.com/v1/chat/completions"
+
+
+def test_llm_judge_uses_custom_judge_without_network():
+    ev = checks.llm_judge("is it polite", judge=lambda prompt: 0.9, threshold=0.5)
+    out = ev("Hello, happy to help!", {"input": "hi"})
+    assert out.passed is True and out.score == 0.9

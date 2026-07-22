@@ -89,6 +89,25 @@ tool to a live system, and knowing them up front turns eight detours into two.
 
 ---
 
+## Choosing a judge
+
+If your evals use an LLM judge, two things bite most often:
+
+- **Structured-output support.** Many judge integrations (and some target repos)
+  request a strict `json_schema` response, which **free/open models often don't
+  support** (Groq's Llama, etc.) — you'll get a 400. Use a model that does
+  (real OpenAI models; Groq `openai/gpt-oss-20b`/`120b`), or a judge that asks for
+  plain text. muteval's own `checks.llm_judge` asks for a plain 0-10 score (no
+  `json_schema`), so it works on any model.
+- **Point the built-in judge anywhere.** `checks.llm_judge(rubric,
+  base_url="…/v1", model="…")` (or the `OPENAI_BASE_URL` env var) hits any
+  OpenAI-compatible endpoint — OpenAI, Groq, Gemini's compat API, GitHub Models,
+  Ollama, a local server — using just `OPENAI_API_KEY`. So you can run a full
+  suite on a free judge.
+- **Judge reliability.** A weak judge gives noisy verdicts (e.g. 0.0 on a correct
+  answer) and silently poisons the score. If a metric misbehaves, use a stronger
+  judge or drop that metric — and watch the `judge_reliability` probe.
+
 ## Validate before you run: `muteval check`
 
 Run the built-in doctor before a full run. It validates the wiring layer by layer
