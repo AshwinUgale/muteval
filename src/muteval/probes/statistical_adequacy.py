@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from muteval.evals import coerce_outcome
 from muteval.probes.base import ProbeResult
-from muteval.stats import min_samples_for_precision, wilson_interval
+from muteval.stats import interval, min_samples_for_precision
 
 
 def _case_passes(config, case) -> bool:
@@ -23,7 +23,11 @@ def _case_passes(config, case) -> bool:
     return True
 
 
-def statistical_adequacy(config, target_margin: float = 0.15) -> ProbeResult:
+def statistical_adequacy(
+    config, target_margin: float = 0.15, method: str = "wilson"
+) -> ProbeResult:
+    """`method`: 'wilson' (default) or 'jeffreys' (Beta-Binomial; degrades better
+    at very small n — Bowyer et al. 2025, Brown/Cai/DasGupta 2001)."""
     passed = evaluated = 0
     for case in config.cases:
         try:
@@ -34,7 +38,7 @@ def statistical_adequacy(config, target_margin: float = 0.15) -> ProbeResult:
         passed += 1 if ok_case else 0
 
     n = evaluated
-    lo, hi = wilson_interval(passed, n)
+    lo, hi = interval(passed, n, method=method)
     half = (hi - lo) / 2 if n else 1.0
     rate = passed / n if n else 0.0
     ok = n > 0 and half <= target_margin

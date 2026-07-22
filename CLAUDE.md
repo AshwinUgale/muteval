@@ -115,12 +115,16 @@ your system; muteval mutates your system to test your evals."
   - `report.py` — terminal report (score bar + survivors + near-miss lines);
     survivors are sorted by severity (HIGH first) with [HIGH]/[MED]/[LOW] tags.
   - `probes/` — Phase 2 "eval evaluator": pluggable `Probe` registry (`PROBES`,
-    `register_probe`, `run_probes`) + `ProbeResult`. `statistical_adequacy`
-    (Wilson CI on case count) + `judge_reliability` (verdict-flip rate over N
-    re-runs) + `discrimination` (good-vs-bad score gap, opt-in exemplars) + `redundancy`
-    (Pearson-correlate metrics, flag > 0.9) shipped. CLI: `muteval probe`. CLI: `muteval probe --config ...` prints
-    a report card (no composite score). More probes (reliability, discrimination)
-    are Phase 2 roadmap.
+    `register_probe`, `run_probes`) + `ProbeResult`. All four upgraded to the
+    prior-art-recommended method + validated on constructed ground truth in
+    `tests/test_probe_validation.py` (see docs/PLAN-probe-validation.md,
+    AUDIT-probe-prior-art.md, PRIOR-ART.md): `statistical_adequacy` (Wilson CI +
+    dependency-free `jeffreys` option in stats.py, small-n) · `judge_reliability`
+    (flip-rate + Krippendorff's alpha over re-runs; bias panel = future work) ·
+    `discrimination` (AUC via Mann-Whitney + Cohen's d + significance, replaces
+    raw mean-gap) · `redundancy` (Spearman + connected-component families,
+    replaces Pearson-only). CLI: `muteval probe --config ...` prints a report card
+    (no composite score).
   - `stats.py` — Wilson confidence interval + min-sample-size (dependency-free).
     Score is a proportion; reported as `X% [95% CI lo-hi]`. `runs_per_mutant`
     now uses a MAJORITY vote (`config.kill_threshold`, default None = STRICT
@@ -161,7 +165,7 @@ your system; muteval mutates your system to test your evals."
   mutation score tracks eval-suite quality, on TWO domains (support bot
   0→33→67→100%, code review 0→35→71→100%). Enforced in tests/test_eval_quality.py.
   See `FINDINGS.md`.
-- `tests/` — pytest; all green (177 tests).
+- `tests/` — pytest; all green (190 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 
