@@ -168,6 +168,64 @@ def llm_judge(
     return _eval
 
 
+def cites_source(pattern: str = r"[A-Za-z]+[-_]?\d+", *, min_count: int = 1) -> EvalFn:
+    """Pass iff the output cites >= ``min_count`` source ids matching ``pattern``,
+    **regardless of bracket style** — it finds the bare id inside ``[id]``,
+    ``(id)``, full-width ``【id】``, or none. Rule-based (no LLM).
+
+    Bakes in a common gotcha: models cite with whatever brackets they like, so
+    matching the id token itself is far more robust than matching ``\\[id\\]``.
+    Pass your own ``pattern`` (e.g. ``r"doc-\\d+"``) for your id scheme.
+    """
+    rx = re.compile(pattern)
+
+    def _eval(output: str, case: Any) -> EvalOutcome:
+        n = len(rx.findall(output or ""))
+        return EvalOutcome(
+            passed=n >= min_count,
+            score=float(n),
+            name="cites_source",
+            detail=f"{n} citation(s) matching {pattern!r}",
+        )
+
+    return _eval
+
+
+def grounded(
+    context_key: str = "context",
+    *,
+    judge: Optional[Callable[[str], float]] = None,
+    threshold: float = 0.5,
+    model: str = "gpt-4o-mini",
+    base_url: Optional[str] = None,
+) -> EvalFn:
+    """LLM-judge preset: pass iff the output is **grounded** in
+    ``case[context_key]`` — it uses only facts from the context and invents
+    nothing; an honest "I don't know" when the answer isn't present counts as
+    grounded. This is the eval muteval most often suggests for grounding/
+    abstention survivors — now a one-liner. Judge notes: see ``llm_judge``.
+    """
+    judge_fn = judge or _default_openai_judge(model, base_url)
+
+    def _eval(output: str, case: Any) -> EvalOutcome:
+        ctx = _case_get(case, context_key)
+        ctx_text = "\n".join(ctx) if isinstance(ctx, (list, tuple)) else str(ctx or "")
+        prompt = (
+            "Rate how well the ANSWER is grounded in the CONTEXT. It must use only "
+            "facts from the context and invent nothing. If the context does not "
+            "contain the answer and the reply honestly says it doesn't know, that "
+            "is fully grounded.\n\n"
+            f"CONTEXT:\n{ctx_text}\n\nANSWER:\n{output}\n\n"
+            "Return ONLY an integer from 0 to 10 (10 = fully grounded)."
+        )
+        score = float(judge_fn(prompt))
+        return EvalOutcome(
+            passed=score >= threshold, score=score, threshold=threshold, name="grounded"
+        )
+
+    return _eval
+
+
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 

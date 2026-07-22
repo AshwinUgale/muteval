@@ -77,7 +77,10 @@ your system; muteval mutates your system to test your evals."
   - `evals.py` — `EvalOutcome` (passed + score + threshold + margin) and
     `coerce_outcome`. Evals may return `bool` OR `EvalOutcome`.
   - `checks.py` — framework-free eval factories (contains, not_contains,
-    contains_case, regex_matches, is_json, equals, llm_judge).
+    contains_case, regex_matches, is_json, equals, llm_judge, cites_source
+    [bracket-agnostic], grounded [judge preset]). `llm_judge`/`grounded` take
+    `base_url=` (or `OPENAI_BASE_URL`) for ANY OpenAI-compatible endpoint and
+    ask for a plain 0-10 score (no json_schema). `_judge_endpoint` resolves it.
   - `mutators.py` — 18 operators: 7 prompt (weaken_modals, flip_negation,
     drop_instruction_lines, delete_sentences, truncate_prompt,
     drop_few_shot_example, remove_emphasis) + 7 context (drop_context_doc,

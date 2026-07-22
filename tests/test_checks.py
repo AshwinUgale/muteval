@@ -82,3 +82,25 @@ def test_llm_judge_uses_custom_judge_without_network():
     ev = checks.llm_judge("is it polite", judge=lambda prompt: 0.9, threshold=0.5)
     out = ev("Hello, happy to help!", {"input": "hi"})
     assert out.passed is True and out.score == 0.9
+
+
+def test_cites_source_is_bracket_agnostic():
+    ev = checks.cites_source(r"doc-\d+")
+    assert ev("see [doc-1] and (doc-2)", {}).passed is True         # ascii brackets
+    assert ev("per 【doc-1】", {}).passed is True                    # full-width brackets
+    assert ev("supported by doc-3", {}).passed is True              # bare
+    assert ev("no citation here", {}).passed is False
+    # min_count
+    two = checks.cites_source(r"doc-\d+", min_count=2)
+    assert two("[doc-1] [doc-2]", {}).passed is True
+    assert two("[doc-1] only", {}).passed is False
+
+
+def test_grounded_preset_uses_context_and_judge_without_network():
+    ev = checks.grounded("context", judge=lambda prompt: 0.9, threshold=0.5)
+    out = ev("The warranty is 24 months.",
+             {"context": ["The warranty is 24 months."]})
+    assert out.passed is True and out.score == 0.9 and out.name == "grounded"
+    # a strict judge fails it
+    ev2 = checks.grounded("context", judge=lambda prompt: 0.1, threshold=0.5)
+    assert ev2("made up claim", {"context": "unrelated"}).passed is False
