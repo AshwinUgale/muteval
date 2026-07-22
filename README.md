@@ -9,55 +9,28 @@
 
 Your evals are passing. That doesn't mean they work.
 
-`muteval` answers the question every eval suite quietly dodges: *would my
-evals actually fail if my system silently got worse?* It deliberately degrades
-the thing under test, reruns **your existing eval suite** against each degraded
+muteval answers the question every eval suite quietly dodges: *would my evals
+actually fail if my system silently got worse?* It deliberately degrades the
+thing under test, reruns **your existing eval suite** against each degraded
 version (a "mutant"), and reports a **mutation score** — the percentage of
 injected regressions your evals caught. The ones they miss are **survivors**:
 concrete blind spots in your eval coverage.
 
-It's `mutmut`/Stryker, but for evals.
+It's `mutmut` / Stryker, but for evals.
 
-**Zero dependencies, no eval framework required.** muteval is pure Python — `pip
-install muteval` and you're running; it never drags in heavy LLM SDKs. Use the
-built-in checks (including a standard-library LLM judge) with nothing else
-installed, or reuse your existing deepeval / RAGAS metrics if you already have
-them.
+```text
+Mutation score: 33%  [████████░░░░░░░░░░░░░░░░]  (2/6 mutants killed, 95% CI 10-70%)
 
-```
-Mutation score: 23%  [█████░░░░░░░░░░░░░░░░░░░]  (5/22 mutants killed)
+2 SURVIVED  (output changed but evals didn't notice — real coverage gaps; 1 HIGH-severity):
 
-17 SURVIVED  (these regressions slipped past your evals — coverage gaps):
-
-  SURVIVED  [flip_negation]
-            inverted "Do not" -> "Do" (near: ...Do not promise refunds...)
-  SURVIVED  [drop_instruction_lines]
-            dropped line: "You must never reveal another customer's data."
+  [HIGH] SURVIVED  [delete_sentences]
+            deleted sentence: "If the answer is not in the context, say you don't know."
+            fix: add checks.grounded("context")   ← muteval suggests the eval that would catch it
+  [MED ] SURVIVED  [weaken_modals]
+            weakened "ONLY" -> "preferably" (near: answer using ONLY the provided context)
 ```
 
 ---
-
-## Why this exists
-
-Regression-testing tools (promptfoo, deepeval, OpenAI Evals, LangSmith) catch
-regressions in your *system*. None of them tell you whether your *evals* are
-good enough to catch those regressions in the first place. That meta-layer is
-the gap `muteval` fills.
-
-The technique — mutation testing — is the established answer to "is my test
-suite any good?" in software engineering, and has been studied for LLM
-in-context-learning systems in research (e.g. the MILE framework, arXiv
-2409.04831). `muteval` brings it to working eval suites as a tool-agnostic,
-developer-facing package.
-
-How muteval differs from neighbouring tools (the two axes that matter):
-
-| Tool | Mutates the… | Measures… |
-| --- | --- | --- |
-| promptfoo red team | input (jailbreaks) | your system's safety |
-| Giskard | input (typos, swaps) | your model's robustness |
-| deepeval synth data | output / ground truth | a metric's calibration |
-| **muteval** | **the system (prompt → context → tools)** | **your eval suite's coverage** |
 
 ## Install
 
@@ -65,271 +38,155 @@ How muteval differs from neighbouring tools (the two axes that matter):
 pip install muteval        # pure Python, zero required dependencies
 ```
 
-That's the whole install. The core has no dependencies; optional adapters
-(`muteval[deepeval]`, `muteval[ragas]`) only matter if you already use those
-tools.
+That's the whole install. The core drags in **no** heavy LLM SDKs; optional
+adapters (`muteval[deepeval]`, `muteval[ragas]`, `muteval[promptfoo]`) only
+matter if you already use those tools.
 
-## Quick start — no Python, one command
+## 60-second quickstart (no API key)
 
-You don't need a config file or a `run()` function. Give muteval a prompt, a
-cases file, and the checks you care about — it calls the model for you:
+```bash
+muteval init --template rag        # scaffold a config (or --template basic)
+muteval check --config muteval_config.py   # validate wiring + baseline first
+muteval run   --config muteval_config.py
+```
+
+`muteval init` writes a runnable config with the four things you supply clearly
+marked. `muteval check` is the doctor — it validates your pipeline, evals, and
+baseline *before* a full run and tells you exactly which layer is broken. Then
+`run` gives you a mutation score and a ranked list of survivors, each with a
+suggested eval to close the gap.
+
+Prefer zero-config? Point muteval at a prompt + cases and let it call the model:
 
 ```bash
 export OPENAI_API_KEY=sk-...
-
-muteval run \
-  --prompt-file system.txt \
-  --cases cases.jsonl \
-  --model gpt-4o-mini \
-  --check not_contains:refund \
-  --judge "the answer is grounded in the provided context" \
-  --fail-under 75
+muteval run --prompt-file system.txt --cases cases.jsonl --model gpt-4o-mini \
+  --judge "the answer is grounded in the provided context" --fail-under 75
 ```
 
-`cases.jsonl` is one JSON object per line, e.g.
-`{"question": "what port?", "context": ["The server listens on port 8080."]}`.
+## Why this exists
 
-Built-in checks: `contains:TEXT`, `not_contains:TEXT`, `contains_case:KEY`,
-`regex:PATTERN`, `is_json`, `equals`, and `judge:<rubric>` (LLM-as-judge, stdlib —
-no extra installs). Add `--dry-run` to validate your setup without spending a
-token. For custom pipelines/metrics, use `--config muteval_config.py` instead.
+Regression tools (promptfoo, deepeval, OpenAI Evals, LangSmith) catch
+regressions in your *system*. None tell you whether your *evals* are good enough
+to catch those regressions in the first place. That meta-layer is the gap
+muteval fills — mutation testing is the established answer to "is my test suite
+any good?" in software engineering, brought to LLM eval suites.
 
-Testing a RAG app? Add `--context-file knowledge.txt` (or `--context "doc"`,
-repeatable). muteval then also drops/clears retrieved docs (`drop_context_doc`,
-`clear_context`) and checks whether your evals notice the degraded retrieval.
+| Tool | Mutates the… | Measures… |
+| --- | --- | --- |
+| promptfoo red team | input (jailbreaks) | your system's safety |
+| Giskard | input (typos, swaps) | your model's robustness |
+| deepeval synth data | output / ground truth | a metric's calibration |
+| **muteval** | **the system (prompt → context → tools → model)** | **your eval suite's coverage** |
 
-Using a specific model? Add `--mutate-model` to also swap it for a weaker one
-(`downgrade_model`) and see whether your evals catch the cheaper model.
+## How it works
 
-## Quick start (runs offline, no API key)
+Describe your system + evals in a small config, then muteval:
 
-```bash
-git clone https://github.com/AshwinUgale/muteval
-cd muteval
-pip install -e .
-muteval run --config examples/support_bot/muteval_config.py
-```
-
-You'll see a mutation score and a list of survivors — because the example's
-eval suite is deliberately missing checks.
-
-Want it against a real model? See `examples/openai_support_bot/` (needs
-`pip install "muteval[examples]"` and an `OPENAI_API_KEY`).
-
-### Start from scratch
-
-No eval framework? You need nothing but muteval. Scaffold a config and grade
-with built-in checks in two lines (`checks.llm_judge` calls the model via the
-standard library — no `openai` package needed). See
-`examples/llm_judge_quickstart/` for a runnable end-to-end example:
-
-```bash
-muteval init                       # writes muteval_config.py you can edit
-muteval run --config muteval_config.py
-```
+1. **Baseline** — confirms your suite passes on the *original* system. If it
+   doesn't, muteval **refuses to score** (a red baseline makes every number
+   meaningless) rather than hand you a misleading 100%.
+2. **Mutate** — generates mutants by degrading the prompt / retrieved context /
+   tool outputs / model (18 operators).
+3. **Grade** — reruns your suite against each mutant. **Killed** = your evals
+   caught it (good); **survived** = they missed it (a gap).
+4. **Score** — `killed / evaluated`, with a 95% confidence interval, severity
+   ranking, near-miss margins, and a suggested fix per survivor.
 
 ```python
 from muteval import MutEvalConfig, checks
 
 config = MutEvalConfig(
-    prompt=SYSTEM_PROMPT,
-    cases=[{"input": "where is my order?", "order_id": "A123"}],
-    run=my_run_fn,
-    evals=[
-        checks.contains_case("order_id"),   # answer must cite the order id
-        checks.not_contains("refund"),      # never promise a refund
-        checks.llm_judge("is it polite?"),  # generic LLM-as-judge (stdlib, no SDK)
+    prompt=SYSTEM_PROMPT,                 # the thing under test
+    cases=[{"input": "...", "order_id": "A123"}],
+    run=my_run_fn,                        # call your LLM/app -> output text
+    evals=[                               # your existing checks, graded by muteval
+        checks.contains_case("order_id"),
+        checks.grounded("context"),       # LLM-judge preset (any OpenAI-compatible endpoint)
     ],
 )
 ```
 
-## How it works
+## Trustworthy by design
 
-You describe your system and evals in a small Python config:
+A coverage number you can't trust is worse than none. muteval **fails closed**:
 
-```python
-from muteval import MutEvalConfig
+- **Red or errored baseline → no score** (status `baseline_failed`/`errored`),
+  CLI exits non-zero, no badge.
+- **Partial mutant errors** above a budget → `partial_errors`, not a score over a
+  shrunken denominator. `--max-error-rate` / `--allow-mutant-errors` to accept.
+- **Non-determinism** → strict-majority verdicts over `runs_per_mutant`, Wilson
+  confidence intervals on the score, flaky-mutant flagging.
+- **Cosmetic changes** → output-diffing separates real coverage gaps from
+  "observationally unchanged" mutants.
 
-config = MutEvalConfig(
-    prompt=MY_SYSTEM_PROMPT,        # the thing under test
-    cases=[...],                    # inputs to your system
-    run=lambda prompt, case: ...,   # call your LLM/app, return output text
-    evals=[...],                    # each: (output, case) -> bool | EvalOutcome
-)
-```
+In a controlled, CI-enforced experiment the mutation score rises monotonically
+with eval-suite coverage (**0 → 33 → 67 → 100%** across two domains). See
+[FINDINGS.md](FINDINGS.md), and [docs/LIMITATIONS.md](docs/LIMITATIONS.md) for
+when to distrust the number.
 
-Evals may return a plain `bool` or a scored `EvalOutcome(passed, score,
-threshold)`. When a score is present, survivors that only *barely* passed are
-flagged as **near misses** (`↳ near miss: passed Faithfulness by only +0.020`) —
-your eval almost caught the regression.
+## What it can mutate (18 operators)
 
-Then:
+**Prompt:** `weaken_modals`, `flip_negation`, `drop_instruction_lines`,
+`delete_sentences`, `truncate_prompt`, `drop_few_shot_example`, `remove_emphasis`.
+**Retrieved context (RAG):** `drop_context_doc`, `clear_context`,
+`corrupt_context_doc`, `swap_context_doc`, `shuffle_context`,
+`duplicate_context_doc`, `truncate_context_doc`.
+**Model:** `downgrade_model`. **Tools (agents):** `drop_tool_output`,
+`corrupt_tool_output`, `swap_tool_output`.
 
-1. **Baseline.** muteval confirms your eval suite passes on the original
-   prompt. (If it doesn't, the score is meaningless — fix that first.)
-2. **Mutate.** It generates mutants by degrading the prompt — weakening
-   instructions, inverting rules, dropping lines, truncating, removing
-   emphasis, deleting few-shot examples.
-3. **Grade.** It reruns your eval suite against each mutant. A mutant is
-   **killed** if your evals fail (good — they caught it) and **survives** if
-   they still pass (bad — a gap).
-4. **Score.** `killed / total`. Write evals to kill the survivors, and watch
-   the number climb.
+Pass a `System(prompt=..., context=[...], tools=[...], model=...)` to make
+context / tools / model mutable for RAG and agent suites. Bring your own operator
+with `register_operator`, and scope which parts of the prompt mutate with
+`[[mutate]]…[[/mutate]]` markers or `--scope-include/-exclude`.
 
-## Gate CI
+## Gate CI + coverage badge
 
 ```bash
-muteval run --config muteval_config.py --fail-under 75
+muteval run --config muteval_config.py --fail-under 75 --badge badge.json
 ```
 
-Exits non-zero if your eval coverage drops below 75%, so a PR that weakens your
-evals fails the build.
+Exits non-zero if coverage drops below 75%, so a PR that weakens your evals fails
+the build. `--fail-on-severity high` gates on any unguarded high-severity gap.
+Copy `examples/ci/github-actions.yml` to run it on every PR and publish a
+[shields.io](https://shields.io) eval-coverage badge.
 
-Copy `examples/ci/github-actions.yml` to `.github/workflows/muteval.yml` and it
-runs on every PR automatically — set once, then it guards your eval suite forever.
+## Bring your existing metrics
 
-### Eval-coverage badge
-
-`muteval run --json out.json --badge badge.json` writes machine-readable results
-and a [shields.io](https://shields.io) endpoint payload. The CI template publishes
-the badge on `main`; then add to your README (replace `OWNER/REPO`):
-
-```markdown
-[![eval coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OWNER/REPO/main/.github/badges/eval-coverage.json)](https://github.com/OWNER/REPO)
-```
-
-## Advanced
-
-- **Choose what mutates** — `--operators weaken_modals flip_negation ...` runs a
-  subset. `--sample N --seed S` runs a reproducible random subset for cheap CI.
-- **Scope the prompt** — wrap mutable regions in `[[mutate]] ... [[/mutate]]`, or
-  use `--scope-include REGEX` / `--scope-exclude REGEX` (line-level) so muteval
-  only mutates the parts you care about.
-- **Bring your own operator** — `from muteval import register_operator` (or pass
-  a callable in `operators=[...]`). Operator factories let you parametrize the
-  built-ins: `make_weaken_modals(pairs)`, `make_downgrade_model(ladder)`.
-- **Mutate beyond the prompt** — `System(prompt, context=[...], tools=[...],
-  model=...)` makes retrieved context, tool outputs, and the model itself
-  mutable (RAG/agent suites).
-
-## Mutation operators
-
-| Operator | What it injects |
-| --- | --- |
-| `weaken_modals` | softens strong instructions (`must` → `should`) |
-| `flip_negation` | inverts a rule (`do not` → `do`, `never` → `always`) |
-| `drop_instruction_lines` | deletes a single instruction line |
-| `delete_sentences` | deletes a single sentence (prose prompts) |
-| `truncate_prompt` | clips the tail of the prompt |
-| `drop_few_shot_example` | removes one few-shot example block |
-| `remove_emphasis` | strips `**bold**` / `IMPORTANT:` cues |
-| `drop_context_doc` | drops one retrieved document (RAG) |
-| `clear_context` | removes all retrieved context (retrieval failure) |
-| `corrupt_context_doc` | injects a plausible-but-wrong fact into a doc |
-| `swap_context_doc` | replaces a doc with an irrelevant one (bad retrieval) |
-| `shuffle_context` | reverses doc order (position sensitivity) |
-| `duplicate_context_doc` | duplicates a doc (redundant noise) |
-| `truncate_context_doc` | clips a doc's tail (cut-off chunk) |
-| `downgrade_model` | swaps the model for a weaker one (model-swap) |
-| `drop_tool_output` | drops one tool output (agents) |
-| `corrupt_tool_output` | corrupts one tool output (wrong tool result) |
-| `swap_tool_output` | swaps a tool output for an irrelevant one |
-
-## Mutating retrieved context (RAG)
-
-The mutation target isn't limited to a prompt string. Pass a `System` and your
-`run` receives the mutated system, so muteval can degrade the **retrieved
-context** and see whether your evals actually depend on retrieval quality:
+Already have a suite? Reuse its metrics instead of rewriting them:
 
 ```python
-from muteval import MutEvalConfig, System
-
-config = MutEvalConfig(
-    system=System(prompt=SYSTEM_PROMPT, context=["doc1", "doc2"]),
-    cases=[{"question": "..."}],
-    run=lambda system, case: my_rag_answer(system.prompt, system.context, case),
-    evals=[...],
-)
-```
-
-The `drop_context_doc` and `clear_context` operators now produce mutants; if your
-suite still passes when a relevant doc is dropped, that's a survivor.
-
-## Adapters (optional)
-
-**You don't need any framework to use muteval.** But if you already have a suite
-in another tool, reuse its metrics instead of rewriting them. The **deepeval**
-adapter wraps your existing metrics as muteval evals:
-
-```python
-from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
-from muteval import MutEvalConfig
+from deepeval.metrics import FaithfulnessMetric
 from muteval.adapters.deepeval import metrics_to_evals
 
-metrics = [AnswerRelevancyMetric(threshold=0.7), FaithfulnessMetric()]
-config = MutEvalConfig(
-    prompt=SYSTEM_PROMPT,
-    cases=[{"question": "...", "context": ["doc1", "doc2"]}],
-    run=my_run_fn,                       # how to regenerate output from a prompt
-    evals=metrics_to_evals(metrics, input_key="question",
-                           retrieval_context_key="context"),
-)
+evals = metrics_to_evals([FaithfulnessMetric()], input_key="question",
+                         retrieval_context_key="context")
 ```
 
-Install with `pip install "muteval[deepeval]"`. See `examples/deepeval_rag/`.
+Adapters for **deepeval**, **RAGAS**, and **promptfoo** (`pip install
+"muteval[deepeval|ragas|promptfoo]"`). Or use the built-in framework-free
+`checks` — including `llm_judge` / `grounded` that hit **any OpenAI-compatible
+endpoint** (OpenAI, Groq, Gemini, GitHub Models, Ollama…) via `base_url=`, using
+only the standard library.
 
-**RAGAS** works the same way (`pip install "muteval[ragas]"`). RAGAS metrics
-return a raw score, so you supply a threshold — and survivors get near-miss
-margins for free:
+## Adopting it on your own suite
 
-```python
-from ragas.metrics import Faithfulness, ResponseRelevancy
-from muteval.adapters.ragas import metrics_to_evals
-
-evals = metrics_to_evals(
-    [Faithfulness(), ResponseRelevancy()],
-    threshold=0.7,
-    input_key="question",
-    retrieval_context_key="context",
-)
-```
-
-(A promptfoo adapter is next.) Writing a new adapter is small — see
-`src/muteval/adapters/base.py` for the contract.
+Pointing muteval at a real system is a ~1-hour integration, not plug-and-play —
+[docs/ADOPTION.md](docs/ADOPTION.md) has the honest checklist, a
+"where-it-breaks → what-to-change" table, judge-selection guidance, and the four
+pieces you supply. Start with `muteval check` and fix a green baseline first.
 
 ## Roadmap
 
-`muteval` started by mutating **prompts**. The thesis scales well beyond that:
+Shipped: prompt/context/tool/model mutation · deepeval/RAGAS/promptfoo adapters ·
+scored evals + near-miss reporting · severity ranking + `--fail-on-severity` ·
+confidence intervals + majority-vote stability · output-diffing · fail-closed
+validity gate · `muteval check` doctor · RAG scaffold + adoption guide.
 
-- [x] Mutate **retrieved context** (RAG) — `drop_context_doc`, `clear_context`
-      (corrupt/swap operators next)
-- [x] **Scored evals + near-miss reporting** (`EvalOutcome`)
-- [x] **deepeval** and **RAGAS** adapters — promptfoo adapter next
-- [ ] Mutate **tool outputs** for agent eval suites
-- [ ] Model-swap mutants (downgrade the model, see if evals notice)
-- [ ] LLM-driven semantic mutations (beyond rule-based string edits)
-- [ ] Statistical handling for non-deterministic suites (confidence intervals)
-- [ ] HTML / Markdown reports and a shareable score badge
-
-The endgame is the standard way teams *certify* their evals before trusting an
-AI system in production.
-
-## Does it work?
-
-See [FINDINGS.md](FINDINGS.md). In a controlled experiment the mutation score
-rises monotonically with eval-suite coverage (0% → 28% → 56% → 72%), and
-`validation/` holds reproducible runs — including against real deepeval metrics.
-
-## Limitations
-
-muteval is honest about what it can't do and when to distrust the number —
-see [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+Next: LLM-driven semantic mutations · HTML/Markdown reports · the eval-quality
+probe layer (`muteval probe`) maturing into a standalone eval-evaluator.
 
 ## Contributing
 
-This is an early, open project and contributions are very welcome — especially
-new mutation operators and tool adapters. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-[Apache-2.0](LICENSE).
+Early, open project — contributions welcome, especially new operators and
+adapters. See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed [Apache-2.0](LICENSE).
