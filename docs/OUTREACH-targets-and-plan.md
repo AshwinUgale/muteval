@@ -42,6 +42,128 @@ A candidate only qualifies if ALL are true:
 - [ ] **Mid-size** — big enough to matter, small enough to notice you. Rough band:
       ~300–8k stars; avoid mega-projects (LangChain etc.) where you'll be invisible.
 
+## VETTED TARGETS (re-verified 2026-07-21 after external review)
+
+Hard-won lesson from this pass: our first "Bucket 1" leaned on data from a
+rate-limited scrape, and a reviewer correctly flagged that two of them
+(`leisurelyleon/ragline`, `OpenAgentHQ/openagent-eval`) can't be independently
+located. So **verification status is now explicit and nothing is "vetted" until
+it passes the clone-and-run gate below.** Confirmation legend:
+- **[API✓]** confirmed live via GitHub REST API this session.
+- **[search✓]** confirmed via web search this session.
+- **[reviewer]** reviewer-cited, but I could NOT independently confirm this
+  session — treat as a lead, clone-verify first.
+- **[unverified]** neither — do not invest until cloned.
+
+### The clone-and-run gate (ALL must hold before a repo earns the spreadsheet)
+```
+git clone succeeds
+one documented command runs the pipeline
+one documented command runs the evals
+at least one system component is mutable (prompt / context / retrieval / model)
+baseline passes twice consecutively
+repository has a real (permissive) license
+maintainer activity visible in the last ~3 months
+```
+
+### Phase 1 — establish muteval credibility (smoke tests; a dramatic survivor is NOT the goal)
+Objective: prove install is clean, the baseline gate works, mutants generate,
+results reproduce, partial errors fail closed, reports diagnose survivors.
+
+1. **sanmaxdev/ragproof**  [reviewer]  — reviewer's top keyless smoke test:
+   bundled no-key example, deterministic retrieve/citation/abstention/injection
+   metrics, re-runnable `retrieve()`/`answer()`, a tagged PyPI `ragproof` 1.0.0.
+   **Caveat (important): I could NOT surface it via the GitHub API or web search
+   this session — clone-verify before trusting it.** Also note it is itself an
+   eval product, so it proves muteval *works*; it is not a "we found an app's
+   blind spot" story.
+2. **aswithabukka/Evaluation-First-Testing-Harness-for-RAG-and-Agents**  [reviewer/search]
+   — real runner + evaluators + a `demo_rag` adapter; ~65 keyless unit tests,
+   but the E2E quickstart wants an OpenRouter/OpenAI key; 0★, portfolio project.
+   Integration fixture, low outreach value. Mutate the bundled `demo_rag` system
+   / adapter retriever+generator config — **NOT** its statistical release gate
+   (that's ordinary program logic, not a muteval system mutation).
+3. **Your own deterministic fixture** (`examples/rag_context_offline/`) — fully
+   in your control; the cleanest possible reproducibility check.
+
+### Phase 1B — replacements needed (do NOT call these vetted)
+- **leisurelyleon/ragline**  [unverified] — our earlier "offline, 2★" entry came
+  from the rate-limited run; the reviewer couldn't locate it and neither could I.
+  PAUSE until cloned.
+- **OpenAgentHQ/openagent-eval**  [unverified] — same; REMOVE until confirmed.
+- **Raudaschl/rag-fusion**  [API✓] — LIVE: 946★, MIT, active (pushed 2026-04-26),
+  ships an eval harness over NFCorpus/BEIR. Solid replacement candidate, BUT its
+  keyless path is **retrieval-only**; generator-prompt mutations need its
+  API-backed methods. Vet against the gate before investing.
+
+### Phase 2 — find a publishable external gap
+1. **vectara/open-rag-eval**  [API✓]  — **best outreach target.** 370★,
+   Apache-2.0, active org (pushed 2026-06-02), right in the attention band.
+   **CONNECTOR MODE REQUIRED** — its static "score an existing answers file" mode
+   does NOT meet muteval's re-run requirement; you must drive a Vectara /
+   LangChain / LlamaIndex / small custom connector. Default branch is **`dev`**
+   per the live API (confirm the working branch/commit before integrating).
+   Mutation surface: connector prompt template · generator model · retriever
+   top-k/query · retrieved contexts. Strongest place for a credible
+   "severe grounding-prompt degradation survives the metric config" finding.
+2. **Marker-Inc-Korea/AutoRAG**  [prior-pass ✓, ~4.8k★]  — strong technical case
+   study, heavier setup; run AFTER Vectara. **Design trap:** AutoRAG optimizes
+   across module combinations and may *compensate* for injected damage by picking
+   another config. For a legit test: freeze one completed pipeline, use a small
+   fixed dataset, **disable optimization/search**, mutate only the selected
+   prompt / model / top-k / context, then evaluate the frozen pipeline with the
+   existing metrics. Prompt-maker nodes are graded via downstream generation
+   (good for prompt mutations) — your adapter must preserve that flow.
+3. **vibrantlabsai/ragas** example  [search✓]  — ragas MOVED from
+   `explodinggradients` to `vibrantlabsai` (old links redirect). Use the
+   "Evaluate and Improve a RAG App" example
+   (`docs/howtos/applications/evaluate-and-improve-rag.md` /
+   `ragas_examples/improve_rag`): it runs a BM25-backed RAG per dataset row then
+   evaluates the fresh response — meets the re-run requirement. (The old
+   `docs/getstarted/rag_eval.md` path still exists too.) Name-recognition
+   benchmark, **not** primary outreach — huge framework, big issue/PR queue, and
+   a survivor reflects one tutorial config, not ragas generally. Good blog
+   section ("muteval vs the official ragas example"), framed narrowly.
+
+### Removed / demoted
+- **NirDiamant/RAG_Techniques**  [search✓ exists] — **remove from outreach.**
+  ~27.6k★ (far outside the 300–8k band), a notebook tutorial *collection* with no
+  single eval-ownership boundary, and a **non-commercial custom license** (not
+  permissive OSS). Our earlier `evaluation/evalute_rag.py` entry point is likely
+  outdated. Use only as an optional content experiment: convert one runnable eval
+  notebook into a script and demo muteval compatibility.
+- Previous-pass disqualifications stand: TonicAI/tonic_validate (metric library,
+  static-CSV examples), SciPhi-AI/R2R (pipeline but no eval suite),
+  umbertogriffo/rag-chatbot (unit tests, no metrics), firecrawl/rag-arena (human
+  Elo voting + TS, stale), AlaGrine & aaronjimv (no eval suite),
+  prasadshreyas/rag-evaluation (renamed to `0xshre`, now inaccessible).
+
+### Updated shortlist
+| Rank | Target | Purpose | Outreach | Verified |
+| ---: | --- | --- | --- | --- |
+| 1 | sanmaxdev/ragproof | first keyless validation | Medium | reviewer — clone-verify |
+| 2 | vectara/open-rag-eval | first credible external finding | High | API✓ |
+| 3 | AutoRAG (frozen pipeline) | technical case study | Med–High | prior pass |
+| 4 | vibrantlabsai/ragas example | name-recognition benchmark | Low–Med | search✓ |
+| 5 | aswithabukka demo adapter | integration testing | Low | reviewer/search |
+| — | Raudaschl/rag-fusion | Phase-1B replacement candidate | Low–Med | API✓ |
+| — | NirDiamant/RAG_Techniques | optional content demo only | Low | search✓ |
+
+### What a valid first result looks like (methodology — don't run every operator at once)
+Start with 8–20 deliberate mutants on a small dataset:
+- **Prompt:** remove grounding instruction · remove abstention instruction ·
+  weaken citation requirement · inject a conflicting output-format instruction.
+- **Context:** drop highest-ranked passage · truncate retrieved context ·
+  reorder passages · inject an irrelevant passage.
+- **Retrieval/config:** reduce top-k · raise similarity cutoff · disable reranking.
+- **Model:** only when an explicit valid downgrade mapping exists.
+
+For each survivor, save: baseline output · mutated output · mutation description ·
+per-eval scores · why the output is materially worse · why the suite still passed ·
+three repeated runs · exact commit SHA · exact config + dataset hash. **Only call
+it a genuine gap when a human looks at baseline vs mutant and immediately agrees
+the mutant is meaningfully degraded.**
+
 ## Candidate pool (~15)
 
 Confidence: **[V]** = I verified some facts via fetch; **[L]** = strong lead from

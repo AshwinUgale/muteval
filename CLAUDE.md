@@ -136,7 +136,12 @@ your system; muteval mutates your system to test your evals."
     real survivor at/above that severity), `--operators`, `--sample/--seed`,
     `--scope-include/--scope-exclude`, `--context/--context-file`,
     `--mutate-model`, `--json`/`--badge` (CI results + eval-coverage badge),
-    `--dry-run`; plus `muteval init` and `muteval probe`.
+    `--dry-run`; plus `muteval init`, `muteval probe`, and `muteval check`.
+  - `doctor.py` — `run_checks(config, use_model, full)`: the `muteval check`
+    doctor. Layered, cheapest-first validation (config/cases/evals/mutants →
+    run() returns text → per-eval baseline diagnostics) so a wiring/format bug
+    costs ~1 call not a whole run; surfaces WHICH eval fails the baseline and its
+    score. CLI exits 0 ready / 2 not. See docs/ADOPTION.md.
 - `examples/support_bot/` — runs offline (mock model, no API key); scores ~23%
   on purpose to demonstrate survivors.
 - `examples/openai_support_bot/` — real OpenAI-backed example (`[examples]`).
@@ -153,7 +158,7 @@ your system; muteval mutates your system to test your evals."
   mutation score tracks eval-suite quality, on TWO domains (support bot
   0→33→67→100%, code review 0→35→71→100%). Enforced in tests/test_eval_quality.py.
   See `FINDINGS.md`.
-- `tests/` — pytest; all green (165 tests).
+- `tests/` — pytest; all green (172 tests).
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 

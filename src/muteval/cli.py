@@ -298,7 +298,47 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Subset of probes to run (default: all).",
     )
     probe.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
+
+    check = sub.add_parser(
+        "check",
+        help="Doctor: validate a config's wiring (and baseline) BEFORE a full run.",
+    )
+    check.add_argument("--config", "-c", required=True, help="Path to a config file.")
+    check.add_argument(
+        "--operators", nargs="+", choices=list(OPERATORS.keys()), default=None,
+        help="Operators to check mutant generation for (default: all).",
+    )
+    check.add_argument(
+        "--no-model", action="store_true",
+        help="Only run the 0-call structural checks (skip run()/evals).",
+    )
+    check.add_argument(
+        "--full", action="store_true",
+        help="Exercise run()/evals on EVERY case (a true baseline), not just the first.",
+    )
+    check.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
     return parser
+
+
+def _format_checks(results, use_color: bool = True) -> str:
+    def c(text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if use_color else text
+
+    lines = ["", c("muteval check — config doctor", "1"), ""]
+    for r in results:
+        tag = c("PASS", "32") if r.ok else c("FAIL", "1;31")
+        line = f"  [{tag}] {r.name}"
+        if r.detail:
+            line += c(f"  — {r.detail}", "2" if r.ok else "33")
+        lines.append(line)
+    lines.append("")
+    from muteval.doctor import all_ok
+
+    if all_ok(results):
+        lines.append(c("✓ Ready — nothing blocking. Run: muteval run --config <file>", "32"))
+    else:
+        lines.append(c("✗ Not ready — fix the FAIL row(s) above, then re-check.", "1;31"))
+    return "\n".join(lines)
 
 
 def _load_run_config(args: argparse.Namespace) -> MutEvalConfig:
@@ -449,6 +489,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         results = run_probes(config, probes=args.probes)
         print(format_probe_card(results, use_color=not args.no_color))
         return 0 if all(r.ok for r in results) else 1
+
+    if args.command == "check":
+        try:
+            config = load_config(args.config)
+        except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
+            print(f"muteval: {exc}", file=sys.stderr)
+            return 2
+        from muteval.doctor import all_ok, run_checks
+
+        results = run_checks(
+            config, operators=args.operators, use_model=not args.no_model, full=args.full
+        )
+        print(_format_checks(results, use_color=not args.no_color))
+        return 0 if all_ok(results) else 2
 
     return 2
 
