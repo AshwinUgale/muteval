@@ -9,9 +9,12 @@ evidence does and does not show.
 ## TL;DR
 
 - In a controlled experiment where a deterministic system genuinely reacts to
-  prompt and context mutations, the mutation score **rose monotonically with
-  eval-suite coverage — 0% -> 28% -> 56% -> 72%** — and the survivors narrowed to
-  a concrete, nameable set at each step. The metric behaves as advertised.
+  prompt and context mutations, the effective mutation score **rose
+  monotonically with eval-suite coverage, from 0% (empty suite) to 100%
+  (complete suite)** — and it holds across **two independent domains** (a support
+  bot: `0 -> 33 -> 67 -> 100%`; a code-review assistant: `0 -> 35 -> 71 -> 100%`).
+  The relationship is **enforced in CI** (`tests/test_eval_quality.py`), so it
+  can't silently regress. The metric behaves as advertised.
 - On a **live GPT-4o-mini run**, a standard faithfulness + relevancy RAG suite
   caught **0 of 24** prompt regressions; adding one unanswerable case + an
   abstention check raised it to **25% (6/24)**, killing exactly the mutants that
@@ -43,32 +46,28 @@ documents survive in the context** — so a mutation that drops or inverts a rul
 genuinely produces a violating answer, exactly as a degraded real system would.
 The eval checks are independent of the prompt.
 
-We then grade the *same* system + mutants with four suites:
+We then grade the *same* system + mutants with four suites of increasing
+coverage (effective mutation score, i.e. excluding output-unchanged mutants):
 
-| Suite | Checks | Baseline | Mutation score | Mutants killed |
-|-------|--------|----------|----------------|----------------|
-| S0 smoke | output non-empty | PASS | **0%** | 0 / 25 |
-| S1 basic | + cites order ID | PASS | **28%** | 7 / 25 |
-| S2 good | + no refund promise, no data leak | PASS | **56%** | 14 / 25 |
-| S3 strong | + polite, + grounded in context | PASS | **72%** | 18 / 25 |
+| Suite | Checks added | Support bot | Code review |
+|-------|--------------|-------------|-------------|
+| S0 smoke | output non-empty | **0%** | **0%** |
+| S1 basic | + a core rule (cite / injection) | **33%** | **35%** |
+| S2 good | + more rules (refund+leak / approve+cite) | **67%** | **71%** |
+| S3 strong | + polite/concise + grounded in context | **100%** | **100%** |
 
-The score climbs strictly with coverage, and the uncaught-operator set shrinks:
-
-- **S0** misses everything (only an empty output would fail it).
-- **S1** still misses refund, data-leak, politeness and all context regressions.
-- **S2** closes refund and data-leak gaps; still misses politeness and context.
-- **S3** additionally catches politeness and a dropped *relevant* context doc;
-  the remaining 7 survivors are residual (see caveats).
-
+The score climbs strictly with coverage in both domains, and the uncaught set
+shrinks at each step until the complete suite catches every degrading mutant.
 This is the result the claim predicts: **the mutation score is a faithful proxy
-for how much real degradation the suite would catch.**
+for how much real degradation the suite would catch** — and, because the two
+domains agree and it's enforced in CI, it isn't a single-example fluke.
 
 ### The intended workflow, demonstrated
 
-Going from S2 -> S3 means writing two more evals (`is_polite`,
-`grounded_in_context`). Those evals kill 4 additional mutants and lift the score
-from 56% to 72%. That is exactly the loop muteval is meant to drive: *a survivor
-names a missing eval; you write it; the score goes up.*
+Each step from S(n) to S(n+1) means writing the specific evals a survivor named;
+those evals kill exactly the mutants that break that behavior and lift the score.
+That is the loop muteval is meant to drive: *a survivor names a missing eval; you
+write it; the score goes up.*
 
 ## Honest caveats
 

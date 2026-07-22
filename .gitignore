@@ -20,3 +20,12 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Local run artifacts / telemetry (not for the public repo)
+.deepeval/
+.ragproof/
+*.db
+cases.jsonl
+
+# Internal/backstage docs kept local, not published
+docs/OUTREACH-targets-and-plan.md
