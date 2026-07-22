@@ -28,4 +28,11 @@ htmlcov/
 cases.jsonl
 
 # Internal/backstage docs kept local, not published
+# (candid competitive/business strategy — keep out of the public repo)
 docs/OUTREACH-targets-and-plan.md
+docs/AUDIT-probe-prior-art.md
+docs/ROADMAP-master.md
+docs/RELEASE-PLAN.md
+docs/ROADMAP-adaptability.md
+docs/PLAN-probe-validation.md
+docs/ROADMAP-next-level.md
