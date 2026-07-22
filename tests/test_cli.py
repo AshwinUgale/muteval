@@ -274,3 +274,19 @@ def test_dry_run_applies_scope_like_the_real_run(tmp_path):
         code = main(["run", "--config", cfg, "--no-color", "--dry-run"])
     assert code == 0
     assert "mutants that would run: 0" in buf.getvalue()
+
+
+def test_init_rag_template_writes_and_runs(tmp_path):
+    from muteval.config import load_config
+    from muteval.runner import run_mutation_testing
+
+    dest = tmp_path / "rag.py"
+    assert main(["init", "--template", "rag", "--path", str(dest)]) == 0
+    body = dest.read_text(encoding="utf-8")
+    assert "System(" in body and "context=CONTEXT" in body   # System-mode scaffold
+
+    # the scaffold runs keyless and produces a VALID mutation run
+    cfg = load_config(str(dest))
+    result = run_mutation_testing(cfg)
+    assert result.status == "valid"
+    assert result.baseline_passed is True

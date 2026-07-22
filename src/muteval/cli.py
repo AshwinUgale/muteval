@@ -84,6 +84,77 @@ config = MutEvalConfig(
 '''
 
 
+_RAG_STARTER_CONFIG = '''"""muteval RAG scaffold (System mode) — edit the four blocks, then:
+
+    muteval check --config muteval_config.py   # validate wiring + baseline first
+    muteval run   --config muteval_config.py
+
+The mutation target here is the retrieved CONTEXT (System mode). This runs with
+NO API key using a tiny mock retriever; replace the TODO with your real pipeline.
+"""
+
+from muteval import MutEvalConfig, System
+from muteval import checks
+
+
+# ---- 2. YOUR CONTEXT: the retrieval corpus muteval will mutate ----
+CONTEXT = (
+    "doc-1 :: The Orbit X ships with a 24-month warranty from the purchase date.",
+    "doc-2 :: Support replies to tickets within one business day.",
+    "doc-3 :: Returns are accepted within 30 days if the device is undamaged.",
+)
+
+SYSTEM_PROMPT = (
+    "Answer using ONLY the provided context. "
+    "If the answer is not in the context, say you don't know."
+)
+
+
+def _overlap(a: str, b: str) -> int:
+    wa = {w for w in a.lower().split() if len(w) > 2}
+    wb = {w for w in b.lower().split() if len(w) > 2}
+    return len(wa & wb)
+
+
+# ---- 1. YOUR PIPELINE: run(system, case) -> a FRESH output string ----
+def run(system, case):
+    # TODO: replace this mock with YOUR real pipeline:
+    #   - retrieve from system.context (the possibly-mutated corpus)
+    #   - generate with your LLM using system.prompt
+    docs = system.context or ()
+    if not docs:
+        return "I don't know."
+    best = max(docs, key=lambda d: _overlap(case["question"], d))
+    return best.split("::", 1)[-1].strip()   # mock "LLM": echo the top doc
+
+
+# ---- 4. YOUR CASES ----
+CASES = [
+    {"question": "How long is the Orbit X warranty?", "expected": "24-month"},
+    {"question": "How fast does support reply?", "expected": "one business day"},
+]
+
+
+# ---- 3. YOUR EVALS: grade the output ----
+config = MutEvalConfig(
+    system=System(prompt=SYSTEM_PROMPT, context=CONTEXT),
+    cases=CASES,
+    run=run,
+    evals=[
+        checks.contains_case("expected"),   # the answer must contain the expected fact
+        # An LLM judge on ANY OpenAI-compatible endpoint (needs OPENAI_API_KEY):
+        # checks.llm_judge(
+        #     "the answer is grounded in the retrieved context and does not invent facts",
+        #     base_url="https://api.groq.com/openai/v1",   # or OpenAI/Gemini/GitHub Models/Ollama
+        #     model="openai/gpt-oss-20b", input_key="question",
+        # ),
+    ],
+    # DELIBERATELY thin — muteval will surface what these evals miss (e.g. nothing
+    # here checks the grounding/abstention rule). Uncomment the judge to close gaps.
+)
+'''
+
+
 # --- zero-config helpers -----------------------------------------------------
 
 
@@ -288,6 +359,10 @@ def _build_parser() -> argparse.ArgumentParser:
     init = sub.add_parser("init", help="Scaffold a starter muteval_config.py you can edit.")
     init.add_argument("--path", "-p", default="muteval_config.py", help="Where to write the scaffold.")
     init.add_argument("--force", action="store_true", help="Overwrite if it exists.")
+    init.add_argument(
+        "--template", "-t", choices=["basic", "rag"], default="basic",
+        help="basic = prompt-only support-bot; rag = System-mode (mutates retrieved context).",
+    )
 
     probe = sub.add_parser(
         "probe", help="Rate your eval suite's quality (a report card of probes)."
@@ -366,8 +441,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         if dest.exists() and not args.force:
             print(f"muteval: {dest} already exists (use --force).", file=sys.stderr)
             return 2
-        dest.write_text(_STARTER_CONFIG, encoding="utf-8")
-        print(f"muteval: wrote {dest}. Edit it, then: muteval run --config {dest}")
+        scaffold = _RAG_STARTER_CONFIG if args.template == "rag" else _STARTER_CONFIG
+        dest.write_text(scaffold, encoding="utf-8")
+        print(
+            f"muteval: wrote {dest} ({args.template} template).\n"
+            f"  Validate it:  muteval check --config {dest}\n"
+            f"  Then run it:  muteval run   --config {dest}"
+        )
         return 0
 
     if args.command == "run":

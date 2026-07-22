@@ -29,7 +29,9 @@ the glue. Every integration is these four things.
 3. **A judge** (only if your evals use an LLM) — a model + endpoint + key.
 4. **Test cases** — `cases`, the inputs fed to `run` and every eval.
 
-`muteval init` scaffolds a config with these four blocks marked.
+`muteval init` scaffolds a config with these four blocks clearly marked —
+`--template basic` (prompt-only) or `--template rag` (System mode; mutates the
+retrieved context, runs keyless with a mock retriever you replace with yours).
 
 ---
 
