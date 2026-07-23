@@ -179,7 +179,8 @@ A coverage number you can't trust is worse than none. muteval **fails closed**:
   "observationally unchanged" mutants.
 
 In a controlled, CI-enforced experiment the mutation score rises monotonically
-with eval-suite coverage (**0 → 33 → 67 → 100%** across two domains). See
+with eval-suite coverage — **0% with no evals → 100% with complete coverage** —
+across four domains (support bot, code review, RAG, HR policy). See
 [FINDINGS.md](FINDINGS.md), and [docs/LIMITATIONS.md](docs/LIMITATIONS.md) for
 when to distrust the number.
 
@@ -239,10 +240,16 @@ pieces you supply. Start with `muteval check` and fix a green baseline first.
 Shipped: prompt/context/tool/model mutation · deepeval/RAGAS/promptfoo adapters ·
 scored evals + near-miss reporting · severity ranking + `--fail-on-severity` ·
 confidence intervals + majority-vote stability · output-diffing · fail-closed
-validity gate · `muteval check` doctor · RAG scaffold + adoption guide.
+validity gate · `muteval check` doctor · RAG scaffold + adoption guide ·
+zero-config ingestion (promptfoo/deepeval/callable/endpoint) · caching +
+concurrency + budget caps · `results`/`show`/`report --html` triage · the
+`muteval probe` eval-quality report card (adequacy, judge reliability + ICC,
+discrimination, redundancy, judge bias, threshold calibration, human agreement) ·
+an autofix verify loop that proposes an eval for a survivor and confirms it kills
+the mutant while the baseline stays green.
 
-Next: LLM-driven semantic mutations · HTML/Markdown reports · the eval-quality
-probe layer (`muteval probe`) maturing into a standalone eval-evaluator.
+Next: LLM-driven semantic mutations · agent/trace mutation · A/B suite
+comparison · the `muteval probe` layer maturing into a standalone eval-evaluator.
 
 ## Contributing
 

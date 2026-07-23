@@ -1,6 +1,6 @@
 {
   "name": "muteval",
-  "version": "0.0.1",
+  "version": "0.6.0",
   "description": "Mutation testing for LLM eval suites — measure whether your evals would actually catch a regression. JS/TS port in progress; Python package available now.",
   "keywords": [
     "llm",
