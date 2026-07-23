@@ -629,9 +629,14 @@ def _force_utf8_output() -> None:
     arrow glyphs and makes ``print`` raise UnicodeEncodeError. Reconfigure stdout
     /stderr to UTF-8 (a no-op on POSIX and safe if the stream can't reconfigure)."""
     for stream in (sys.stdout, sys.stderr):
+        # getattr keeps mypy on the happy path: older/piped streams may lack
+        # ``reconfigure`` (it's TextIOWrapper-only), so we probe for it.
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001 - not a TextIOWrapper / already fine
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001 - stream can't reconfigure / already fine
             pass
 
 

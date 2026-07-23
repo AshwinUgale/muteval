@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Callable, List, Optional, cast
 
 from muteval.config import MutEvalConfig
 from muteval.evals import EvalOutcome, coerce_outcome
@@ -304,8 +304,10 @@ def select_mutants(
     ``operators=None`` falls back to ``config.operators`` (then to all operators).
     """
     selected = operators if operators is not None else getattr(config, "operators", None)
+    # config.operators is untyped (Any); generate_mutants wants str|Callable ops.
+    ops = cast("List[str | Callable] | None", selected)
     mutants = generate_mutants(
-        config.system, operators=selected, scope=getattr(config, "scope", None)
+        config.system, operators=ops, scope=getattr(config, "scope", None)
     )
     if sample is not None and 0 <= sample < len(mutants):
         import random
