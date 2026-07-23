@@ -14,11 +14,12 @@ import pytest
 from muteval.probes.discrimination import _auc, _cohens_d
 from muteval.probes.judge_reliability import _krippendorff_alpha_nominal
 from muteval.probes.redundancy import _spearman
-from muteval.stats import jeffreys_interval, wilson_interval
+from muteval.stats import _beta_ppf, _betai, jeffreys_interval, wilson_interval
 
 # Skip the whole module unless the reference libraries are installed.
 statsmodels = pytest.importorskip("statsmodels.stats.proportion")
 scipy_stats = pytest.importorskip("scipy.stats")
+scipy_special = pytest.importorskip("scipy.special")
 sk_metrics = pytest.importorskip("sklearn.metrics")
 krippendorff = pytest.importorskip("krippendorff")
 pingouin = pytest.importorskip("pingouin")
@@ -105,4 +106,39 @@ def test_krippendorff_nominal_matches_library(items):
     # Library wants reliability_data as raters x units; our items are units x raters.
     reliability_data = np.array(items, dtype=float).T
     ref = krippendorff.alpha(reliability_data=reliability_data, level_of_measurement="nominal")
+    assert math.isclose(ours, ref, abs_tol=1e-6)
+
+
+# --- numerical internals: the incomplete-beta engine ------------------------
+# These pin _betai / _betacf / _beta_ppf directly (not just the end-to-end
+# interval), which is what kills the mutmut survivors clustered in the
+# continued-fraction internals. See docs/MUTMUT.md.
+
+_ABX = [
+    (0.5, 0.5, 0.3),
+    (2.0, 3.0, 0.4),
+    (5.5, 2.5, 0.7),
+    (10.0, 20.0, 0.35),
+    (1.0, 1.0, 0.9),
+    (50.0, 50.0, 0.5),
+    (3.0, 7.0, 0.05),
+    (7.0, 3.0, 0.95),
+    (100.5, 0.5, 0.999),
+    (0.5, 100.5, 0.001),
+]
+
+
+@pytest.mark.parametrize("a,b,x", _ABX)
+def test_betai_matches_scipy_betainc(a, b, x):
+    # _betai is the regularized incomplete beta I_x(a,b) == scipy.special.betainc.
+    assert math.isclose(_betai(a, b, x), float(scipy_special.betainc(a, b, x)), abs_tol=1e-9)
+
+
+@pytest.mark.parametrize("a,b", [(0.5, 0.5), (2.0, 3.0), (5.5, 2.5), (10.0, 20.0), (50.0, 50.0)])
+@pytest.mark.parametrize("p", [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975, 0.99])
+def test_beta_ppf_matches_scipy_betaincinv(p, a, b):
+    # _beta_ppf inverts I_x(a,b) == scipy.special.betaincinv. Bisection is exact
+    # to ~2^-100; loosen only enough to absorb betai's own ~3e-12 tolerance.
+    ours = _beta_ppf(p, a, b)
+    ref = float(scipy_special.betaincinv(a, b, p))
     assert math.isclose(ours, ref, abs_tol=1e-6)

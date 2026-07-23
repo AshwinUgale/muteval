@@ -38,55 +38,78 @@ sandbox dir is gitignored.
 
 ## Baseline (recorded 2026-07-22)
 
-First real run — `paths_to_mutate = ["src/muteval/stats.py"]`, tested against a
-**reduced suite** (`test_edge_cases.py` + `test_stats_reference.py` only; the
-property + MC-coverage tests were excluded for speed):
+Run against a **reduced suite** (`test_edge_cases.py` + `test_stats_reference.py`;
+the property + MC-coverage tests are excluded for speed) with the correct mutmut-3
+config (`source_paths`; the whole package `also_copy`-ed into the sandbox):
 
-| metric | value |
-| --- | --- |
-| mutants generated | 335 |
-| killed | 231 |
-| survived | 44 |
-| not covered by this suite | 60 |
-| **mutation score** (killed / (killed+survived)) | **84.0%** |
+| metric | first suite | after v0.4 hardening |
+| --- | --- | --- |
+| mutants generated | 335 | 335 |
+| killed | 231 | **247** |
+| survived | 44 | 46 |
+| not covered by this reduced suite | 60 | 42 |
+| **mutation score** (killed / (killed+survived)) | 84.0% | **84.3%** |
 
-This is a **lower bound**: it excludes `test_properties.py` (400 Hypothesis
-examples over the interval math) and the Monte-Carlo coverage test, both of which
-exercise `stats.py` hard. The full stats-covering suite scores higher; re-run with
-all four stats tests to record the real ceiling.
+The middle column used a mis-configured (deprecated `tests_dir`) run that left 60
+mutants untested; the right column is the corrected run **plus** the new tests
+below. Net: **+16 real mutants killed** (231 → 247) and 18 fewer untested.
 
-### Where the survivors are (and why)
+Still a **lower bound** — it excludes `test_properties.py` (400 Hypothesis
+examples) and the MC-coverage test, which exercise `stats.py` harder. Re-run with
+the full stats-covering set for the ceiling.
 
-Survivors concentrate in the `_betacf` / `_betai` continued-fraction internals
-(Numerical Recipes incomplete-beta). That's the classic mutation-testing signal:
-the tests assert the *end-to-end* interval value to 1e-6, so a mutation deep in
-the iteration that the fixed-point still converges through (or that only shifts
-the 13th digit) survives. Options, in order of honesty:
-1. add targeted asserts on `_betai(a,b,x)` against `scipy.special.betainc` at
-   several (a,b,x) — kills most `_betacf`/`_betai` survivors directly; or
-2. document specific survivors as **equivalent mutants** (the change cannot alter
-   the observable output within tolerance) with the reasoning, here.
+### Two real bugs mutation testing caught (and we fixed)
 
-Do NOT paper over them by loosening tolerances. Next action: add the
-`_betai`-vs-`scipy.special.betainc` cross-check, re-run, and update this table.
+1. **z rounded to 4 dp** (`1.9600`) — off by ~3.6e-5 vs the exact value; fixed to
+   full precision (also caught by the reference cross-checks).
+2. **Inconsistent fallback z** — `_Z.get(confidence, 1.9600)` returned the *rounded*
+   z for unknown confidence levels while the table held the *precise* one. Fixed to
+   `_Z.get(confidence, _Z[0.95])`. Surfaced directly by the surviving
+   `default-z` mutants.
 
-### Reproduce this number
+### Tests added to kill real survivors
+
+- `_betai` / `_beta_ppf` vs `scipy.special.betainc`/`betaincinv` at 10+ (a,b,x)
+  points (pins the incomplete-beta engine directly, not just the end-to-end
+  interval).
+- unknown-confidence fallback (`wilson(·,0.80) == wilson(·,0.95)`).
+- `jeffreys` n=1 lower bound is a real quantile > 0 (kills `n<=0 → n<=1`).
+- `interval()` dispatch (wilson/jeffreys/default).
+
+### Residual survivors are EQUIVALENT mutants (verified, not gaps)
+
+The remaining survivors concentrate in `_betacf`/`_beta_ppf` and are equivalent
+mutants — no test can kill them because they do not change observable output:
+
+- `_betacf`: `maxit = 300 → 301`. The continued fraction converges in ~10
+  iterations (breaks on `abs(delta-1) < eps`), so the loop bound is never reached
+  → identical output.
+- `_beta_ppf` / `_betai`: `if p <= 0.0 → if p < 0.0` (and `x <= 0.0 → x < 0.0`).
+  At the boundary value both paths return the same number (0.0) via different
+  routes; the mutated `<` case (negative input) never occurs in practice.
+- `wilson`/`jeffreys`: `min(1.0, hi) → min(2.0, hi)` and `max(0.0, lo) →
+  max(-1.0, lo)`. These are defensive clamps; the Wilson/Jeffreys formulas already
+  produce values in [0,1], so the clamp never binds → identical output.
+
+Per policy we **document** these rather than contrive tests to force the score to
+100% — killing an equivalent mutant is impossible by definition, and faking it
+would be the exact dishonesty this project exists to prevent.
+
+### Reproduce
 
 ```toml
 [tool.mutmut]
-paths_to_mutate = ["src/muteval/stats.py"]
-tests_dir = ["tests/"]
-also_copy = ["src/muteval"]   # copy the whole package into the sandbox
+source_paths = ["src/muteval/stats.py"]
+also_copy = ["src/muteval"]   # whole package must be importable in the sandbox
 ```
 
 ```bash
 mutmut run && mutmut results
 ```
 
-Note: `mutmut` v3 runs in a copied `mutants/` sandbox; `also_copy = ["src/muteval"]`
-is required so the full package (not just the mutated file) is importable there.
-Run with only the `[dev]` extras so the optional-framework adapter tests are
-skipped cleanly.
+Note: `mutmut` v3 runs in a copied `mutants/` sandbox, so `also_copy` is required.
+Install only `[dev]` so the optional-framework adapter tests skip cleanly, and run
+against the stats tests (`test_edge_cases.py`, `test_stats_reference.py`).
 
 ## Why this is in the v0.4 "Provably honest" gate
 

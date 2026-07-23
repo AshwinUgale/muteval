@@ -10,6 +10,7 @@ injected regressions your evals actually caught. Mutants your evals fail to
 catch are "survivors" — concrete blind spots in your eval coverage.
 """
 
+from muteval.cache import Cache
 from muteval.config import MutEvalConfig
 from muteval.evals import EvalOutcome, coerce_outcome
 from muteval.mutators import (
@@ -31,6 +32,7 @@ except Exception:  # noqa: BLE001 - dev tree without installed metadata
 
 __all__ = [
     "MutEvalConfig",
+    "Cache",
     "System",
     "as_system",
     "EvalOutcome",

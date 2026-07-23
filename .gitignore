@@ -36,3 +36,12 @@ docs/RELEASE-PLAN.md
 docs/ROADMAP-adaptability.md
 docs/PLAN-probe-validation.md
 docs/ROADMAP-next-level.md
+
+# mutmut sandbox + cache
+mutants/
+.mutmut-cache
+html/
+.coverage
+
+# muteval persisted last-run (triage)
+.muteval/

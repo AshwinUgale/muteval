@@ -26,7 +26,10 @@ def test_result_to_dict_shape():
         assert key in d
     if d["survivors"]:
         s = d["survivors"][0]
-        assert set(s) == {"operator", "description", "severity", "fix"}
+        assert set(s) == {
+            "id", "operator", "description", "severity", "fix",
+            "baseline_output", "mutant_output",
+        }
 
 
 def test_badge_dict_is_shields_endpoint():

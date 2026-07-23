@@ -33,6 +33,38 @@ def test_intervals_at_n1_are_valid():
     assert jeffreys_interval(1, 1)[1] == 1.0
 
 
+def test_jeffreys_n1_lower_bound_is_a_real_quantile():
+    # At n=1, k=1 the lower bound is a genuine Beta(1.5, 0.5) quantile > 0 — NOT
+    # the n<=0 "unknown" fallback. Pins n=1 as a computed case (kills the
+    # `n <= 0 -> n <= 1` mutant, which would wrongly return (0, 1) here).
+    lo, hi = jeffreys_interval(1, 1)
+    assert lo > 0.0 and hi == 1.0
+    lo0, hi0 = jeffreys_interval(0, 1)
+    assert lo0 == 0.0 and hi0 < 1.0  # k=0,n=1 computes a real upper bound < 1
+
+
+def test_unknown_confidence_falls_back_to_95_z():
+    # A confidence level not in the z-table uses the default z (== the 0.95 z),
+    # so the interval equals the 95% one. Pins the fallback branch (kills the
+    # default-z mutants: None / empty / a different constant).
+    from muteval.stats import interval
+
+    assert wilson_interval(5, 10, 0.80) == wilson_interval(5, 10, 0.95)
+    assert interval(5, 10, 0.80, "wilson") == wilson_interval(5, 10, 0.95)
+
+
+def test_interval_dispatch_selects_method():
+    # `interval` dispatches on method (default wilson). Pins both branches so a
+    # mutated dispatch (wrong method / inverted comparison) is caught.
+    from muteval.stats import interval
+
+    assert interval(5, 10, 0.95, "wilson") == wilson_interval(5, 10, 0.95)
+    assert interval(5, 10, 0.95, "jeffreys") == jeffreys_interval(5, 10, 0.95)
+    assert interval(5, 10, 0.95) == wilson_interval(5, 10, 0.95)  # default = wilson
+    # jeffreys and wilson genuinely differ here, so the dispatch is observable.
+    assert interval(5, 10, 0.95, "jeffreys") != interval(5, 10, 0.95, "wilson")
+
+
 # --- AUC / Cohen's d degeneracies -------------------------------------------
 
 def test_auc_all_tie_is_half():

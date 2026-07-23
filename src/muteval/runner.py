@@ -25,6 +25,7 @@ NOT abort the whole run. Such a mutant is recorded as "errored" and excluded.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -44,6 +45,32 @@ NO_EVALUATED_MUTANTS = "no_evaluated_mutants"
 # Some (but not all) mutants errored, above the allowed error budget. The score
 # is computed over a shrunken denominator, so it is NOT trustworthy for CI.
 PARTIAL_ERRORS = "partial_errors"
+# The run hit --max-calls before finishing: incomplete, so no trustworthy score.
+BUDGET_EXCEEDED = "budget_exceeded"
+
+
+class BudgetExceeded(Exception):
+    """Raised when a run exceeds its --max-calls budget (fail closed)."""
+
+
+class _Budget:
+    """Thread-safe counter of ACTUAL model/judge calls (cache hits and skipped
+    judges don't count). Raises BudgetExceeded when the cap is passed."""
+
+    def __init__(self, max_calls: Optional[int]):
+        self.max_calls = max_calls
+        self.calls = 0
+        self._lock = threading.Lock()
+
+    def charge(self) -> None:
+        if self.max_calls is None:
+            return
+        with self._lock:
+            self.calls += 1
+            if self.calls > self.max_calls:
+                raise BudgetExceeded(
+                    f"exceeded --max-calls={self.max_calls} (made {self.calls} calls)"
+                )
 
 
 @dataclass
@@ -65,6 +92,10 @@ class MutantOutcome:
     severity: Optional[str] = None
     # Fraction of runs in which the suite caught this mutant (judge-noise signal).
     kill_rate: Optional[float] = None
+    # For survivors: a sample of the FIRST case whose output changed vs baseline,
+    # so `muteval show` can render the baseline-vs-mutant diff.
+    baseline_output: Optional[str] = None
+    mutant_output: Optional[str] = None
 
 
 @dataclass
@@ -180,21 +211,60 @@ def _eval_label(config: MutEvalConfig, idx: int) -> str:
     return getattr(ev, "__name__", f"eval[{idx}]")
 
 
-def _run_suite(system: System, config: MutEvalConfig) -> _SuiteRun:
+def _ordered_evals(config: MutEvalConfig):
+    """(orig_idx, ev, label) with CHEAP (rule-based) checks before LLM judges.
+
+    Combined with the short-circuit below, a cheap check that already fails a
+    mutant means the expensive judge is never called. Order is stable within a
+    cost tier, so reporting stays deterministic.
+    """
+    items = [(i, ev, _eval_label(config, i)) for i, ev in enumerate(config.evals)]
+    return sorted(items, key=lambda t: bool(getattr(t[1], "is_llm", False)))
+
+
+def _run_suite(system: System, config: MutEvalConfig, cache=None, baseline=None, budget=None) -> _SuiteRun:
     """Run the eval suite once over all cases.
 
-    Short-circuits on the first failing eval (cheap — important for paid LLM
-    judges). Returns the failing eval's label (or None), the outcomes collected,
-    and the system outputs produced (one per case run).
+    Three cost savers, all safe for deterministic suites:
+    * **cheap-checks-first** — rule-based evals run before LLM judges, so the
+      short-circuit skips the judge when a cheap check already fails the mutant.
+    * **short-circuit** — stop at the first failing eval (a mutant is already
+      killed).
+    * **skip-unchanged** — when ``baseline`` is given and a case's output is
+      byte-identical to the baseline's, reuse the baseline's (passing) outcomes
+      instead of re-running the evals (0 judge calls for inert mutants).
+    Plus the optional ``cache`` (memoizes across whole runs).
     """
     collected: List[EvalOutcome] = []
     outputs: List[str] = []
-    for case in config.cases:
-        output = config.invoke(system, case)
+    ordered = _ordered_evals(config)
+    base_outputs, base_by_case = baseline if baseline else (None, None)
+    for ci, case in enumerate(config.cases):
+        output = cache.get_output(system, case) if cache is not None else None
+        if output is None:
+            if budget is not None:
+                budget.charge()  # a real model call
+            output = config.invoke(system, case)
+            if cache is not None:
+                cache.set_output(system, case, output)
         outputs.append(output)
-        for idx, ev in enumerate(config.evals):
-            label = _eval_label(config, idx)
-            outcome = coerce_outcome(ev(output, case), name=label)
+        # Skip-unchanged: identical output => deterministic evals reproduce the
+        # baseline's passing outcomes; reuse them, run no evals for this case.
+        if (
+            base_outputs is not None
+            and ci < len(base_outputs)
+            and output == base_outputs[ci]
+        ):
+            collected.extend(base_by_case[ci])
+            continue
+        for idx, ev, label in ordered:
+            outcome = cache.get_outcome(system, case, label) if cache is not None else None
+            if outcome is None:
+                if budget is not None and getattr(ev, "is_llm", False):
+                    budget.charge()  # a real (paid) judge call
+                outcome = coerce_outcome(ev(output, case), name=label)
+                if cache is not None:
+                    cache.set_outcome(system, case, label, outcome)
             collected.append(outcome)
             if not outcome.passed:
                 return _SuiteRun(failing_eval=label, outcomes=collected, outputs=outputs)
@@ -246,14 +316,90 @@ def select_mutants(
     return mutants
 
 
+def _evaluate_mutant(mutant, config, cache, baseline_arg, baseline_outputs, budget=None) -> MutantOutcome:
+    """Evaluate a single mutant into a MutantOutcome. Pure w.r.t. the mutant, so
+    it is safe to run concurrently across a thread pool."""
+    try:
+        runs = [
+            _run_suite(mutant.system, config, cache=cache, baseline=baseline_arg, budget=budget)
+            for _ in range(config.runs_per_mutant)
+        ]
+        fails = sum(1 for r in runs if r.failing_eval is not None)
+        kill_rate = fails / len(runs)
+        if config.kill_threshold is None:
+            killed = fails * 2 > len(runs)  # strict majority; ties survive
+        else:
+            killed = kill_rate >= config.kill_threshold
+        rep = next(
+            (r for r in runs if (r.failing_eval is not None) == killed), runs[0]
+        )
+        closest_eval = min_margin = None
+        output_changed: Optional[bool] = None
+        sample_base = sample_mut = None
+        if not killed:
+            closest_eval, min_margin = _near_miss(rep.outcomes)
+            # Capture the first case whose output changed, for `muteval show`.
+            for i, mo in enumerate(rep.outputs):
+                if i < len(baseline_outputs) and baseline_outputs[i] != mo:
+                    sample_base, sample_mut = baseline_outputs[i], mo
+                    break
+            # Aggregate output-change evidence across EVERY surviving run so
+            # raising runs_per_mutant actually hardens equivalence detection: any
+            # observed change -> changed; any incomplete/absent comparison ->
+            # unknown (None); "unchanged" only when every comparable run matched.
+            survivor_runs = [r for r in runs if r.failing_eval is None]
+            diffs = [_diff_outputs(baseline_outputs, r.outputs) for r in survivor_runs]
+            if any(d is True for d in diffs):
+                output_changed = True
+            elif not diffs or any(d is None for d in diffs):
+                output_changed = None
+            else:
+                output_changed = False
+        return MutantOutcome(
+            mutant=mutant, killed=killed, failing_eval=rep.failing_eval,
+            closest_eval=closest_eval, min_margin=min_margin,
+            output_changed=output_changed, severity=severity_of(mutant),
+            kill_rate=kill_rate, baseline_output=sample_base, mutant_output=sample_mut,
+        )
+    except BudgetExceeded:
+        raise  # budget is a hard stop, not a per-mutant error
+    except Exception as exc:  # noqa: BLE001
+        # A flaky eval call (timeout, rate limit, API error) must not nuke the
+        # whole run. Record this mutant as errored and keep going.
+        return MutantOutcome(
+            mutant=mutant, killed=False, errored=True,
+            error=f"{type(exc).__name__}: {exc}", severity=severity_of(mutant),
+        )
+
+
 def run_mutation_testing(
     config: MutEvalConfig,
     operators: List[str] | None = None,
     max_mutants: Optional[int] = None,
     sample: Optional[int] = None,
     seed: Optional[int] = None,
+    cache=None,
+    concurrency: int = 1,
+    max_calls: Optional[int] = None,
 ) -> MutationResult:
-    """Run mutation testing for the given config and return a MutationResult."""
+    """Run mutation testing for the given config and return a MutationResult.
+
+    ``max_calls`` caps the number of ACTUAL model + judge calls (cache hits and
+    skipped judges don't count). Exceeding it fails closed with status
+    ``budget_exceeded`` — no trustworthy score.
+
+    ``cache`` (a ``muteval.cache.Cache``) memoizes run outputs + eval outcomes so
+    an identical re-run makes zero model/judge calls. It is disabled when
+    ``runs_per_mutant > 1`` (those repeats exist to observe non-determinism, which
+    a cache would erase).
+
+    ``concurrency`` > 1 evaluates mutants across a thread pool (order preserved),
+    cutting wall-clock on API-bound suites.
+    """
+    # Caching assumes determinism; a noisy (multi-run) suite must not be cached.
+    if cache is not None and config.runs_per_mutant > 1:
+        cache = None
+    budget = _Budget(max_calls)
     # Baseline — resilient: an error here shouldn't lose the whole run.
     baseline_passed = False
     baseline_error: Optional[str] = None
@@ -263,11 +409,16 @@ def run_mutation_testing(
     # A clean pass/fail verdict is a real result and is NOT retried.
     for _ in range(max(config.runs_per_mutant, 3)):
         try:
-            baseline_run = _run_suite(config.system, config)
+            baseline_run = _run_suite(config.system, config, cache=cache, budget=budget)
             baseline_passed = baseline_run.failing_eval is None
             baseline_outputs = baseline_run.outputs
             baseline_error = None
             break
+        except BudgetExceeded as exc:
+            # Budget hit during the baseline: incomplete, fail closed.
+            result = MutationResult(baseline_passed=False, baseline_error=str(exc))
+            result.status = BUDGET_EXCEEDED
+            return result
         except Exception as exc:  # noqa: BLE001 - transient judge/API errors
             baseline_error = f"{type(exc).__name__}: {exc}"
             continue
@@ -292,66 +443,36 @@ def run_mutation_testing(
         result.status = NO_MUTANTS
         return result
 
-    for mutant in mutants:
-        try:
-            runs = [
-                _run_suite(mutant.system, config)
-                for _ in range(config.runs_per_mutant)
-            ]
-            fails = sum(1 for r in runs if r.failing_eval is not None)
-            kill_rate = fails / len(runs)
-            if config.kill_threshold is None:
-                killed = fails * 2 > len(runs)  # strict majority; ties survive
-            else:
-                killed = kill_rate >= config.kill_threshold
-            # A representative run consistent with the (majority) verdict.
-            rep = next(
-                (r for r in runs if (r.failing_eval is not None) == killed), runs[0]
-            )
-            closest_eval = min_margin = None
-            output_changed: Optional[bool] = None
-            if not killed:
-                closest_eval, min_margin = _near_miss(rep.outcomes)
-                # Aggregate output-change evidence across EVERY surviving run,
-                # not just the representative one (raising runs_per_mutant must
-                # actually harden this): any observed change -> changed; any
-                # incomplete/absent comparison -> unknown (None, keeps the mutant
-                # in the effective denominator); "unchanged" only when every
-                # comparable run matched the baseline.
-                survivor_runs = [r for r in runs if r.failing_eval is None]
-                diffs = [
-                    _diff_outputs(baseline_outputs, r.outputs) for r in survivor_runs
-                ]
-                if any(d is True for d in diffs):
-                    output_changed = True
-                elif not diffs or any(d is None for d in diffs):
-                    output_changed = None
-                else:
-                    output_changed = False
-            result.outcomes.append(
-                MutantOutcome(
-                    mutant=mutant,
-                    killed=killed,
-                    failing_eval=rep.failing_eval,
-                    closest_eval=closest_eval,
-                    min_margin=min_margin,
-                    output_changed=output_changed,
-                    severity=severity_of(mutant),
-                    kill_rate=kill_rate,
-                )
-            )
-        except Exception as exc:  # noqa: BLE001
-            # A flaky eval call (timeout, rate limit, API error) must not nuke
-            # the whole run. Record this mutant as errored and keep going.
-            result.outcomes.append(
-                MutantOutcome(
-                    mutant=mutant,
-                    killed=False,
-                    errored=True,
-                    error=f"{type(exc).__name__}: {exc}",
-                    severity=severity_of(mutant),
-                )
-            )
+    # Skip-unchanged optimization: give each mutant run the baseline's per-case
+    # outputs + (passing) outcomes so cases whose output didn't change reuse them
+    # and call no judges. Only for deterministic runs (runs_per_mutant == 1); a
+    # noisy suite must re-run the judges to observe the noise.
+    baseline_arg = None
+    if config.runs_per_mutant == 1 and baseline_outputs:
+        n_evals = len(config.evals)
+        oc = baseline_run.outcomes
+        if len(oc) == len(config.cases) * n_evals:  # baseline ran fully (it passed)
+            base_by_case = [oc[i * n_evals:(i + 1) * n_evals] for i in range(len(config.cases))]
+            baseline_arg = (baseline_outputs, base_by_case)
+
+    def _worker(mutant: Mutant) -> MutantOutcome:
+        return _evaluate_mutant(mutant, config, cache, baseline_arg, baseline_outputs, budget)
+
+    concurrency = max(1, int(concurrency or 1))
+    try:
+        if concurrency > 1 and len(mutants) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=concurrency) as ex:
+                # ex.map preserves input order, so outcomes stay deterministic.
+                result.outcomes.extend(ex.map(_worker, mutants))
+        else:
+            for mutant in mutants:
+                result.outcomes.append(_worker(mutant))
+    except BudgetExceeded:
+        # Hit --max-calls partway: the run is incomplete, so no trustworthy score.
+        result.status = BUDGET_EXCEEDED
+        return result
 
     # Validity: no evidence at all is invalid; too many errors is invalid too
     # (a score over a shrunken denominator is not trustworthy — fail closed).

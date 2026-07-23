@@ -165,6 +165,7 @@ def llm_judge(
             name="llm_judge",
         )
 
+    _eval.is_llm = True  # expensive: ordered AFTER cheap deterministic checks
     return _eval
 
 
@@ -223,6 +224,7 @@ def grounded(
             passed=score >= threshold, score=score, threshold=threshold, name="grounded"
         )
 
+    _eval.is_llm = True  # expensive: ordered AFTER cheap deterministic checks
     return _eval
 
 

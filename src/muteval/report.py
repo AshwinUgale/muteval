@@ -22,6 +22,13 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     lines.append("")
 
     # Invalid / empty runs are terminal — there is NO trustworthy score to show.
+    if result.status == "budget_exceeded":
+        lines.append(c("⚠  INCOMPLETE — call budget exceeded (--max-calls)", "1;31"))
+        lines.append(
+            "   Stopped before finishing, so there is no trustworthy score. "
+            "Raise --max-calls (or narrow with --sample) and re-run."
+        )
+        return "\n".join(lines)
     if result.baseline_error:
         lines.append(c("⚠  INVALID RUN — baseline ERRORED", "1;31"))
         lines.append(f"   {result.baseline_error}")
@@ -230,6 +237,13 @@ def _redact(obj):
     return obj
 
 
+def _severity_sorted(survivors):
+    """Survivors ordered HIGH severity first (stable), for triage."""
+    from muteval.severity import MEDIUM, severity_rank
+
+    return sorted(survivors, key=lambda o: severity_rank(o.severity or MEDIUM))
+
+
 def result_to_dict(result) -> dict:
     """Machine-readable summary of a MutationResult (for --json / CI / reports).
 
@@ -257,12 +271,15 @@ def result_to_dict(result) -> dict:
         "high_severity_survivors": len(result.high_severity_survivors),
         "survivors": [
             {
+                "id": i,
                 "operator": o.mutant.operator,
                 "description": o.mutant.description,
                 "severity": o.severity,
                 "fix": suggest_eval(o),
+                "baseline_output": o.baseline_output,
+                "mutant_output": o.mutant_output,
             }
-            for o in result.real_survivors
+            for i, o in enumerate(_severity_sorted(result.real_survivors))
         ],
     })
 

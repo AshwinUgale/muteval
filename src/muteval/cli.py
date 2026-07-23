@@ -31,6 +31,7 @@ from muteval.report import format_report
 from muteval.runner import (
     BASELINE_ERRORED,
     BASELINE_FAILED,
+    BUDGET_EXCEEDED,
     NO_EVALUATED_MUTANTS,
     NO_MUTANTS,
     PARTIAL_ERRORS,
@@ -249,7 +250,16 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     evals = [_check_from_spec(s, args.threshold, args.model) for s in specs]
     names = [s.split(":", 1)[0] for s in specs]
 
-    run = openai_run(model=args.model)
+    if getattr(args, "target", None):
+        from muteval.runners import callable_run
+
+        run = callable_run(args.target)
+    elif getattr(args, "endpoint", None):
+        from muteval.runners import http_run
+
+        run = http_run(args.endpoint)
+    else:
+        run = openai_run(model=args.model)
     context_docs = _load_context(args)
     common = dict(
         cases=cases, run=run, evals=evals, eval_names=names,
@@ -284,9 +294,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to a Python file defining a module-level `config`. Use this "
         "for custom run()/pipelines/metrics.",
     )
+    run.add_argument(
+        "--promptfoo",
+        metavar="promptfooconfig.yaml",
+        help="Ingest an existing promptfoo config (prompt + tests + assertions) "
+        "and run muteval against it — no muteval config file needed.",
+    )
     run.add_argument("--prompt", help="The system prompt to mutate (inline).")
     run.add_argument("--prompt-file", help="File containing the system prompt to mutate.")
     run.add_argument("--cases", help="Cases file (.jsonl or .json list).")
+    run.add_argument(
+        "--target",
+        metavar="pkg.mod:fn",
+        help="Use your own function as the system under test, imported by dotted "
+        "path and called as fn(prompt, case) -> str. No run() wrapper needed.",
+    )
+    run.add_argument(
+        "--endpoint",
+        metavar="URL",
+        help="Drive an HTTP endpoint as the system: POSTs {prompt, case} JSON, "
+        "reads the text output. Test a deployed pipeline without importing it.",
+    )
     run.add_argument(
         "--context", action="append",
         help="A retrieved-context doc (repeatable). Enables RAG mutation "
@@ -320,6 +348,22 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-mutants", type=int, default=None, help="Cap the number of mutants (head).")
     run.add_argument("--sample", type=int, default=None, help="Randomly sample N mutants (cheap runs).")
     run.add_argument("--seed", type=int, default=None, help="Seed for --sample (reproducible).")
+    run.add_argument(
+        "--cache", metavar="PATH", default=None,
+        help="Memoize run outputs + eval outcomes in a sqlite file, so an "
+        "identical re-run makes zero model/judge calls. Ignored when "
+        "--runs-per-mutant > 1 (non-deterministic).",
+    )
+    run.add_argument(
+        "--concurrency", type=int, default=1, metavar="N",
+        help="Evaluate N mutants in parallel (thread pool). Cuts wall-clock on "
+        "API-bound suites. Default 1 (sequential).",
+    )
+    run.add_argument(
+        "--max-calls", type=int, default=None, metavar="N",
+        help="Cap the number of model + judge calls (cache hits / skipped judges "
+        "don't count). Fails closed (exit 2) before overspending.",
+    )
     run.add_argument(
         "--fail-under", type=float, default=None, metavar="PCT",
         help="Exit non-zero if the mutation score is below this percent (gate CI).",
@@ -392,6 +436,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Exercise run()/evals on EVERY case (a true baseline), not just the first.",
     )
     check.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
+
+    results = sub.add_parser(
+        "results", help="Show the ranked survivors from the last run (no re-run).",
+    )
+    results.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
+
+    show = sub.add_parser(
+        "show", help="Show one survivor from the last run: details + output diff.",
+    )
+    show.add_argument("id", type=int, help="Survivor id (from `muteval results`).")
+    show.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
     return parser
 
 
@@ -419,14 +474,101 @@ def _format_checks(results, use_color: bool = True) -> str:
 def _load_run_config(args: argparse.Namespace) -> MutEvalConfig:
     if args.config:
         return load_config(args.config)
+    if getattr(args, "promptfoo", None):
+        from muteval.adapters.promptfoo import from_promptfoo
+
+        return from_promptfoo(args.promptfoo, model=args.model)
     if args.prompt or args.prompt_file:
         if not args.cases:
             raise ValueError("--cases is required in zero-config mode")
         return _config_from_flags(args)
     raise ValueError(
-        "nothing to run: pass --config FILE, or zero-config flags "
-        "(--prompt/--prompt-file + --cases + --check/--judge)"
+        "nothing to run: pass --config FILE, --promptfoo FILE, or zero-config "
+        "flags (--prompt/--prompt-file + --cases + --check/--judge)"
     )
+
+
+_LAST_RUN = Path(".muteval") / "last_run.json"
+
+
+def _save_last_run(result) -> None:
+    """Persist the last run's machine-readable summary for `results` / `show`.
+    Best-effort: never fail a run over persistence."""
+    from muteval.report import result_to_dict
+
+    try:
+        _LAST_RUN.parent.mkdir(parents=True, exist_ok=True)
+        _LAST_RUN.write_text(
+            json.dumps(result_to_dict(result), indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def _load_last_run() -> Optional[dict]:
+    if not _LAST_RUN.exists():
+        return None
+    try:
+        return json.loads(_LAST_RUN.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+_SEV_TAG = {"high": ("[HIGH]", "31"), "medium": ("[MED ]", "33"), "low": ("[LOW ]", "2")}
+
+
+def _format_results(data: dict, use_color: bool = True) -> str:
+    def c(t, code):
+        return f"\033[{code}m{t}\033[0m" if use_color else t
+
+    survs = data.get("survivors", [])
+    lines = ["", c("muteval — survivors from the last run", "1")]
+    eff = data.get("effective_score")
+    if eff is not None:
+        lines.append(c(f"effective score {eff * 100:.0f}%  ", "2") + f"({len(survs)} real survivor(s))")
+    lines.append("")
+    if not survs:
+        lines.append(c("✓ No survivors saved — your evals caught everything.", "32"))
+        return "\n".join(lines)
+    for s in survs:
+        tag, code = _SEV_TAG.get(s.get("severity") or "medium", ("[MED ]", "33"))
+        lines.append(
+            f"  {c(str(s['id']).rjust(3), '1')} {c(tag, code)} "
+            f"[{s['operator']}] {s['description']}"
+        )
+    lines.append("")
+    lines.append(c("Inspect one:  muteval show <id>", "2"))
+    return "\n".join(lines)
+
+
+def _format_show(s: dict, use_color: bool = True) -> str:
+    import difflib
+
+    def c(t, code):
+        return f"\033[{code}m{t}\033[0m" if use_color else t
+
+    tag, code = _SEV_TAG.get(s.get("severity") or "medium", ("[MED ]", "33"))
+    lines = [
+        "",
+        c(f"muteval — survivor #{s['id']}  {tag}", "1"),
+        f"  operator:    {s['operator']}",
+        f"  description: {s['description']}",
+        f"  fix:         {c(s.get('fix') or '(none)', '36')}",
+        "",
+    ]
+    base, mut = s.get("baseline_output"), s.get("mutant_output")
+    if base is None or mut is None:
+        lines.append(c("  (no output diff captured — inert or output unchanged)", "2"))
+        return "\n".join(lines)
+    lines.append(c("  output diff (baseline → mutant):", "1"))
+    diff = difflib.unified_diff(
+        base.splitlines(), mut.splitlines(),
+        fromfile="baseline", tofile="mutant", lineterm="",
+    )
+    for ln in diff:
+        col = "32" if ln.startswith("+") else "31" if ln.startswith("-") else "2"
+        lines.append("  " + c(ln, col))
+    return "\n".join(lines)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -483,11 +625,20 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             return 0
 
+        cache = None
+        if args.cache:
+            from muteval.cache import Cache
+
+            cache = Cache(args.cache)
         result = run_mutation_testing(
             config, operators=args.operators, max_mutants=args.max_mutants,
-            sample=args.sample, seed=args.seed,
+            sample=args.sample, seed=args.seed, cache=cache,
+            concurrency=args.concurrency, max_calls=args.max_calls,
         )
+        if cache is not None:
+            cache.close()
         print(format_report(result, use_color=not args.no_color))
+        _save_last_run(result)  # for `muteval results` / `muteval show <id>`
 
         # JSON is always safe to write — it carries "status" and None-aware
         # scores, so it is useful precisely when the run is invalid.
@@ -510,6 +661,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 NO_MUTANTS: "no mutants were generated "
                 "(use --allow-empty to treat as a pass)",
                 NO_EVALUATED_MUTANTS: "every mutant errored — no verdict produced",
+                BUDGET_EXCEEDED: "hit --max-calls before finishing "
+                "(raise --max-calls or narrow with --sample)",
                 PARTIAL_ERRORS: f"{result.errored}/{result.total} mutant(s) errored "
                 f"({result.error_rate * 100:.0f}% > allowed "
                 f"{config.max_error_rate * 100:.0f}%); raise --max-error-rate "
@@ -583,6 +736,31 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         print(_format_checks(results, use_color=not args.no_color))
         return 0 if all_ok(results) else 2
+
+    if args.command == "results":
+        data = _load_last_run()
+        if not data:
+            print("muteval: no saved run. Run `muteval run ...` first.", file=sys.stderr)
+            return 2
+        print(_format_results(data, use_color=not args.no_color))
+        return 0
+
+    if args.command == "show":
+        data = _load_last_run()
+        if not data:
+            print("muteval: no saved run. Run `muteval run ...` first.", file=sys.stderr)
+            return 2
+        match = next(
+            (s for s in data.get("survivors", []) if s.get("id") == args.id), None
+        )
+        if match is None:
+            print(
+                f"muteval: no survivor with id {args.id} (see `muteval results`).",
+                file=sys.stderr,
+            )
+            return 2
+        print(_format_show(match, use_color=not args.no_color))
+        return 0
 
     return 2
 

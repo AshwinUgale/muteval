@@ -27,7 +27,7 @@ def wilson_interval(successes: int, n: int, confidence: float = 0.95) -> Tuple[f
     """
     if n <= 0:
         return (0.0, 1.0)
-    z = _Z.get(confidence, 1.9600)
+    z = _Z.get(confidence, _Z[0.95])  # unknown level -> precise 95% z
     p = successes / n
     denom = 1.0 + z * z / n
     center = (p + z * z / (2 * n)) / denom

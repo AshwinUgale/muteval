@@ -128,3 +128,71 @@ def openai_run(
         )
 
     return run
+
+
+def _prompt_of(target: Any) -> str:
+    """The (possibly mutated) prompt string from a run target (System or str)."""
+    from muteval.system import System
+
+    return target.prompt if isinstance(target, System) else target
+
+
+def callable_run(spec: str) -> Callable[[Any, Any], str]:
+    """Use an existing function as the run, imported by dotted path.
+
+    ``spec`` is ``"package.module:function"``. The imported callable is invoked as
+    ``fn(prompt, case) -> str`` with the (possibly mutated) prompt, so a user can
+    point muteval at a pipeline they already have — no ``run()`` wrapper, no config
+    file (``muteval run --target mypkg.app:answer --prompt-file p.txt --cases c.jsonl``).
+    """
+    module_path, sep, attr = spec.partition(":")
+    if not sep or not module_path or not attr:
+        raise ValueError(
+            f"--target must be 'package.module:function', got {spec!r}"
+        )
+    import importlib
+
+    mod = importlib.import_module(module_path)
+    fn = getattr(mod, attr, None)
+    if not callable(fn):
+        raise ValueError(f"{spec!r} did not resolve to a callable")
+
+    def run(target: Any, case: Any) -> str:
+        return fn(_prompt_of(target), case)
+
+    return run
+
+
+_OUTPUT_KEYS = ("output", "text", "content", "answer", "response", "completion")
+
+
+def http_run(url: str, *, timeout: int = 60) -> Callable[[Any, Any], str]:
+    """Drive an HTTP endpoint as the system under test.
+
+    POSTs ``{"prompt": <mutated prompt>, "case": <case>}`` as JSON to ``url`` and
+    returns the text output. The response may be plain text, or JSON carrying the
+    text under any of: output / text / content / answer / response / completion.
+    Lets muteval test a deployed pipeline without importing it.
+    """
+
+    def run(target: Any, case: Any) -> str:
+        body = json.dumps({"prompt": _prompt_of(target), "case": case}).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
+            raw = resp.read().decode("utf-8")
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return raw  # plain-text response
+        if isinstance(data, str):
+            return data
+        if isinstance(data, dict):
+            for k in _OUTPUT_KEYS:
+                if k in data:
+                    return str(data[k])
+        return raw
+
+    return run

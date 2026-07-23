@@ -64,6 +64,54 @@ muteval run --prompt-file system.txt --cases cases.jsonl --model gpt-4o-mini \
   --judge "the answer is grounded in the provided context" --fail-under 75
 ```
 
+Already have a **promptfoo** suite? Point muteval straight at it — no muteval
+config file, it reuses your prompt + tests + assertions:
+
+```bash
+muteval run --promptfoo promptfooconfig.yaml            # add --dry-run to preview
+```
+
+Already have your own pipeline? Use it as the system under test — a function or a
+deployed endpoint — no `run()` wrapper:
+
+```bash
+# your own function, called as fn(prompt, case) -> str
+muteval run --target mypkg.app:answer --prompt-file system.txt --cases cases.jsonl --check contains:8080
+
+# a deployed service: POSTs {prompt, case} JSON, reads the text output
+muteval run --endpoint https://my-app/answer --prompt-file system.txt --cases cases.jsonl --judge "grounded in context"
+```
+
+Re-running is cheap: `--cache runs.sqlite` memoizes run outputs + eval outcomes,
+so an identical re-run makes **zero** model/judge calls (skipped for noisy suites
+with `--runs-per-mutant > 1`):
+
+```bash
+muteval run --config muteval_config.py --cache .muteval-cache.sqlite
+```
+
+Slow because it's API-bound? Evaluate mutants in parallel (results are identical
+to a serial run — order preserved):
+
+```bash
+muteval run --config muteval_config.py --concurrency 8 --cache .muteval-cache.sqlite
+```
+
+Worried about spend? Cap the model + judge calls; muteval fails closed (exit 2)
+before overspending (cache hits and skipped judges don't count):
+
+```bash
+muteval run --config muteval_config.py --max-calls 500
+```
+
+Triage the survivors without re-running (the last run is saved to
+`.muteval/last_run.json`):
+
+```bash
+muteval results        # ranked survivors (HIGH first) with ids
+muteval show 0         # one survivor: operator, suggested fix, baseline→mutant diff
+```
+
 ## Why this exists
 
 Regression tools (promptfoo, deepeval, OpenAI Evals, LangSmith) catch
