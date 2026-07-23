@@ -193,19 +193,48 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
     return "\n".join(lines)
 
 
+# Not every lens carries the same weight — be honest about it in the output.
+# core:     catches a real, common eval defect (trust a WARN here).
+# validity: the "is the eval actually correct?" check — needs labels.
+# hygiene:  a sanity check; a WARN is a footnote, not a crisis.
+_PROBE_TIER = {
+    "judge_reliability": "core",
+    "judge_bias": "core",
+    "discrimination": "core",
+    "human_agreement": "validity",
+    "threshold_calibration": "hygiene",
+    "statistical_adequacy": "hygiene",
+    "redundancy": "hygiene",
+}
+_PROBE_TIER_LEGEND = (
+    "core = catches a real eval defect · validity = needs labels · "
+    "hygiene = sanity check (a WARN here is a footnote)"
+)
+
+
 def format_probe_card(results, use_color: bool = True) -> str:
     """Render probe results as an eval-quality report card (no composite score)."""
 
     def c(text: str, code: str) -> str:
         return f"\033[{code}m{text}\033[0m" if use_color else text
 
-    lines = ["", c("muteval — eval quality report card", "1"), ""]
+    lines = [
+        "",
+        c("muteval — eval quality report card", "1"),
+        c(f"  {_PROBE_TIER_LEGEND}", "2"),
+        "",
+    ]
     if not results:
         lines.append("No probes ran.")
         return "\n".join(lines)
-    for r in results:
+    # Show core lenses first, then validity, then hygiene, then anything custom.
+    order = {"core": 0, "validity": 1, "hygiene": 2}
+    ranked = sorted(results, key=lambda r: order.get(_PROBE_TIER.get(r.name, ""), 3))
+    for r in ranked:
         tag = c("PASS", "32") if r.ok else c("WARN", "33")
-        lines.append(f"  [{tag}] {c(r.name, '1')}")
+        tier = _PROBE_TIER.get(r.name, "")
+        tier_str = c(f"  ({tier})", "2") if tier else ""
+        lines.append(f"  [{tag}] {c(r.name, '1')}{tier_str}")
         lines.append(f"         {r.summary}")
         if r.detail:
             lines.append(c(f"         {r.detail}", "2"))
@@ -216,15 +245,19 @@ def format_probe_card(results, use_color: bool = True) -> str:
 def format_probe_card_html(results, title: str = "muteval — eval quality report card") -> str:
     """Render the probe panel as a standalone HTML page. Deliberately NO composite
     score — the panel is a set of separately-interpretable signals."""
+    order = {"core": 0, "validity": 1, "hygiene": 2}
+    ranked = sorted(results, key=lambda r: order.get(_PROBE_TIER.get(r.name, ""), 3))
     cards = []
-    for r in results:
+    for r in ranked:
         state = "pass" if r.ok else "warn"
         badge = "PASS" if r.ok else "WARN"
+        tier = _PROBE_TIER.get(r.name, "")
+        tier_html = f'<span class="tier">{tier}</span>' if tier else ""
         detail = f'<div class="pd">{html.escape(r.detail)}</div>' if r.detail else ""
         cards.append(
             f'''<div class="card {state}">
   <div class="chd"><span class="badge {state}">{badge}</span>
-    <span class="pn">{html.escape(r.name)}</span></div>
+    <span class="pn">{html.escape(r.name)}</span>{tier_html}</div>
   <div class="psum">{html.escape(r.summary)}</div>
   {detail}
 </div>'''
@@ -232,7 +265,7 @@ def format_probe_card_html(results, title: str = "muteval — eval quality repor
     body = "\n".join(cards) or "<p>No probes ran.</p>"
     n_warn = sum(1 for r in results if not r.ok)
     subtitle = (
-        f"{n_warn} of {len(results)} probes flagged an issue"
+        f"{n_warn} of {len(results)} probes flagged an issue — {_PROBE_TIER_LEGEND}"
         if results else "no probes ran"
     )
     return f"""<!doctype html>
@@ -246,6 +279,7 @@ def format_probe_card_html(results, title: str = "muteval — eval quality repor
  .badge{{font-size:.72rem;font-weight:700;padding:.1rem .45rem;border-radius:4px;color:#fff}}
  .badge.pass{{background:#2ea043}} .badge.warn{{background:#d29922}}
  .psum{{margin:.4rem 0}} .pd{{color:#656d76;font-size:.9rem}}
+ .tier{{font-size:.7rem;color:#656d76;border:1px solid #d0d7de;border-radius:4px;padding:.05rem .35rem;text-transform:uppercase;letter-spacing:.03em}}
 </style>
 <h1>{html.escape(title)}</h1>
 <p class="muted">{subtitle} — no composite score (each signal stands on its own).</p>
