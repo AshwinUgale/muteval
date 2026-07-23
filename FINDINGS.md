@@ -11,10 +11,12 @@ evidence does and does not show.
 - In a controlled experiment where a deterministic system genuinely reacts to
   prompt and context mutations, the effective mutation score **rose
   monotonically with eval-suite coverage, from 0% (empty suite) to 100%
-  (complete suite)** — and it holds across **two independent domains** (a support
-  bot: `0 -> 33 -> 67 -> 100%`; a code-review assistant: `0 -> 35 -> 71 -> 100%`).
-  The relationship is **enforced in CI** (`tests/test_eval_quality.py`), so it
-  can't silently regress. The metric behaves as advertised.
+  (complete suite)** — and it holds across **four independent domains**
+  (support bot, code review, RAG grounding, HR policy), each climbing 0% -> 100%
+  with coverage (e.g. support bot `0 -> 33 -> 67 -> 100%`; code review
+  `0 -> 35 -> 71 -> 100%`). The relationship is **enforced in CI**
+  (`tests/test_eval_quality.py`) across all four, so it can't silently regress.
+  The metric behaves as advertised.
 - On a **live GPT-4o-mini run**, a standard faithfulness + relevancy RAG suite
   caught **0 of 24** prompt regressions; adding one unanswerable case + an
   abstention check raised it to **25% (6/24)**, killing exactly the mutants that
@@ -96,15 +98,18 @@ GPT-4o-mini). A small RAG assistant graded by a **faithfulness** judge and a
 | faithfulness + relevancy (2 answerable cases) | **0%** | 0 / 24 |
 | + 1 unanswerable case + an `abstains_when_unanswerable` check | **25%** | 6 / 24 |
 
-Two things make this a real finding, not a demo:
+Two things make this more than a toy — read them with the *Scope* caveat in
+"What this supports" below, which keeps the claim honest:
 
 1. **The standard suite was completely blind.** Faithfulness + relevancy caught
    **none** of 24 prompt regressions — not inverting "do not invent facts", not
    dropping "cite the source", not deleting half the prompt. The faithfulness
    judge returned a flat 1.0 on *every* mutant (every survivor is the same
    `+0.300` near-miss). When the test cases have answers sitting in the context,
-   these metrics simply can't see prompt degradation. That is exactly the "your
-   green suite is lying" failure muteval exists to surface.
+   these metrics simply can't see prompt degradation. That is exactly the kind of
+   blind spot muteval exists to surface on a given suite (read with the *Scope*
+   caveat below — this is a known property of reference-free metrics, not proof a
+   suite is "broken").
 
 2. **The kills were surgical.** Adding one unanswerable case + an abstention
    check killed exactly the 6 mutants that break the "if it's not in the
@@ -203,6 +208,17 @@ Does not (yet) support: a quantitative claim that the score predicts real-world
 regression-catch rate across many production suites, or a handle on equivalent
 mutants. Those are the experiments that would turn this from a compelling tool
 into a citable result.
+
+**Scope of the RAG-blindness result (Experiments 2–4).** These illustrate a
+*known* limitation, not a new discovery: reference-free metrics
+(faithfulness/relevancy) measure grounding, not correctness — so on answerable
+cases they pass prompt regressions that don't change the grounded answer.
+Competent teams already mitigate this with labeled/correctness evals and
+retrieval-quality checks, and it does **not** apply when the retrieved documents
+*are* the source of truth (there, faithful = correct). The point is not
+"faithfulness is broken" — it's that muteval **surfaces this gap on your specific
+suite automatically and names the eval that closes it.** Read every muteval
+result as a per-suite diagnostic, never a universal verdict.
 
 ## Reproduce
 
