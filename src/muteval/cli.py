@@ -360,6 +360,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "API-bound suites. Default 1 (sequential).",
     )
     run.add_argument(
+        "--manifest", metavar="PATH", default=None,
+        help="Write a reproducible-run manifest (version, model, seed, operators, "
+        "config fingerprint, result) — commit it beside a real run to make it auditable.",
+    )
+    run.add_argument(
         "--max-calls", type=int, default=None, metavar="N",
         help="Cap the number of model + judge calls (cache hits / skipped judges "
         "don't count). Fails closed (exit 2) before overspending.",
@@ -687,6 +692,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             cache.close()
         print(format_report(result, use_color=not args.no_color))
         _save_last_run(result)  # for `muteval results` / `muteval show <id>`
+
+        if args.manifest:
+            from muteval.report import run_manifest
+
+            try:
+                Path(args.manifest).write_text(
+                    json.dumps(run_manifest(result, config, operators=args.operators,
+                                            seed=args.seed), indent=2),
+                    encoding="utf-8",
+                )
+                print(f"muteval: wrote manifest {args.manifest}")
+            except OSError as exc:
+                print(f"muteval: could not write manifest: {exc}", file=sys.stderr)
 
         # JSON is always safe to write — it carries "status" and None-aware
         # scores, so it is useful precisely when the run is invalid.

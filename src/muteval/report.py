@@ -326,6 +326,40 @@ def result_to_dict(result) -> dict:
     })
 
 
+def run_manifest(result, config, operators=None, seed=None) -> dict:
+    """A reproducible-run manifest: provenance (version, model, seed, operator
+    set, config fingerprint, timestamp) + the machine-readable result. Committing
+    this next to a real-LLM-judge run makes the number auditable and repeatable.
+    Secrets are redacted."""
+    import hashlib
+    import platform
+    import sys as _sys
+    from datetime import datetime, timezone
+
+    from muteval import __version__
+
+    system = getattr(config, "system", None)
+    key = repr(system.key()) if system is not None else repr(getattr(config, "prompt", ""))
+    fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    return _redact({
+        "manifest_version": 1,
+        "muteval_version": __version__,
+        "python": _sys.version.split()[0],
+        "platform": platform.platform(),
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "run": {
+            "model": getattr(system, "model", None) if system is not None else None,
+            "operators": list(operators) if operators else "all",
+            "seed": seed,
+            "n_cases": len(config.cases) if config.cases else 0,
+            "eval_names": list(config.eval_names),
+            "runs_per_mutant": config.runs_per_mutant,
+            "system_fingerprint": fingerprint,
+        },
+        "result": result_to_dict(result),
+    })
+
+
 def badge_dict(result, label: str = "eval coverage") -> dict:
     """A shields.io endpoint payload for the effective mutation score."""
     eff = result.effective_score

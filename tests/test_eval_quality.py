@@ -21,6 +21,8 @@ _DIR = (
 _EXPERIMENTS = [
     _DIR / "run_experiment.py",              # domain 1: support bot
     _DIR / "run_experiment_codereview.py",   # domain 2: code review
+    _DIR / "run_experiment_rag.py",          # domain 3: RAG / context grounding
+    _DIR / "run_experiment_hr.py",           # domain 4: HR policy
 ]
 
 

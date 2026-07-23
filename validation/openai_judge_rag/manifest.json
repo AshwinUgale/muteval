@@ -1,0 +1,90 @@
+{
+  "manifest_version": 1,
+  "muteval_version": "0.0.1",
+  "python": "3.11.7",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "created_utc": "2026-07-23T03:30:39.814648+00:00",
+  "run": {
+    "model": null,
+    "operators": "all",
+    "seed": 0,
+    "n_cases": 3,
+    "eval_names": [
+      "abstains_when_unanswerable",
+      "faithfulness_judge",
+      "relevancy_judge"
+    ],
+    "runs_per_mutant": 1,
+    "system_fingerprint": "d97877e9e0da9d3b"
+  },
+  "result": {
+    "schema_version": 1,
+    "status": "valid",
+    "baseline_passed": true,
+    "baseline_error": null,
+    "score": 0.25,
+    "effective_score": 0.5455,
+    "score_ci": [
+      0.12,
+      0.449
+    ],
+    "effective_score_ci": [
+      0.2801,
+      0.7873
+    ],
+    "killed": 6,
+    "evaluated": 24,
+    "total": 24,
+    "errored": 0,
+    "error_rate": 0.0,
+    "inert": 13,
+    "high_severity_survivors": 0,
+    "survivors": [
+      {
+        "id": 0,
+        "operator": "drop_instruction_lines",
+        "description": "dropped line: \"You are answering a user's question using the provided documentation.\"",
+        "severity": "medium",
+        "fix": "add checks.llm_judge(\"the reply still follows: You are answering a user's question using the provi\u2026\")",
+        "baseline_output": "To rotate API keys, go to the dashboard and navigate to Settings > Keys. Keep in mind that rotating a key will immediately invalidate the previous key.",
+        "mutant_output": "To rotate API keys, go to the dashboard and navigate to Settings > Keys. From there, you can initiate the rotation process. Please note that rotating a key will immediately invalidate the previous key."
+      },
+      {
+        "id": 1,
+        "operator": "drop_instruction_lines",
+        "description": "dropped line: \"Provide a clear, concise answer grounded in the documentation.\"",
+        "severity": "medium",
+        "fix": "add checks.llm_judge(\"the reply still follows: Provide a clear, concise answer grounded in the doc\u2026\")",
+        "baseline_output": "To rotate API keys, go to the dashboard and navigate to Settings > Keys. Keep in mind that rotating a key will immediately invalidate the previous key.",
+        "mutant_output": "To rotate API keys, you can do so from the dashboard by navigating to Settings > Keys. Please note that rotating a key will immediately invalidate the previous key."
+      },
+      {
+        "id": 2,
+        "operator": "drop_instruction_lines",
+        "description": "dropped line: \"If the question is specific, locate the pertinent information in the \u2026\"",
+        "severity": "medium",
+        "fix": "add checks.llm_judge(\"the reply still follows: If the question is specific, locate the pertinent i\u2026\")",
+        "baseline_output": "The server listens on port 8080 by default.",
+        "mutant_output": "The server listens on port 8080 by default. (source: config/server.md)"
+      },
+      {
+        "id": 3,
+        "operator": "delete_sentences",
+        "description": "deleted sentence: \"Provide a clear, concise answer grounded in the documentation.\"",
+        "severity": "medium",
+        "fix": "add checks.llm_judge(\"the reply still follows: Provide a clear, concise answer grounded in the doc\u2026\")",
+        "baseline_output": "To rotate API keys, go to the dashboard and navigate to Settings > Keys. Keep in mind that rotating a key will immediately invalidate the previous key.",
+        "mutant_output": "To rotate API keys, you can do so from the dashboard by navigating to Settings > Keys. Please note that rotating a key will immediately invalidate the previous key."
+      },
+      {
+        "id": 4,
+        "operator": "delete_sentences",
+        "description": "deleted sentence: \"Remember to: If the question is general (e.g.\"",
+        "severity": "medium",
+        "fix": "add checks.llm_judge(\"the reply still follows: Remember to: If the question is general (e.g.\")",
+        "baseline_output": "The server listens on port 8080 by default.",
+        "mutant_output": "The server listens on port 8080 by default. (source: config/server.md)"
+      }
+    ]
+  }
+}

@@ -124,3 +124,34 @@ def test_autofix_end_to_end_with_injected_llm():
     names = [v.name for v in verified]
     assert "suggested_not_contains" in names
     assert "suggested_contains" not in names  # 'xyz-never' fails the baseline too
+
+
+def test_generated_fix_closes_the_gap_in_a_full_rerun():
+    """GATE: a survivor -> generated eval -> re-run kills that mutant and the
+    baseline stays valid."""
+    from muteval import run_mutation_testing
+    from muteval.autofix import autofix
+
+    before = run_mutation_testing(_config())
+    survivor = before.real_survivors[0]
+    op, desc = survivor.mutant.operator, survivor.mutant.description
+
+    def fake_chat(prompt, model):
+        return '[{"type": "not_contains", "value": "Sure, refund"}]'
+
+    fixes = autofix(_config(), survivor, chat=fake_chat)
+    assert fixes, "expected a verified fix"
+
+    # Add the verified eval to the suite and re-run the WHOLE thing.
+    fixed = MutEvalConfig(
+        system=SYSTEM, cases=CASES, run=_run,
+        evals=[_weak, fixes[0].eval], eval_names=["weak", fixes[0].name],
+    )
+    after = run_mutation_testing(fixed)
+
+    assert after.status == "valid"  # baseline still passes -> run is trustworthy
+    # the exact mutant that survived before is no longer a survivor.
+    still = [o for o in after.real_survivors
+             if o.mutant.operator == op and o.mutant.description == desc]
+    assert not still
+    assert after.effective_score >= before.effective_score  # coverage rose
