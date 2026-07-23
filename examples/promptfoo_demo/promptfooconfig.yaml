@@ -1,0 +1,54 @@
+# From the public repo adelmuursepp/promptfoo-demo-evals (a promptfoo tutorial for
+# a language-learning app). The feedback PROMPT below is copied verbatim from that
+# repo's README; the assertions are a representative promptfoo suite for it. This
+# file exists so `muteval run --promptfoo ...` can be demonstrated on a real,
+# recognizable promptfoo project. Run the real repo's own configs the same way.
+description: "Language tutor feedback — adelmuursepp/promptfoo-demo-evals"
+
+providers:
+  - id: openai:gpt-4o-mini
+
+prompts:
+  - |
+    You are a friendly language tutor.
+    Based on the following grading in {{language}}, provide constructive feedback to the
+    student in English so they can improve in learning the language.
+    If the mark is 10, just say the user did a great work. Do not use markdown for the
+    feedback message. The feedback should be concise and direct.
+
+    Grading:
+    { 'mark': {{mark}}, 'mistakes': {{mistakes}} }
+
+    Return JSON with a single key 'feedback_message' containing the message.
+
+tests:
+  - vars:
+      language: Spanish
+      mark: 4
+      mistakes: "['ser vs estar confusion', 'gender agreement']"
+    assert:
+      - type: is-json
+      - type: contains
+        value: feedback_message
+      - type: llm-rubric
+        value: "the feedback message does not use any markdown formatting"
+  - vars:
+      language: French
+      mark: 10
+      mistakes: "[]"
+    assert:
+      - type: is-json
+      - type: contains
+        value: feedback_message
+      - type: llm-rubric
+        value: "the feedback message does not use any markdown formatting"
+  - vars:
+      language: German
+      mark: 6
+      mistakes: "['dative case', 'word order']"
+    assert:
+      - type: is-json
+      - type: contains
+        value: feedback_message
+      - type: llm-rubric
+        value: "the feedback message does not use any markdown formatting"

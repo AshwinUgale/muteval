@@ -1,0 +1,55 @@
+site_name: muteval
+site_description: Mutation testing for your LLM evals — find out if they'd actually catch a regression.
+site_url: https://ashwinugale.github.io/muteval/
+repo_url: https://github.com/AshwinUgale/muteval
+repo_name: AshwinUgale/muteval
+copyright: Apache-2.0
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: black
+    accent: light blue
+  features:
+    - navigation.top
+    - navigation.sections
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+docs_dir: docs
+
+# Keep the local, gitignored strategy docs OUT of the published site even if
+# someone builds locally (on CI they're absent anyway — they're gitignored).
+exclude_docs: |
+  ROADMAP-*.md
+  RELEASE-PLAN.md
+  OUTREACH-*.md
+  AUDIT-*.md
+  PLAN-*.md
+  MUTMUT.md
+  devto-post.md
+  writeup-*.md
+
+nav:
+  - Home: index.md
+  - "Example — a promptfoo suite ↗": real-report.html
+  - "How it works ↗": demo.html
+  - Limitations: LIMITATIONS.md
+  - Adopting muteval: ADOPTION.md
+  - Findings: findings.md
+  - Plugins: PLUGINS.md
+  - Prior art: PRIOR-ART.md
+  - Changelog: changelog.md

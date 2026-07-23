@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>muteval on a promptfoo suite — install to report</title>
+<meta name="description" content="Install muteval, point it at a promptfooconfig.yaml, and read the two reports it writes: coverage and eval-quality.">
+<style>
+  :root{
+    --bg:#0d1117;--panel:#161b22;--panel2:#0b0f14;--bd:#30363d;
+    --tx:#e6edf3;--mut:#8b949e;--grn:#3fb950;--amb:#d29922;--red:#f85149;--acc:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased}
+  a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+  .wrap{max-width:860px;margin:0 auto;padding:0 1.15rem}
+  code,kbd{font-family:var(--mono);font-size:.92em}
+  .hero{padding:4rem 0 2.2rem;border-bottom:1px solid var(--bd)}
+  .kick{font-family:var(--mono);font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin:0 0 1rem}
+  h1{font-size:2.2rem;line-height:1.16;margin:.2rem 0 1rem;letter-spacing:-.02em}
+  .lede{font-size:1.13rem;color:var(--mut);margin:0;max-width:66ch}.lede b{color:var(--tx)}
+  .toc{display:flex;flex-wrap:wrap;gap:.4rem;margin:1.4rem 0 0}
+  .toc a{font-family:var(--mono);font-size:.78rem;padding:.25rem .6rem;border:1px solid var(--bd);border-radius:20px;color:var(--mut)}
+  .toc a:hover{color:var(--acc);border-color:var(--acc);text-decoration:none}
+  section{padding:2.4rem 0;border-bottom:1px solid var(--bd)}
+  h2{font-size:1.32rem;margin:0 0 .35rem;letter-spacing:-.01em;scroll-margin-top:1rem}
+  h2 .n{font-family:var(--mono);color:var(--acc);font-size:1rem;margin-right:.5rem}
+  .sub{color:var(--mut);margin:.2rem 0 1.3rem}
+  .term{background:var(--panel2);border:1px solid var(--bd);border-radius:10px;font-family:var(--mono);font-size:12.5px;line-height:1.62;overflow:auto}
+  .term .bar{display:flex;gap:.5rem;padding:.5rem .9rem;border-bottom:1px solid var(--bd);color:var(--mut);font-size:12px;align-items:center}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block}.dot.r{background:#ff5f56}.dot.y{background:#ffbd2e}.dot.g{background:#27c93f}
+  .term pre{margin:0;padding:1rem 1.1rem;white-space:pre-wrap;word-break:break-word}
+  .cmd{color:var(--grn)}.mut{color:var(--mut)}.grn{color:var(--grn)}.amb{color:var(--amb)}.red{color:var(--red)}.acc{color:var(--acc)}
+  .fillA{color:var(--amb)}.empty{color:#2b3138}
+  .report{background:var(--panel);border:1px solid var(--bd);border-radius:12px;overflow:hidden;margin:1rem 0}
+  .rhd{display:flex;align-items:center;gap:.6rem;padding:.8rem 1.15rem;border-bottom:1px solid var(--bd);background:#12171e}
+  .rhd .t{font-weight:700}.rhd .f{font-family:var(--mono);font-size:.8rem;color:var(--mut);margin-left:auto}
+  .rbody{padding:1.1rem 1.15rem}
+  .scoreline{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;font-family:var(--mono);font-size:.95rem;margin-bottom:.3rem}
+  .track{display:inline-block;width:220px;height:11px;background:#20262e;border-radius:6px;overflow:hidden}
+  .track>i{display:block;height:100%;background:var(--amb)}
+  .big{font-size:1.5rem;font-weight:700;color:var(--amb)}
+  .grp{margin:1.1rem 0 0}
+  .grp h4{margin:0 0 .5rem;font-size:.95rem}
+  .row{display:flex;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--bd);font-size:.95rem;align-items:baseline}
+  .tag{font-family:var(--mono);font-size:.68rem;padding:.1rem .42rem;border-radius:4px;border:1px solid var(--bd);white-space:nowrap}
+  .tag.h{color:var(--red);border-color:#5a2222}.tag.m{color:var(--amb);border-color:#5a4a1f}.tag.k{color:var(--grn);border-color:#22482a}
+  .op{font-family:var(--mono);font-size:.8rem;color:var(--mut);white-space:nowrap}
+  .lens{display:flex;gap:.6rem;padding:.55rem 0;border-top:1px solid var(--bd);align-items:baseline;font-size:.95rem}
+  .lens:first-child{border-top:0}
+  .badge{font-family:var(--mono);font-size:.68rem;font-weight:700;padding:.1rem .45rem;border-radius:4px;color:#fff}
+  .badge.p{background:#2ea043}.badge.w{background:#bb8009}
+  .tier{font-family:var(--mono);font-size:.68rem;color:var(--mut);text-transform:uppercase}
+  .lens .d{color:var(--mut)}
+  .note{background:var(--panel);border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:10px;padding:1.1rem 1.3rem}
+  .note b{color:var(--tx)}.note ul{margin:.5rem 0 0;padding-left:1.2rem;color:var(--mut)}.note li{margin:.4rem 0}
+  .meta{color:var(--mut);font-size:.9rem;margin-top:.7rem}
+  .kv{font-family:var(--mono);font-size:.85rem;color:var(--mut)}
+  footer{padding:2.3rem 0 4rem;color:var(--mut);font-size:.92rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <p class="kick">muteval · promptfoo example</p>
+    <h1>Point muteval at a promptfoo suite.<br>Get two reports back.</h1>
+    <p class="lede">Install, point it at your <code>promptfooconfig.yaml</code>, and read the two reports
+    it writes. The example below runs against a public promptfoo suite
+    (<a href="https://github.com/adelmuursepp/promptfoo-demo-evals">adelmuursepp/promptfoo-demo-evals</a>);
+    you'd point it at your own.</p>
+    <div class="toc">
+      <a href="#install">1 · install</a><a href="#suite">2 · the suite</a><a href="#run">3 · run</a>
+      <a href="#coverage">4 · coverage report</a><a href="#quality">5 · quality report</a>
+      <a href="#read">6 · reading the report</a><a href="#repro">7 · your repo</a>
+    </div>
+  </div>
+
+  <section id="install">
+    <h2><span class="n">01</span>Install</h2>
+    <p class="sub">Pure-Python core; the <code>[promptfoo]</code> extra only adds a YAML parser. No key needed to install.</p>
+    <div class="term"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+<pre><span class="cmd">pip install "muteval[promptfoo]"</span>
+<span class="cmd">export OPENAI_API_KEY=sk-...</span>   <span class="mut"># muteval runs your prompt on a model; set your provider's key</span></pre></div>
+  </section>
+
+  <section id="suite">
+    <h2><span class="n">02</span>The suite in this example</h2>
+    <p class="sub">muteval reads any <code>promptfooconfig.yaml</code> directly — the prompt becomes the
+    mutation target, each test a case, each assertion a graded check. This example uses a language-tutor
+    feedback prompt; swap in your own config and the flow is identical.</p>
+    <div class="report">
+      <div class="rhd"><span class="t">The prompt (mutation target)</span><span class="f">promptfooconfig.yaml → prompts</span></div>
+      <div class="rbody term" style="border:0;background:transparent">
+<pre>You are a friendly language tutor.
+Based on the following grading in {{language}}, provide constructive feedback to the
+student in English so they can improve in learning the language.
+<span class="amb">If the mark is 10, just say the user did a great work.</span> <span class="amb">Do not use markdown</span> for the
+feedback message. <span class="amb">The feedback should be concise and direct.</span>
+Return JSON with a single key 'feedback_message' containing the message.</pre>
+      </div>
+    </div>
+    <div class="report">
+      <div class="rhd"><span class="t">The assertions (the graded suite)</span><span class="f">3 test cases</span></div>
+      <div class="rbody">
+        <div class="kv">✓ <b>is-json</b> — output is valid JSON &nbsp;<span class="mut">(format)</span></div>
+        <div class="kv">✓ <b>contains: feedback_message</b> — the required key is present &nbsp;<span class="mut">(format)</span></div>
+        <div class="kv">✓ <b>llm-rubric</b>: "the feedback does not use markdown" &nbsp;<span class="mut">(one behavior)</span></div>
+        <p class="meta">Notice what's <em>not</em> asserted: friendly tone, answering in English, conciseness,
+        the "mark = 10 → just say great work" shortcut. Hold that thought.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="run">
+    <h2><span class="n">03</span>Run it</h2>
+    <p class="sub">muteval generates mutants of the prompt, reruns the promptfoo suite against each, and
+    scores how many the assertions caught — then writes the two HTML reports.</p>
+    <div class="term"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+<pre><span class="cmd">muteval run    --promptfoo promptfooconfig.yaml</span>
+<span class="cmd">muteval report --html coverage.html</span>
+<span class="cmd">muteval probe  --promptfoo promptfooconfig.yaml --html quality.html</span></pre></div>
+  </section>
+
+  <section id="coverage">
+    <h2><span class="n">04</span>Report 1 — coverage</h2>
+    <p class="sub">Would the suite notice if the prompt silently degraded? For 11 of 15 injected
+    regressions: no.</p>
+    <div class="report">
+      <div class="rhd"><span class="t">Mutation coverage</span><span class="f">coverage.html</span></div>
+      <div class="rbody">
+        <div class="scoreline"><span class="big">27%</span>
+          <span class="track"><i style="width:27%"></i></span>
+          <span class="mut">4 / 15 mutants killed · 95% CI 11–52%</span></div>
+
+        <div class="grp">
+          <h4 style="color:var(--grn)">✓ Caught (4) — the assertions did their job</h4>
+          <div class="row"><span class="tag k">KILLED</span><span>Mutations that broke the JSON output or dropped the
+            <code>feedback_message</code> key — caught by <code>is-json</code> / <code>contains</code>.</span></div>
+        </div>
+
+        <div class="grp">
+          <h4 style="color:var(--amb)">Survived — uncovered behavior (7)</h4>
+          <div class="row"><span class="tag m">MED</span><span class="op">drop_instruction</span><span>dropped <b>"You are a friendly language tutor."</b></span></div>
+          <div class="row"><span class="tag m">MED</span><span class="op">delete_sentence</span><span>deleted <b>"…in English so they can improve…"</b></span></div>
+          <div class="row"><span class="tag m">MED</span><span class="op">delete_sentence</span><span>deleted <b>"If the mark is 10, just say the user did a great work."</b></span></div>
+          <div class="row"><span class="tag m">MED</span><span class="op">delete_sentence</span><span>deleted <b>"The feedback should be concise and direct."</b></span></div>
+          <div class="row"><span class="tag m">MED</span><span class="op">drop_instruction</span><span>dropped the conciseness rule &nbsp;<span class="mut">(+ 2 more sentence/line drops)</span></span></div>
+          <div class="meta">No assertion checks tone, language, conciseness, or the mark-10 shortcut — so degrading
+            any of them passes clean. <span class="acc">Each survivor prints the fix:</span> add a
+            <code>checks.llm_judge</code> for that rule, re-run, the mutant dies.</div>
+        </div>
+
+        <div class="grp">
+          <h4 style="color:var(--red)">Survived — likely equivalent (3)</h4>
+          <div class="row"><span class="tag h">HIGH</span><span class="op">weaken_modals</span><span>weakened <b>"Do not"</b> → "try not to" use markdown</span></div>
+          <div class="row"><span class="tag h">HIGH</span><span class="op">flip_negation</span><span>inverted <b>"Do not"</b> → "do" use markdown</span></div>
+          <div class="row"><span class="tag h">HIGH</span><span class="op">delete_sentence</span><span>deleted the <b>no-markdown</b> rule</span></div>
+          <div class="meta">Flagged HIGH by severity heuristic, but the suite's no-markdown judge passed them —
+            the model didn't emit markdown even with the rule weakened. Equivalent mutants: worth a glance,
+            not a gap.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="quality">
+    <h2><span class="n">05</span>Report 2 — eval quality</h2>
+    <p class="sub">Coverage asks "would the suite catch a regression?" The quality card audits the suite
+    <em>itself</em>, ranked by what each lens actually catches.</p>
+    <div class="report">
+      <div class="rhd"><span class="t">Eval-quality report card</span><span class="f">quality.html</span></div>
+      <div class="rbody">
+        <div class="lens"><span class="badge p">PASS</span><b>judge_reliability</b><span class="tier">core</span>
+          <span class="d">— 0/3 verdicts flipped across re-runs = 0% flaky (Krippendorff α 1.00). The no-markdown judge is stable.</span></div>
+        <div class="lens"><span class="badge p">PASS</span><b>discrimination</b><span class="tier">core</span>
+          <span class="d">— not assessed (no good/bad exemplars). Add them to test whether the suite separates good answers from bad.</span></div>
+        <div class="lens"><span class="badge p">PASS</span><b>human_agreement</b><span class="tier">validity</span>
+          <span class="d">— not assessed (no labels). <code>muteval label</code> emits a worksheet to enable it.</span></div>
+        <div class="lens"><span class="badge w">WARN</span><b>statistical_adequacy</b><span class="tier">hygiene</span>
+          <span class="d">— 3/3 pass = 100% [95% CI 44–100%]. Only 3 cases → the number is too uncertain to trust; add ~9.</span></div>
+        <div class="lens"><span class="badge p">PASS</span><b>redundancy</b><span class="tier">hygiene</span>
+          <span class="d">— not assessed (needs ≥ 2 evals).</span></div>
+        <div class="lens"><span class="badge p">PASS</span><b>threshold_calibration</b><span class="tier">hygiene</span>
+          <span class="d">— not assessed (no good/bad exemplars).</span></div>
+        <p class="meta">No composite score on purpose — each lens is a separately-interpretable signal.
+          <span class="mut">core = catches an eval defect that matters · validity = needs labels · hygiene = sanity check.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="read">
+    <h2><span class="n">06</span>Reading the report</h2>
+    <div class="note">
+      <b>27% is a starting point, not a verdict.</b>
+      <ul>
+        <li><b>The gaps that matter:</b> the suite guards the output <em>format</em> but not the tutor's
+          <em>behavior</em> — friendly, in English, concise, the mark-10 shortcut. Those are the survivors that
+          count, and each one names the eval to add.</li>
+        <li><b>The markdown survivors are equivalent mutants.</b> They passed the suite's own no-markdown judge
+          because the model didn't emit markdown even with the rule weakened — flagged for a look, not a gap.
+          Equivalent mutants are a normal part of a mutation report.</li>
+        <li><b>Read the interval, not the point.</b> Three cases give a wide CI (11–52%); the adequacy lens
+          flags it. More cases tighten the number.</li>
+        <li><b>Coverage, not correctness.</b> Whether the suite is <em>right</em> needs labels — that's the
+          validity lens.</li>
+      </ul>
+      <p style="margin:.85rem 0 0">muteval is a <b>per-suite diagnostic</b>: it shows where a suite has holes
+      and names the fix.
+      <a href="https://github.com/AshwinUgale/muteval/blob/main/docs/LIMITATIONS.md">See the limits →</a></p>
+    </div>
+  </section>
+
+  <section id="repro">
+    <h2><span class="n">07</span>Pointing it at your repo</h2>
+    <p class="sub">Swap the example for your own suite. A few things to set, depending on how yours is built:</p>
+    <div class="note">
+      <ul>
+        <li><b>Your config path.</b> Replace <code>promptfooconfig.yaml</code> with the path to yours. If it
+          defines several prompts, muteval mutates the first — split them into separate configs to cover each.</li>
+        <li><b>Model &amp; key.</b> muteval runs the prompt through a model to produce outputs (default
+          <code>gpt-4o-mini</code>). Set the key your provider needs; to use a different model, load the config
+          in a two-line <code>.py</code> and pass <code>from_promptfoo(path, model="…")</code>.</li>
+        <li><b>Which assertions carry over.</b> <code>contains</code>, <code>icontains</code>,
+          <code>not-contains</code>, <code>equals</code>, <code>regex</code>, and
+          <code>llm-rubric</code>/<code>model-graded</code> become graded checks. <code>is-json</code>,
+          <code>javascript</code>, and <code>python</code> asserts are skipped — if your suite relies on those,
+          add the equivalent muteval <code>checks</code> so they're graded too.</li>
+        <li><b>Prompt variables.</b> <code>{{var}}</code> placeholders are filled from each test's
+          <code>vars</code>, so your existing cases carry over unchanged.</li>
+        <li><b>Not on promptfoo?</b> Point muteval at a Python config instead — same two reports, any pipeline.
+          See <a href="https://github.com/AshwinUgale/muteval/blob/main/docs/ADOPTION.md">Adopting muteval</a>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="wrap" style="padding-left:0;padding-right:0">
+    <b>muteval</b> — mutation testing for your LLM evals.
+    &nbsp;<a href="https://github.com/AshwinUgale/muteval">GitHub</a> ·
+    <a href="https://pypi.org/project/muteval/">PyPI</a> ·
+    <a href="demo.html">How it works</a>
+    <p style="margin:.6rem 0 0">Example figures are from a run on gpt-4o-mini. Apache-2.0.</p>
+  </footer>
+
+</div>
+</body>
+</html>

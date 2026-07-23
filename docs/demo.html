@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>muteval — live demo: would your evals catch a regression?</title>
+<meta name="description" content="A reproducible, offline demo of muteval finding a real coverage gap in an eval suite and closing the loop — survivor to fix to kill.">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#0b0f14; --bd:#30363d;
+    --tx:#e6edf3; --mut:#8b949e; --grn:#3fb950; --amb:#d29922; --red:#f85149; --acc:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.65 var(--sans);
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:820px;margin:0 auto;padding:0 1.15rem}
+  code,kbd{font-family:var(--mono)}
+  .hero{padding:4.5rem 0 2.5rem;border-bottom:1px solid var(--bd)}
+  .kick{font-family:var(--mono);font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin:0 0 1rem}
+  h1{font-size:2.35rem;line-height:1.15;margin:.2rem 0 1rem;letter-spacing:-.02em}
+  h1 .g{color:var(--grn)} h1 .a{color:var(--amb)}
+  .lede{font-size:1.16rem;color:var(--mut);margin:0;max-width:60ch}
+  section{padding:2.6rem 0;border-bottom:1px solid var(--bd)}
+  h2{font-size:1.4rem;margin:0 0 .4rem;letter-spacing:-.01em}
+  h2 .n{font-family:var(--mono);color:var(--acc);font-size:1rem;margin-right:.5rem}
+  .sub{color:var(--mut);margin:.2rem 0 1.4rem}
+  .term{background:var(--panel2);border:1px solid var(--bd);border-radius:10px;
+    font-family:var(--mono);font-size:13.5px;line-height:1.6;overflow:auto}
+  .term .bar{display:flex;gap:.5rem;padding:.55rem .9rem;border-bottom:1px solid var(--bd);color:var(--mut);font-size:12px}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .dot.r{background:#ff5f56}.dot.y{background:#ffbd2e}.dot.g{background:#27c93f}
+  .term pre{margin:0;padding:1rem 1.1rem;white-space:pre-wrap;word-break:break-word}
+  .cmd{color:var(--grn)} .mut{color:var(--mut)}
+  .grn{color:var(--grn)} .amb{color:var(--amb)} .red{color:var(--red)} .acc{color:var(--acc)}
+  .fill{color:var(--grn)} .empty{color:#2b3138}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:1.15rem 1.3rem;margin:1.1rem 0}
+  .hi{border-left:4px solid var(--red)}
+  .diff{font-family:var(--mono);font-size:13.5px;margin:.6rem 0 0}
+  .diff .was{color:var(--mut);text-decoration:line-through} .diff .now{color:var(--amb)}
+  table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:13.5px;margin:.4rem 0}
+  th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--bd)}
+  th{color:var(--mut);font-weight:600}
+  .track{display:inline-block;vertical-align:middle;width:150px;height:9px;background:#20262e;border-radius:5px;overflow:hidden;margin-right:.55rem}
+  .track > i{display:block;height:100%;background:var(--grn);border-radius:5px}
+  .pct{color:var(--grn);font-weight:600}
+  .note{background:var(--panel);border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:10px;padding:1.1rem 1.3rem;color:var(--tx)}
+  .note b{color:var(--tx)} .note ul{margin:.5rem 0 0;padding-left:1.2rem;color:var(--mut)} .note li{margin:.3rem 0}
+  .cmds .term pre{color:var(--tx)}
+  footer{padding:2.4rem 0 4rem;color:var(--mut);font-size:.92rem}
+  .pill{display:inline-block;font-family:var(--mono);font-size:.72rem;padding:.12rem .5rem;border-radius:4px;border:1px solid var(--bd);color:var(--mut);margin-left:.4rem;vertical-align:middle}
+  .tag-high{color:var(--red);border-color:#5a2222} .tag-med{color:var(--amb);border-color:#5a4a1f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <p class="kick">muteval · live demo</p>
+    <h1>Your evals are <span class="g">passing</span>.<br>Would they catch a <span class="a">regression</span>?</h1>
+    <p class="lede">muteval deliberately breaks the system under test, reruns your existing
+    eval suite, and reports which breakages your evals <em>failed to notice</em>. Below is a run on
+    a bundled example suite — no API key, fully reproducible with one command.</p>
+  </div>
+
+  <section>
+    <h2><span class="n">01</span>The suite under test</h2>
+    <p class="sub">A support-bot prompt with four rules, and a small eval suite that
+    checks the answer is non-empty and cites an order ID. Looks reasonable. It passes.</p>
+    <div class="term">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span style="margin-left:.4rem">examples/support_bot/muteval_config.py</span></div>
+<pre>SYSTEM PROMPT
+  You are a support assistant for an online store.
+  - You must cite the order ID when discussing an order.
+  <span class="amb">- Do not promise refunds; refunds require manager approval.</span>
+  - You must never reveal another customer's data.
+  - Always reply in a polite, professional tone.
+
+EVALS (the suite we are grading)
+  contains_case("order_id")     # cites the order id
+  not_contains("ERROR")         # produced an answer
+  <span class="mut"># ...and nothing that checks the refund / privacy / tone rules</span></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">02</span>Run muteval</h2>
+    <p class="sub">It generates 22 mutants (weaken a rule, invert it, drop a line, truncate…),
+    reruns the suite against each, and scores how many the evals caught.</p>
+    <div class="term">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span style="margin-left:.4rem">$ muteval run --config examples/support_bot/muteval_config.py</span></div>
+<pre><span class="mut">Mutation score:</span> <span class="amb">23%</span>  [<span class="fill">█████</span><span class="empty">░░░░░░░░░░░░░░░░░░</span>]  (5/22 mutants killed, 95% CI 10-43%)
+<span class="mut">Effective score:</span> <span class="amb">45%</span>  (5/11 — excludes 11 inert mutants whose output didn't change)
+
+<span class="red">6 SURVIVED</span>  (output changed but the evals didn't notice — 4 HIGH-severity):
+
+  <span class="red">[HIGH]</span> SURVIVED  [weaken_modals]
+        weakened "Do not promise refunds" → "try not to promise refunds"
+        <span class="acc">fix:</span> add an eval for the refund rule (e.g. checks.llm_judge)
+  <span class="red">[HIGH]</span> SURVIVED  [flip_negation]
+        inverted "Do not promise refunds" → "do promise refunds"
+  <span class="red">[HIGH]</span> SURVIVED  [drop_instruction_lines]
+        dropped line: "- Do not promise refunds; refunds require manager approval."
+  <span class="red">[HIGH]</span> SURVIVED  [delete_sentences]
+        deleted the refund rule entirely
+  <span class="amb">[MED ]</span> SURVIVED  [truncate_prompt] × 2
+        dropped the tail of the prompt (privacy + tone rules)</pre>
+    </div>
+    <div class="card hi">
+      <b>The catch <span class="pill tag-high">HIGH</span></b>
+      <p style="margin:.5rem 0 0;color:var(--mut)">muteval turned the refund guardrail into its
+      opposite — the bot now <em>promises refunds it shouldn't</em> — and the suite stayed green.
+      Nothing in it checks that rule.</p>
+      <p class="diff"><span class="was">Do not promise refunds</span> &nbsp;→&nbsp; <span class="now">do promise refunds</span> &nbsp;&nbsp;<span class="grn">evals: still PASS ✓</span></p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">03</span>Close the loop</h2>
+    <p class="sub">Each survivor names a missing eval. Add it, and that mutant dies — the score
+    climbs. Here's the same system graded by suites of increasing coverage (an offline,
+    CI-enforced experiment shipped in the repo):</p>
+    <table>
+      <thead><tr><th>Eval suite</th><th>Coverage</th><th>Real gaps left</th></tr></thead>
+      <tbody>
+        <tr><td>smoke — non-empty only</td><td><span class="track"><i style="width:0%"></i></span><span class="pct">0%</span></td><td>21</td></tr>
+        <tr><td>+ cite the order ID</td><td><span class="track"><i style="width:33%"></i></span><span class="pct">33%</span></td><td>14</td></tr>
+        <tr><td>+ refund &amp; privacy rules</td><td><span class="track"><i style="width:67%"></i></span><span class="pct">67%</span></td><td>7</td></tr>
+        <tr><td>+ tone &amp; grounded-in-context</td><td><span class="track"><i style="width:100%"></i></span><span class="pct">100%</span></td><td>0</td></tr>
+      </tbody>
+    </table>
+    <p style="color:var(--mut);margin:.9rem 0 0">The score is a faithful proxy for how much real
+    degradation the suite would catch: it rises monotonically with coverage, and the same result
+    holds across four domains (support bot, code review, RAG grounding, HR policy), enforced in CI
+    so it can't silently regress.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">04</span>What the score means</h2>
+    <div class="note">
+      muteval is a <b>per-suite diagnostic, not a universal flaw-finder.</b> A few things it does by design:
+      <ul>
+        <li>A survivor is a <b>candidate</b> gap — flagged for review, not an automatic verdict on your system.</li>
+        <li><b>Inert mutants</b> (output unchanged) are excluded from the effective score, not counted
+          as blind spots.</li>
+        <li>It <b>fails closed</b>: a red or errored baseline yields <em>no score</em>, never a
+          misleading 100%. Scores come with confidence intervals.</li>
+        <li>It measures eval <b>coverage</b>, not whether your eval is <em>correct</em> — that needs
+          labels (see the limits).</li>
+      </ul>
+      <p style="margin:.8rem 0 0"><a href="https://github.com/AshwinUgale/muteval/blob/main/docs/LIMITATIONS.md">The limits →</a></p>
+    </div>
+  </section>
+
+  <section class="cmds">
+    <h2><span class="n">05</span>Reproduce it yourself</h2>
+    <p class="sub">No API key. The example runs on a deterministic mock model, so you get the exact
+    output above.</p>
+    <div class="term">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+<pre><span class="cmd">pip install muteval</span>
+<span class="cmd">muteval run --config examples/support_bot/muteval_config.py</span>   <span class="mut"># the run above</span>
+<span class="cmd">python validation/eval_quality_experiment/run_experiment.py</span>  <span class="mut"># the 0→100% loop</span></pre>
+    </div>
+  </section>
+
+  <footer class="wrap" style="padding-left:0;padding-right:0">
+    <b>muteval</b> — mutation testing for your LLM evals.
+    &nbsp;<a href="https://github.com/AshwinUgale/muteval">GitHub</a> ·
+    <a href="https://pypi.org/project/muteval/">PyPI</a> ·
+    <a href="https://github.com/AshwinUgale/muteval/blob/main/FINDINGS.md">Findings</a>
+    <p style="margin:.6rem 0 0">Output on this page is from a run on the bundled example suite. Apache-2.0.</p>
+  </footer>
+
+</div>
+</body>
+</html>
