@@ -116,12 +116,14 @@ muteval report --html coverage.html   # a shareable standalone report
 
 Beyond mutation coverage, `muteval probe` audits the eval suite along other
 lenses. The load-bearing ones catch real, common defects: **judge reliability**
-(does your LLM judge flip on identical re-runs?), **judge bias**
-(position / verbosity / self-preference), and **discrimination** (can the eval
-tell good outputs from bad?). The rest are hygiene checks — statistical adequacy
-and redundancy — plus, only if you have labels, **human agreement** (Cohen's κ
-via `muteval label`), the one true validity check. A report card, no composite
-score:
+(does your LLM judge flip on identical re-runs?) and **discrimination** (can the
+eval tell good outputs from bad, given good/bad exemplars?). The rest are hygiene
+checks — statistical adequacy and redundancy — plus, only if you have labels,
+**human agreement** (Cohen's κ via `muteval label`), the one true validity check.
+A report card, no composite score. (A separate **judge-bias panel** —
+position / verbosity / self-preference — is available as a library function for
+*pairwise A/B judges*; it isn't part of the default card because it needs a
+pairwise-judge harness.)
 
 ```bash
 muteval probe --config muteval_config.py --html quality.html

@@ -49,11 +49,13 @@ and now backed by reference cross-checks and Monte-Carlo coverage tests.
   operator/probe/adapter/reporter extension points with a contract test.
 
 ### The eval-evaluator (`muteval probe`)
-- **Report card** across seven lenses, no composite score: statistical adequacy
-  (Wilson/Jeffreys), judge reliability (flip-rate + Krippendorff's alpha +
-  ICC(2,1)), discrimination (AUC + Cohen's d), redundancy (Spearman + connected
-  families), **judge bias** (position/verbosity/self-preference), **threshold
-  calibration**, and **human agreement** (Cohen's κ via `muteval label`).
+- **Report card** across six lenses, no composite score: judge reliability
+  (flip-rate + Krippendorff's alpha + ICC(2,1)), discrimination (AUC + Cohen's d),
+  statistical adequacy (Wilson/Jeffreys), redundancy (Spearman + connected
+  families), threshold calibration, and **human agreement** (Cohen's κ via
+  `muteval label`). A separate **judge-bias panel** (position/verbosity/
+  self-preference) ships as a library function for pairwise A/B judges — it needs
+  a pairwise-judge harness, so it is not part of the default card.
 - Every probe has a CI test asserting its signal is monotonic in injected
   severity and hits its endpoints.
 - **Autofix verify loop** — `autofix.suggest_and_verify` proposes an eval for a

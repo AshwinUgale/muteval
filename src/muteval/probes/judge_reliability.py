@@ -14,8 +14,9 @@ Rule-based checks are perfectly stable (0% flips, alpha=1). Noisy judges are not
 
 NOTE (reliability != validity): a judge can be perfectly self-consistent yet
 systematically wrong. This probe measures stability only. Directional-bias tests
-(position / verbosity / self-preference) need a structured judge abstraction and
-are future work.
+(position / verbosity / self-preference) need a *pairwise* judge, so they live in
+a separate panel (`probes/judge_bias.py`, `run_judge_bias_panel`), not this probe
+and not the default `muteval probe` card.
 
 Cost: re-runs each eval `runs` times, so for LLM judges it costs `runs`x the calls.
 """

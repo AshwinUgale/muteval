@@ -197,9 +197,11 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
 # core:     catches a real, common eval defect (trust a WARN here).
 # validity: the "is the eval actually correct?" check — needs labels.
 # hygiene:  a sanity check; a WARN is a footnote, not a crisis.
+# Only lenses that actually run in the `muteval probe` card belong here. The
+# judge-bias panel is a separate library function (needs a pairwise A/B judge),
+# so it is deliberately NOT listed as a card lens.
 _PROBE_TIER = {
     "judge_reliability": "core",
-    "judge_bias": "core",
     "discrimination": "core",
     "human_agreement": "validity",
     "threshold_calibration": "hygiene",
