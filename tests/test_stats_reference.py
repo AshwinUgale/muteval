@@ -14,7 +14,7 @@ import pytest
 from muteval.probes.discrimination import _auc, _cohens_d
 from muteval.probes.judge_reliability import _krippendorff_alpha_nominal
 from muteval.probes.redundancy import _spearman
-from muteval.stats import _beta_ppf, _betai, jeffreys_interval, wilson_interval
+from muteval.stats import _beta_ppf, _betai, icc, jeffreys_interval, wilson_interval
 
 # Skip the whole module unless the reference libraries are installed.
 statsmodels = pytest.importorskip("statsmodels.stats.proportion")
@@ -141,4 +141,30 @@ def test_beta_ppf_matches_scipy_betaincinv(p, a, b):
     # to ~2^-100; loosen only enough to absorb betai's own ~3e-12 tolerance.
     ours = _beta_ppf(p, a, b)
     ref = float(scipy_special.betaincinv(a, b, p))
+    assert math.isclose(ours, ref, abs_tol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "matrix",
+    [
+        [[9.0, 8.0], [4.0, 5.0], [2.0, 3.0], [7.0, 6.0], [1.0, 2.0]],
+        [[1.0, 2.0, 1.0], [5.0, 4.0, 6.0], [9.0, 8.0, 9.0], [2.0, 3.0, 2.0]],
+        [[10, 10, 9], [3, 4, 3], [6, 6, 7], [8, 7, 8], [1, 2, 1], [5, 5, 6]],
+    ],
+)
+def test_icc_matches_pingouin(matrix):
+    ours = icc(matrix)
+    # Long-format frame for pingouin: subject, rater, score.
+    rows = []
+    for si, subj in enumerate(matrix):
+        for ri, val in enumerate(subj):
+            rows.append({"subject": si, "rater": ri, "score": float(val)})
+    pd = pytest.importorskip("pandas")
+    df = pd.DataFrame(rows)
+    res = pingouin.intraclass_corr(data=df, targets="subject", raters="rater", ratings="score")
+    # ICC(2,1) absolute-agreement, single rater == pingouin's "ICC(A,1)"
+    # (older pingouin labelled the same row "ICC2").
+    types = res.set_index("Type")["ICC"]
+    ref = float(types.get("ICC(A,1)", types.get("ICC2")))
+    assert ours is not None
     assert math.isclose(ours, ref, abs_tol=1e-6)

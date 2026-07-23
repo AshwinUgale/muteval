@@ -63,9 +63,12 @@ def _krippendorff_alpha_nominal(items):
 
 
 def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> ProbeResult:
+    from muteval.stats import icc
+
     total = flipped = 0
     worst: dict = {}           # eval name -> flips
     matrices: dict = {}        # eval name -> [per-case list of `runs` verdicts]
+    score_matrices: dict = {}  # eval name -> [per-case list of `runs` numeric scores]
     for case in config.cases:
         try:
             output = config.invoke(config.system, case)  # fix the output once
@@ -74,11 +77,14 @@ def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> 
         for idx, ev in enumerate(config.evals):
             name = _eval_name(config, idx, ev)
             try:
-                verdicts = [int(bool(coerce_outcome(ev(output, case)))) for _ in range(runs)]
+                outcomes = [coerce_outcome(ev(output, case)) for _ in range(runs)]
             except Exception:  # noqa: BLE001 - a broken eval isn't a flip; skip
                 continue
+            verdicts = [int(bool(o)) for o in outcomes]
             total += 1
             matrices.setdefault(name, []).append(verdicts)
+            if all(o.score is not None for o in outcomes):  # scored judge -> ICC
+                score_matrices.setdefault(name, []).append([float(o.score) for o in outcomes])
             if len(set(verdicts)) > 1:
                 flipped += 1
                 worst[name] = worst.get(name, 0) + 1
@@ -86,6 +92,9 @@ def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> 
     rate = flipped / total if total else 0.0
     alpha_by_eval = {n: _krippendorff_alpha_nominal(m) for n, m in matrices.items()}
     min_alpha = min(alpha_by_eval.values()) if alpha_by_eval else 1.0
+    # ICC(2,1) on the numeric score matrices (None when not a scored judge).
+    icc_by_eval = {n: icc(m) for n, m in score_matrices.items()}
+    icc_by_eval = {n: v for n, v in icc_by_eval.items() if v is not None}
     ok = total > 0 and rate <= target_flip_rate
 
     if not total:
@@ -114,5 +123,6 @@ def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> 
         metrics={
             "pairs": total, "flipped": flipped, "flip_rate": rate, "runs": runs,
             "by_eval": worst, "alpha_by_eval": alpha_by_eval, "min_alpha": min_alpha,
+            "icc_by_eval": icc_by_eval,  # ICC(2,1) per scored judge (empty if none)
         },
     )

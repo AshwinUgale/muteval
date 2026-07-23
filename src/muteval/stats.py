@@ -124,6 +124,42 @@ def interval(successes: int, n: int, confidence: float = 0.95, method: str = "wi
     return wilson_interval(successes, n, confidence)
 
 
+def icc(matrix) -> "float | None":
+    """ICC(2,1): two-way random-effects, single rater, ABSOLUTE agreement.
+
+    ``matrix`` is a list of subjects (rows), each a list of ``k`` ratings — here,
+    a judge's numeric score for one case across ``k`` re-runs. ICC(2,1) answers
+    "how reliably does one run reproduce the judge's score?": 1.0 = identical
+    every run, toward 0 = run-to-run noise dominates. Dependency-free; matches
+    ``pingouin.intraclass_corr(...'ICC2')`` to ~1e-6.
+
+    Returns ``None`` when it can't be computed (n<2 subjects, k<2 raters, ragged
+    rows, or zero total variance — nothing to correlate).
+    """
+    n = len(matrix)
+    if n < 2:
+        return None
+    k = len(matrix[0])
+    if k < 2 or any(len(row) != k for row in matrix):
+        return None
+    grand = sum(sum(row) for row in matrix) / (n * k)
+    row_means = [sum(row) / k for row in matrix]
+    col_means = [sum(matrix[i][j] for i in range(n)) / n for j in range(k)]
+    ss_total = sum((matrix[i][j] - grand) ** 2 for i in range(n) for j in range(k))
+    if ss_total == 0:
+        return None  # no variance anywhere
+    ss_rows = k * sum((rm - grand) ** 2 for rm in row_means)
+    ss_cols = n * sum((cm - grand) ** 2 for cm in col_means)
+    ss_err = ss_total - ss_rows - ss_cols
+    msr = ss_rows / (n - 1)
+    msc = ss_cols / (k - 1)
+    mse = ss_err / ((n - 1) * (k - 1))
+    denom = msr + (k - 1) * mse + (k / n) * (msc - mse)
+    if denom == 0:
+        return None
+    return (msr - mse) / denom
+
+
 def min_samples_for_lower_bound(
     observed_rate: float, target: float, confidence: float = 0.95, cap: int = 100000
 ) -> int:
