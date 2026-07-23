@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from muteval.runner import MutationResult
 
 
@@ -203,13 +205,42 @@ def format_probe_card(results, use_color: bool = True) -> str:
     return "\n".join(lines)
 
 
+# The JSON schema version. Bump on any breaking change to result_to_dict's shape;
+# consumers can branch on it. Snapshotted in tests/test_output.py.
+RESULT_SCHEMA_VERSION = 1
+
+# Patterns that must never appear in emitted JSON/logs (defense in depth: a
+# survivor description or error string could echo a prompt containing a key).
+_SECRET_RE = re.compile(
+    r"(sk-[A-Za-z0-9_\-]{8,}"          # OpenAI-style
+    r"|gsk_[A-Za-z0-9_\-]{8,}"          # Groq-style
+    r"|AIza[A-Za-z0-9_\-]{20,}"         # Google API keys
+    r"|(?i:(?:api[_-]?key|authorization|bearer)\s*[:=]\s*)\S+)"
+)
+
+
+def _redact(obj):
+    """Recursively replace secret-looking substrings in any string value."""
+    if isinstance(obj, str):
+        return _SECRET_RE.sub("[REDACTED]", obj)
+    if isinstance(obj, dict):
+        return {k: _redact(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact(v) for v in obj]
+    return obj
+
+
 def result_to_dict(result) -> dict:
-    """Machine-readable summary of a MutationResult (for --json / CI / reports)."""
+    """Machine-readable summary of a MutationResult (for --json / CI / reports).
+
+    Secrets (API keys) are redacted from all string fields before returning.
+    """
     from muteval.suggest import suggest_eval
 
     score = result.score
     eff = result.effective_score
-    return {
+    return _redact({
+        "schema_version": RESULT_SCHEMA_VERSION,
         "status": result.status,
         "baseline_passed": result.baseline_passed,
         "baseline_error": result.baseline_error,
@@ -233,7 +264,7 @@ def result_to_dict(result) -> dict:
             }
             for o in result.real_survivors
         ],
-    }
+    })
 
 
 def badge_dict(result, label: str = "eval coverage") -> dict:

@@ -119,7 +119,14 @@ class MutEvalConfig:
 
 
 def load_config(path: str | Path) -> MutEvalConfig:
-    """Load a ``MutEvalConfig`` from a Python file that defines ``config``."""
+    """Load a ``MutEvalConfig`` from a Python file that defines ``config``.
+
+    SECURITY — trust boundary: this EXECUTES ``path`` as arbitrary Python
+    (``spec.loader.exec_module``). Only ever point it at a config file you wrote
+    or reviewed. Never run a config downloaded from an untrusted source, pasted
+    from an issue, or fetched over the network — doing so runs that code with
+    your privileges and secrets. See SECURITY.md.
+    """
     path = Path(path).resolve()
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")

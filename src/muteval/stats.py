@@ -11,8 +11,13 @@ from __future__ import annotations
 import math
 from typing import Tuple
 
-# z for common two-sided confidence levels.
-_Z = {0.90: 1.6449, 0.95: 1.9600, 0.99: 2.5758}
+# z for common two-sided confidence levels (full precision: norm.ppf(1-alpha/2),
+# so the hand-rolled Wilson interval matches reference libraries to ~1e-9).
+_Z = {
+    0.90: 1.6448536269514722,
+    0.95: 1.959963984540054,
+    0.99: 2.5758293035489004,
+}
 
 
 def wilson_interval(successes: int, n: int, confidence: float = 0.95) -> Tuple[float, float]:

@@ -1,0 +1,19 @@
+# Normalize line endings in the repo to LF; ends the CRLF<->LF churn that
+# repeatedly showed whole files as "modified" with no real content change.
+* text=auto eol=lf
+
+# Explicitly text
+*.py    text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.cfg   text eol=lf
+*.txt   text eol=lf
+
+# Binary (never touch)
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.pdf   binary
