@@ -113,6 +113,15 @@ muteval show 0         # one survivor: operator, suggested fix, baseline→mutan
 muteval report --html coverage.html   # a shareable standalone report
 ```
 
+Beyond mutation coverage, `muteval probe` rates the eval suite along other
+lenses — statistical adequacy, judge reliability (flip-rate + ICC), discrimination,
+redundancy, judge bias, threshold calibration, and human agreement (Cohen's κ via
+`muteval label`) — as a report card with no composite score:
+
+```bash
+muteval probe --config muteval_config.py --html quality.html
+```
+
 ## Why this exists
 
 Regression tools (promptfoo, deepeval, OpenAI Evals, LangSmith) catch

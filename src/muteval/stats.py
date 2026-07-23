@@ -160,6 +160,53 @@ def icc(matrix) -> "float | None":
     return (msr - mse) / denom
 
 
+def cohens_kappa(a, b) -> "float | None":
+    """Cohen's kappa: agreement between two raters BEYOND chance.
+
+    ``a`` and ``b`` are equal-length label sequences (e.g. machine verdict vs
+    human label). Returns kappa in [-1, 1]: 1 = perfect, 0 = chance-level, <0 =
+    worse than chance. Dependency-free; matches
+    ``sklearn.metrics.cohen_kappa_score`` to ~1e-9. None if the sequences are
+    empty or mismatched.
+    """
+    n = len(a)
+    if n == 0 or len(b) != n:
+        return None
+    po = sum(1 for x, y in zip(a, b) if x == y) / n
+    cats = set(a) | set(b)
+    from collections import Counter
+
+    ca, cb = Counter(a), Counter(b)
+    pe = sum((ca.get(c, 0) / n) * (cb.get(c, 0) / n) for c in cats)
+    if pe >= 1.0:
+        return 1.0 if po >= 1.0 else 0.0
+    return (po - pe) / (1.0 - pe)
+
+
+def kappa_ci(a, b, confidence: float = 0.95, resamples: int = 2000, seed: int = 0):
+    """Percentile bootstrap CI for Cohen's kappa (robust at small n, where a
+    normal-approx SE is unreliable). Returns (low, high) or (None, None)."""
+    import random
+
+    n = len(a)
+    if n < 2 or len(b) != n:
+        return (None, None)
+    rng = random.Random(seed)
+    idx = list(range(n))
+    ks = []
+    for _ in range(resamples):
+        s = [rng.choice(idx) for _ in range(n)]
+        k = cohens_kappa([a[i] for i in s], [b[i] for i in s])
+        if k is not None:
+            ks.append(k)
+    if not ks:
+        return (None, None)
+    ks.sort()
+    lo = ks[int((1.0 - confidence) / 2.0 * len(ks))]
+    hi = ks[min(len(ks) - 1, int((1.0 + confidence) / 2.0 * len(ks)))]
+    return (lo, hi)
+
+
 def min_samples_for_lower_bound(
     observed_rate: float, target: float, confidence: float = 0.95, cap: int = 100000
 ) -> int:

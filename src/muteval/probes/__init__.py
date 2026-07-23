@@ -2,6 +2,7 @@
 
 from muteval.probes.base import PROBES, ProbeResult, register_probe, run_probes
 from muteval.probes.discrimination import discrimination
+from muteval.probes.human_agreement import human_agreement
 from muteval.probes.judge_reliability import judge_reliability
 from muteval.probes.redundancy import redundancy
 from muteval.probes.statistical_adequacy import statistical_adequacy
@@ -12,5 +13,6 @@ register_probe("judge_reliability", judge_reliability)
 register_probe("discrimination", discrimination)
 register_probe("redundancy", redundancy)
 register_probe("threshold_calibration", threshold_calibration)
+register_probe("human_agreement", human_agreement)
 
 __all__ = ["PROBES", "ProbeResult", "register_probe", "run_probes"]

@@ -14,7 +14,14 @@ import pytest
 from muteval.probes.discrimination import _auc, _cohens_d
 from muteval.probes.judge_reliability import _krippendorff_alpha_nominal
 from muteval.probes.redundancy import _spearman
-from muteval.stats import _beta_ppf, _betai, icc, jeffreys_interval, wilson_interval
+from muteval.stats import (
+    _beta_ppf,
+    _betai,
+    cohens_kappa,
+    icc,
+    jeffreys_interval,
+    wilson_interval,
+)
 
 # Skip the whole module unless the reference libraries are installed.
 statsmodels = pytest.importorskip("statsmodels.stats.proportion")
@@ -168,3 +175,16 @@ def test_icc_matches_pingouin(matrix):
     ref = float(types.get("ICC(A,1)", types.get("ICC2")))
     assert ours is not None
     assert math.isclose(ours, ref, abs_tol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "a,b",
+    [
+        ([1, 0, 1, 0, 1, 1, 0, 0], [1, 0, 1, 1, 1, 0, 0, 0]),
+        ([2, 2, 1, 0, 1, 2, 0, 1, 2], [2, 1, 1, 0, 1, 2, 0, 0, 2]),  # 3 categories
+        ([1, 1, 1, 1, 0, 0, 0, 0], [1, 1, 1, 1, 0, 0, 0, 0]),         # perfect
+    ],
+)
+def test_cohens_kappa_matches_sklearn(a, b):
+    ref = float(sk_metrics.cohen_kappa_score(a, b))
+    assert math.isclose(cohens_kappa(a, b), ref, abs_tol=1e-9)

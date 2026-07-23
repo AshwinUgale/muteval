@@ -417,6 +417,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Subset of probes to run (default: all).",
     )
     probe.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
+    probe.add_argument(
+        "--html", metavar="PATH", default=None,
+        help="Also write the report card as a standalone HTML page.",
+    )
 
     check = sub.add_parser(
         "check",
@@ -455,6 +459,17 @@ def _build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--json", metavar="PATH", default=None,
         help="Input run JSON (default: the last run at .muteval/last_run.json).",
+    )
+
+    label = sub.add_parser(
+        "label",
+        help="Emit a worksheet (case/output/machine-verdict) to hand-label for "
+        "the human-agreement probe.",
+    )
+    label.add_argument("--config", "-c", required=True, help="Path to a config file.")
+    label.add_argument(
+        "--out", metavar="PATH", default=str(Path(".muteval") / "labels.csv"),
+        help="Where to write the worksheet CSV (default: .muteval/labels.csv).",
     )
     return parser
 
@@ -512,6 +527,30 @@ def _save_last_run(result) -> None:
         )
     except OSError:
         pass
+
+
+def _write_label_worksheet(config, out) -> int:
+    """Run the system + evals over every case and write a hand-labeling
+    worksheet CSV (one row per case×eval) with a blank human_label column."""
+    import csv
+
+    from muteval.evals import coerce_outcome
+    from muteval.runner import _eval_label
+
+    out_path = Path(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    n = 0
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["case_index", "case", "output", "eval", "machine_verdict", "human_label"])
+        for ci, case in enumerate(config.cases):
+            output = config.invoke(config.system, case)
+            for idx, ev in enumerate(config.evals):
+                label = _eval_label(config, idx)
+                verdict = "pass" if coerce_outcome(ev(output, case)).passed else "fail"
+                w.writerow([ci, str(case)[:200], str(output)[:500], label, verdict, ""])
+                n += 1
+    return n
 
 
 def _load_last_run() -> Optional[dict]:
@@ -730,6 +769,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         results = run_probes(config, probes=args.probes)
         print(format_probe_card(results, use_color=not args.no_color))
+        if args.html:
+            from muteval.report import format_probe_card_html
+
+            try:
+                Path(args.html).write_text(format_probe_card_html(results), encoding="utf-8")
+                print(f"muteval: wrote {args.html}")
+            except OSError as exc:
+                print(f"muteval: could not write {args.html}: {exc}", file=sys.stderr)
+                return 2
         return 0 if all(r.ok for r in results) else 1
 
     if args.command == "check":
@@ -769,6 +817,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             return 2
         print(_format_show(match, use_color=not args.no_color))
+        return 0
+
+    if args.command == "label":
+        try:
+            config = load_config(args.config)
+        except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
+            print(f"muteval: {exc}", file=sys.stderr)
+            return 2
+        try:
+            n = _write_label_worksheet(config, args.out)
+        except Exception as exc:  # noqa: BLE001 - surface run/eval failures clearly
+            print(f"muteval: could not build worksheet: {exc}", file=sys.stderr)
+            return 2
+        print(
+            f"muteval: wrote {n} rows to {args.out}. Fill the 'human_label' column "
+            f"(pass/fail), then run `muteval probe` to see human agreement."
+        )
         return 0
 
     if args.command == "report":

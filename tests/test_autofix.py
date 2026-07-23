@@ -80,3 +80,47 @@ def test_verified_fix_carries_the_catching_case():
     verified = suggest_and_verify(_config(), _a_survivor(), [good_fix])
     assert len(verified) == 1
     assert verified[0].killed_case in CASES
+
+
+# --- LLM candidate generation (offline, injected chat) -----------------------
+
+def test_parse_specs_builds_checks_from_vocabulary():
+    from muteval.autofix import parse_specs
+
+    raw = '[{"type": "not_contains", "value": "Sure, refund"}, {"type": "contains", "value": "cannot"}]'
+    evals = parse_specs(raw)
+    assert len(evals) == 2
+    # they behave like the real checks
+    assert bool(evals[0]("I cannot promise a refund.", {})) is True   # not_contains passes
+    assert bool(evals[0]("Sure, refund now!", {})) is False
+
+
+def test_parse_specs_tolerates_fences_and_drops_unknown():
+    from muteval.autofix import parse_specs
+
+    raw = '```json\n[{"type": "contains", "value": "x"}, {"type": "os_system", "value": "rm -rf /"}]\n```'
+    evals = parse_specs(raw)
+    assert len(evals) == 1  # the bogus/unsafe type is dropped, no code executed
+
+
+def test_parse_specs_handles_garbage():
+    from muteval.autofix import parse_specs
+
+    assert parse_specs("not json at all") == []
+    assert parse_specs('{"not": "a list"}') == []
+
+
+def test_autofix_end_to_end_with_injected_llm():
+    from muteval.autofix import autofix
+
+    # A fake LLM that proposes a good check + a useless one.
+    def fake_chat(prompt, model):
+        assert "regression" in prompt.lower()
+        return '[{"type": "not_contains", "value": "Sure, refund"}, {"type": "contains", "value": "xyz-never"}]'
+
+    verified = autofix(_config(), _a_survivor(), chat=fake_chat)
+    # Only the not_contains("Sure, refund") check is verified: it passes on the
+    # baseline ("I cannot promise a refund") and fails on the mutant.
+    names = [v.name for v in verified]
+    assert "suggested_not_contains" in names
+    assert "suggested_contains" not in names  # 'xyz-never' fails the baseline too
