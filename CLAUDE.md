@@ -222,8 +222,21 @@ Target list + plan for running muteval against real OSS repos to find
 eval gaps, contribute, and publish: `docs/OUTREACH-targets-and-plan.md`.
 Lead with a gift not a pitch; filter outreach by HIGH severity.
 
-## What matters most right now
+## What matters most right now (DECIDED 2026-07 — supersedes earlier GTM framing)
 
-Validate demand, not competitor speed. Get muteval running on 2-3 real eval
-suites, publish a "your evals scored X%" writeup, ship tool-agnostic adapters.
-Mindshare > moat for an OSS land-grab.
+This is an **OSS credibility / portfolio project, not a product or a land-grab.**
+After pressure-testing the findings, demand, and competition honestly, the goal
+is narrowed to: the best, most *honest* mutation-testing-for-evals tool we can
+build, as a strong open-source project and proof of eval expertise.
+
+- **No second repo / no org.** The eval-quality probes stay a documented layer
+  INSIDE muteval (v0.6 branch gate: split only on real external demand — none exists).
+- **PARKED:** agent / LLM-driven mutations (capability), adoption / outreach / GTM,
+  and chasing "findings" on real repos. The obvious eval gaps are known and already
+  mitigated by competent teams; muteval is a **per-suite diagnostic**, not a
+  universal flaw-finder. Frame it that way everywhere.
+- **Focus:** pure quality + honesty — the trust core, ruthlessly honest docs
+  (`docs/LIMITATIONS.md` now states the three hard limits), the strong probe lenses
+  (judge reliability, judge bias, discrimination) done well; statistical-adequacy /
+  redundancy are hygiene footnotes.
+- **One honest demo at the very end.** Full rationale: `docs/ROADMAP-next-level.md` banner.

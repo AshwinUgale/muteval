@@ -4,6 +4,38 @@ muteval is deliberately honest about what it does *not* do. Reading this should
 make you trust the tool *more*, not less: a tool that names its own limits is
 more reliable than one that pretends to measure everything.
 
+## The three things muteval cannot do for you (read this first)
+
+These are the hard, structural limits — not bugs to be fixed later, but the
+nature of the technique. Internalize them before you act on any output.
+
+1. **muteval can't tell you whether a survivor *matters* — only that your eval
+   didn't catch it.** A survivor is a *candidate* gap. It's a *real* gap only if
+   the injected change (a) can actually happen in your system and (b) would
+   actually be wrong if it did. Counter-example: corrupting a retrieved document
+   is meaningless when the documents *are* your source of truth — the doc can't
+   be "wrong," so a faithfulness metric passing the changed answer is correct
+   behavior, not a gap. Every survivor needs a human to ask *"could this happen,
+   and would it be bad?"* Many won't survive that question. **muteval surfaces
+   candidates; you triage them.**
+
+2. **muteval — and every label-free check — measures coverage/consistency, not
+   validity.** Whether an eval is *correct* (agrees with ground truth or a human)
+   cannot be measured without labels. The mutation score, judge-reliability,
+   judge-bias, and redundancy all run label-free and catch *hygiene* problems
+   (does the suite notice a change? is the judge stable / unbiased / redundant?).
+   None of them tells you the eval is *right*. Validity requires the
+   discrimination / human-agreement checks, which require labeled examples. This
+   is the reliability-without-validity wall, and it's fundamental.
+
+3. **muteval is a per-suite diagnostic, not a universal flaw-finder.** It tells
+   you where *your specific* suite has a hole. It does not discover new universal
+   truths about evaluation — the obvious gaps (faithfulness ≠ correctness,
+   reference-free ≠ ground truth) are already well known, and competent teams
+   mitigate them with other layers (offline labeled evals, retrieval-quality
+   metrics, human review). Read muteval's output as *"here's a hole in this suite
+   worth a look,"* never as *"we discovered that evals are broken."*
+
 ## What muteval needs (and where it doesn't apply)
 
 muteval mutates the **system under test** and reruns your **eval suite**, so it

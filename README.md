@@ -13,8 +13,9 @@ muteval answers the question every eval suite quietly dodges: *would my evals
 actually fail if my system silently got worse?* It deliberately degrades the
 thing under test, reruns **your existing eval suite** against each degraded
 version (a "mutant"), and reports a **mutation score** — the percentage of
-injected regressions your evals caught. The ones they miss are **survivors**:
-concrete blind spots in your eval coverage.
+injected regressions your evals caught. The ones they miss are **survivors** —
+candidate coverage gaps to triage: muteval surfaces them, you decide which ones
+actually matter (see [docs/LIMITATIONS.md](docs/LIMITATIONS.md)).
 
 It's `mutmut` / Stryker, but for evals.
 
@@ -113,10 +114,14 @@ muteval show 0         # one survivor: operator, suggested fix, baseline→mutan
 muteval report --html coverage.html   # a shareable standalone report
 ```
 
-Beyond mutation coverage, `muteval probe` rates the eval suite along other
-lenses — statistical adequacy, judge reliability (flip-rate + ICC), discrimination,
-redundancy, judge bias, threshold calibration, and human agreement (Cohen's κ via
-`muteval label`) — as a report card with no composite score:
+Beyond mutation coverage, `muteval probe` audits the eval suite along other
+lenses. The load-bearing ones catch real, common defects: **judge reliability**
+(does your LLM judge flip on identical re-runs?), **judge bias**
+(position / verbosity / self-preference), and **discrimination** (can the eval
+tell good outputs from bad?). The rest are hygiene checks — statistical adequacy
+and redundancy — plus, only if you have labels, **human agreement** (Cohen's κ
+via `muteval label`), the one true validity check. A report card, no composite
+score:
 
 ```bash
 muteval probe --config muteval_config.py --html quality.html
@@ -248,8 +253,10 @@ discrimination, redundancy, judge bias, threshold calibration, human agreement) 
 an autofix verify loop that proposes an eval for a survivor and confirms it kills
 the mutant while the baseline stays green.
 
-Next: LLM-driven semantic mutations · agent/trace mutation · A/B suite
-comparison · the `muteval probe` layer maturing into a standalone eval-evaluator.
+Possible later (not the current focus): LLM-driven semantic mutations ·
+agent/trace mutation · A/B suite comparison. The `muteval probe` layer stays a
+documented part of muteval — an honest eval-quality/judge-audit layer, not a
+separate product. Current focus is quality and honesty over new scope.
 
 ## Contributing
 
