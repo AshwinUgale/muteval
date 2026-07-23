@@ -10,7 +10,7 @@ they miss are **survivors**: candidate coverage gaps for you to triage.
 
 It's `mutmut` / Stryker, but for evals.
 
-[See it run on a real suite → Live demo](demo.html){ .md-button .md-button--primary }
+[See it run on a promptfoo suite → Example](real-report.html){ .md-button .md-button--primary }
 [Read the limits](LIMITATIONS.md){ .md-button }
 
 ---
@@ -43,7 +43,7 @@ For the full picture, read the [Limitations](LIMITATIONS.md) and the
 
 ## Where to go next
 
-- **[Live demo](demo.html)** — a reproducible run finding a real coverage gap and closing the loop.
+- **[Example — a promptfoo suite](real-report.html)** — install, point it at a config, read the two reports.
 - **[Adopting muteval](ADOPTION.md)** — a ~1-hour integration guide for your own suite.
 - **[Findings](findings.md)** — does the mutation score actually track eval quality? (Yes, across four domains, CI-enforced.)
 - **[Plugins](PLUGINS.md)** — extend with your own operators, probes, adapters, and reporters.

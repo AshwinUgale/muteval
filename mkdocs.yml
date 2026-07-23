@@ -42,11 +42,11 @@ exclude_docs: |
   MUTMUT.md
   devto-post.md
   writeup-*.md
+  demo.html
 
 nav:
   - Home: index.md
   - "Example — a promptfoo suite ↗": real-report.html
-  - "How it works ↗": demo.html
   - Limitations: LIMITATIONS.md
   - Adopting muteval: ADOPTION.md
   - Findings: findings.md
