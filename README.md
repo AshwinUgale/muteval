@@ -110,6 +110,7 @@ Triage the survivors without re-running (the last run is saved to
 ```bash
 muteval results        # ranked survivors (HIGH first) with ids
 muteval show 0         # one survivor: operator, suggested fix, baseline→mutant diff
+muteval report --html coverage.html   # a shareable standalone report
 ```
 
 ## Why this exists

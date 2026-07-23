@@ -25,6 +25,7 @@ rather than faking a signal.
 from __future__ import annotations
 
 import math
+from typing import Dict
 
 from muteval.evals import coerce_outcome
 from muteval.probes.base import ProbeResult
@@ -82,7 +83,8 @@ def _mw_pvalue(good, bad, u):
 
 
 def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
-    good, bad = {}, {}
+    good: Dict[str, list] = {}
+    bad: Dict[str, list] = {}
     have = False
     for case in config.cases:
         goods = case.get("good") if isinstance(case, dict) else None

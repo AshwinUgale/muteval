@@ -35,7 +35,7 @@ Repository = "https://github.com/AshwinUgale/muteval"
 Issues = "https://github.com/AshwinUgale/muteval/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "hypothesis>=6.0", "coverage>=7.0"]
+dev = ["pytest>=7.0", "hypothesis>=6.0", "coverage>=7.0", "mypy>=1.8,<2.0"]
 # Reference libraries used ONLY to cross-check muteval's dependency-free math in
 # tests (tests/test_stats_reference.py). Never a runtime dependency.
 verify = ["statsmodels>=0.14", "scipy>=1.10", "scikit-learn>=1.2", "krippendorff>=0.6", "pingouin>=0.5"]
@@ -49,6 +49,21 @@ muteval = "muteval.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/muteval"]
+
+[tool.mypy]
+# Pragmatic gate today, not --strict. strict_optional is off because the config
+# dataclass uses a validated-Optional pattern (fields are Optional at
+# construction but guaranteed non-None after __post_init__), which mypy can't
+# narrow. Tightening toward --strict is a tracked follow-up (ROADMAP §4.5).
+python_version = "3.9"
+strict_optional = false
+warn_unused_ignores = true
+files = ["src/muteval"]
+
+[[tool.mypy.overrides]]
+# Optional third-party integrations (behind extras) have no stubs installed.
+module = ["ragas.*", "deepeval.*", "yaml", "certifi"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = "--ignore=mutants"

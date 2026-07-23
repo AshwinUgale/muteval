@@ -114,7 +114,7 @@ def redundancy(config, max_corr: float = 0.9, method: str = "spearman") -> Probe
     if len(config.evals) < 2:
         return _na("need >= 2 evals")
 
-    vectors = {}
+    vectors: dict = {}
     for case in config.cases:
         try:
             output = config.invoke(config.system, case)

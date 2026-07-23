@@ -64,8 +64,8 @@ def _krippendorff_alpha_nominal(items):
 
 def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> ProbeResult:
     total = flipped = 0
-    worst = {}                 # eval name -> flips
-    matrices = {}              # eval name -> [per-case list of `runs` verdicts]
+    worst: dict = {}           # eval name -> flips
+    matrices: dict = {}        # eval name -> [per-case list of `runs` verdicts]
     for case in config.cases:
         try:
             output = config.invoke(config.system, case)  # fix the output once

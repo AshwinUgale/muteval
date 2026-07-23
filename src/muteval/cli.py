@@ -447,6 +447,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     show.add_argument("id", type=int, help="Survivor id (from `muteval results`).")
     show.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
+
+    report = sub.add_parser(
+        "report", help="Render a shareable HTML report from a run.",
+    )
+    report.add_argument("--html", required=True, metavar="PATH", help="Output HTML file.")
+    report.add_argument(
+        "--json", metavar="PATH", default=None,
+        help="Input run JSON (default: the last run at .muteval/last_run.json).",
+    )
     return parser
 
 
@@ -731,11 +740,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 2
         from muteval.doctor import all_ok, run_checks
 
-        results = run_checks(
+        check_results = run_checks(
             config, operators=args.operators, use_model=not args.no_model, full=args.full
         )
-        print(_format_checks(results, use_color=not args.no_color))
-        return 0 if all_ok(results) else 2
+        print(_format_checks(check_results, use_color=not args.no_color))
+        return 0 if all_ok(check_results) else 2
 
     if args.command == "results":
         data = _load_last_run()
@@ -760,6 +769,32 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             return 2
         print(_format_show(match, use_color=not args.no_color))
+        return 0
+
+    if args.command == "report":
+        if args.json:
+            try:
+                data = json.loads(Path(args.json).read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                print(f"muteval: could not read {args.json}: {exc}", file=sys.stderr)
+                return 2
+        else:
+            data = _load_last_run()
+        if not data:
+            print(
+                "muteval: no run to report. Run `muteval run ...` first, or pass "
+                "--json PATH.",
+                file=sys.stderr,
+            )
+            return 2
+        from muteval.report import format_report_html
+
+        try:
+            Path(args.html).write_text(format_report_html(data), encoding="utf-8")
+        except OSError as exc:
+            print(f"muteval: could not write {args.html}: {exc}", file=sys.stderr)
+            return 2
+        print(f"muteval: wrote {args.html}")
         return 0
 
     return 2

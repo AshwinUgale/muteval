@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 
 from muteval.runner import MutationResult
@@ -293,3 +294,92 @@ def badge_dict(result, label: str = "eval coverage") -> dict:
     pct = round(eff * 100)
     color = "brightgreen" if pct >= 80 else "yellow" if pct >= 50 else "red"
     return {"schemaVersion": 1, "label": label, "message": f"{pct}%", "color": color}
+
+
+def _diff_html(base: str, mutant: str) -> str:
+    """A minimal line-diff of two outputs as escaped, colored HTML rows."""
+    import difflib
+
+    rows = []
+    for ln in difflib.unified_diff(
+        base.splitlines(), mutant.splitlines(),
+        fromfile="baseline", tofile="mutant", lineterm="",
+    ):
+        cls = "add" if ln.startswith("+") else "del" if ln.startswith("-") else "ctx"
+        rows.append(f'<div class="dl {cls}">{html.escape(ln)}</div>')
+    return "".join(rows) or '<div class="dl ctx">(no textual diff)</div>'
+
+
+def format_report_html(data: dict, title: str = "muteval — eval coverage report") -> str:
+    """Render a result_to_dict() payload (or a saved last_run.json) as a
+    self-contained HTML report: score, survivors, and baseline→mutant diffs."""
+    def pct(x):
+        return "n/a" if x is None else f"{round(x * 100)}%"
+
+    status = data.get("status", "unknown")
+    valid = status == "valid"
+    eff = data.get("effective_score")
+    bar_color = (
+        "#2ea043" if (eff or 0) >= 0.8 else "#d29922" if (eff or 0) >= 0.5 else "#f85149"
+    )
+    ci = data.get("effective_score_ci") or [0, 0]
+    survivors = data.get("survivors", [])
+
+    cards = []
+    for s in survivors:
+        sev = (s.get("severity") or "medium").lower()
+        base, mut = s.get("baseline_output"), s.get("mutant_output")
+        diff = _diff_html(base, mut) if (base is not None and mut is not None) else \
+            '<div class="dl ctx">(output unchanged / not captured)</div>'
+        cards.append(
+            f'''<div class="card {sev}">
+  <div class="chd"><span class="sev {sev}">{sev.upper()}</span>
+    <span class="op">{html.escape(str(s.get("operator", "")))}</span>
+    <span class="cid">#{s.get("id", "")}</span></div>
+  <div class="desc">{html.escape(str(s.get("description", "")))}</div>
+  <div class="fix"><b>fix:</b> {html.escape(str(s.get("fix", "") or "—"))}</div>
+  <div class="diff">{diff}</div>
+</div>'''
+        )
+    cards_html = "\n".join(cards) or '<p class="ok">No survivors — your evals caught every injected regression.</p>'
+
+    banner = "" if valid else (
+        f'<div class="warn">⚠ INVALID / INCOMPLETE run (status: {html.escape(status)}) '
+        "— the score below is not trustworthy.</div>"
+    )
+
+    return f"""<!doctype html>
+<meta charset="utf-8"><title>{html.escape(title)}</title>
+<style>
+ body{{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+ h1{{font-size:1.4rem}} .muted{{color:#656d76}}
+ .warn{{background:#ffebe9;border:1px solid #ff818266;padding:.6rem .8rem;border-radius:6px;margin:1rem 0;color:#a40e26}}
+ .score{{font-size:2.4rem;font-weight:700}}
+ .track{{height:12px;background:#eaeef2;border-radius:6px;overflow:hidden;margin:.4rem 0 1rem}}
+ .fill{{height:100%;background:{bar_color}}}
+ .stats{{display:flex;gap:1.5rem;flex-wrap:wrap;margin:.5rem 0 1.5rem}} .stats div b{{display:block;font-size:1.2rem}}
+ .card{{border:1px solid #d0d7de;border-left-width:5px;border-radius:8px;padding:.8rem 1rem;margin:.8rem 0}}
+ .card.high{{border-left-color:#f85149}} .card.medium{{border-left-color:#d29922}} .card.low{{border-left-color:#9aa0a6}}
+ .chd{{display:flex;gap:.6rem;align-items:center}} .op{{font-family:ui-monospace,monospace;font-weight:600}} .cid{{color:#8b949e;margin-left:auto}}
+ .sev{{font-size:.72rem;font-weight:700;padding:.1rem .4rem;border-radius:4px;color:#fff}}
+ .sev.high{{background:#f85149}} .sev.medium{{background:#d29922}} .sev.low{{background:#9aa0a6}}
+ .desc{{margin:.4rem 0}} .fix{{color:#0969da;font-size:.9rem;margin:.3rem 0}}
+ .diff{{background:#f6f8fa;border-radius:6px;padding:.4rem;font-family:ui-monospace,monospace;font-size:.82rem;overflow:auto;margin-top:.5rem}}
+ .dl{{white-space:pre-wrap}} .dl.add{{background:#e6ffec;color:#116329}} .dl.del{{background:#ffebe9;color:#a40e26}} .dl.ctx{{color:#656d76}}
+ .ok{{color:#116329;font-weight:600}}
+</style>
+<h1>{html.escape(title)}</h1>
+{banner}
+<div class="score">{pct(eff)} <span class="muted" style="font-size:1rem">effective coverage</span></div>
+<div class="track"><div class="fill" style="width:{round((eff or 0)*100)}%"></div></div>
+<div class="stats">
+ <div><b>{pct(data.get("score"))}</b>raw score</div>
+ <div><b>{ci[0]*100:.0f}–{ci[1]*100:.0f}%</b>95% CI</div>
+ <div><b>{data.get("killed",0)}/{data.get("evaluated",0)}</b>killed / evaluated</div>
+ <div><b>{data.get("inert",0)}</b>inert (excluded)</div>
+ <div><b>{data.get("high_severity_survivors",0)}</b>high-severity survivors</div>
+</div>
+<h2>Survivors <span class="muted">({len(survivors)})</span></h2>
+{cards_html}
+<p class="muted" style="margin-top:2rem;font-size:.85rem">Generated by muteval. Each survivor is an output change your evals did not catch — write an eval that fails on it, then re-run.</p>
+"""

@@ -60,7 +60,7 @@ def scorer_to_eval(
 def named(eval_fn: EvalFn, name: str) -> EvalFn:
     """Attach a ``__name__`` to an eval for nicer report labels."""
     try:
-        eval_fn.__name__ = name  # type: ignore[attr-defined]
+        eval_fn.__name__ = name
     except (AttributeError, TypeError):
         pass
     return eval_fn
