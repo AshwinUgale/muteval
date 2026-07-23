@@ -624,7 +624,19 @@ def _format_show(s: dict, use_color: bool = True) -> str:
     return "\n".join(lines)
 
 
+def _force_utf8_output() -> None:
+    """Windows consoles default to cp1252, which can't encode the report's box/
+    arrow glyphs and makes ``print`` raise UnicodeEncodeError. Reconfigure stdout
+    /stderr to UTF-8 (a no-op on POSIX and safe if the stream can't reconfigure)."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - not a TextIOWrapper / already fine
+            pass
+
+
 def main(argv: Optional[List[str]] = None) -> int:
+    _force_utf8_output()
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.command is None:

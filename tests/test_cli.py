@@ -290,3 +290,18 @@ def test_init_rag_template_writes_and_runs(tmp_path):
     result = run_mutation_testing(cfg)
     assert result.status == "valid"
     assert result.baseline_passed is True
+
+
+def test_cli_output_survives_a_cp1252_stdout(monkeypatch):
+    # Reproduces the Windows cp1252 console cross-platform: the report has box/
+    # arrow glyphs that cp1252 can't encode. main() must reconfigure stdout to
+    # UTF-8 and not raise UnicodeEncodeError (regression: Windows CI self-check).
+    import io
+    import sys
+
+    buf = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", newline="")
+    monkeypatch.setattr(sys, "stdout", buf)
+    code = main([
+        "run", "--config", "examples/support_bot/muteval_config.py", "--no-color",
+    ])
+    assert code == 0
