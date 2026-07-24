@@ -1,0 +1,1217 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Mutation testing for your LLM evals — find out if they'd actually catch a regression.">
+      
+      
+      
+        <link rel="canonical" href="https://ashwinugale.github.io/muteval/findings/">
+      
+      
+        <link rel="prev" href="../ADOPTION/">
+      
+      
+        <link rel="next" href="../PLUGINS/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Findings - muteval</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#findings-does-mutevals-mutation-score-measure-eval-suite-quality" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="muteval" class="md-header__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            muteval
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Findings
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="muteval" class="md-nav__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    muteval
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial (5 min)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../real-report.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Example — a promptfoo suite ↗
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LIMITATIONS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADOPTION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adopting muteval
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Findings
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Findings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TL;DR
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-claim-stated-precisely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The claim, stated precisely
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-1-controlled-deterministic-no-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 1 — controlled, deterministic, no API
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Experiment 1 — controlled, deterministic, no API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-intended-workflow-demonstrated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The intended workflow, demonstrated
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honest-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honest caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-2-a-live-llm-run-on-gpt-4o-mini" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 2 — a live LLM run on GPT-4o-mini
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-3-replicated-deepeval-and-ragas-suites-gpt-4o-mini" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 3 — replicated deepeval and RAGAS suites (GPT-4o-mini)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-4-literal-deepeval-and-ragas-metrics-real-adapters-run-in-colab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 4 — literal deepeval AND ragas metrics (real adapters, run in Colab)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#real-metric-validation-reproducible-with-an-api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Real-metric validation (reproducible with an API key)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-supports-and-what-it-doesnt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this supports — and what it doesn't
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproduce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproduce
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLUGINS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRIOR-ART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prior art
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TL;DR
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-claim-stated-precisely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The claim, stated precisely
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-1-controlled-deterministic-no-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 1 — controlled, deterministic, no API
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Experiment 1 — controlled, deterministic, no API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-intended-workflow-demonstrated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The intended workflow, demonstrated
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honest-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honest caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-2-a-live-llm-run-on-gpt-4o-mini" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 2 — a live LLM run on GPT-4o-mini
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-3-replicated-deepeval-and-ragas-suites-gpt-4o-mini" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 3 — replicated deepeval and RAGAS suites (GPT-4o-mini)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiment-4-literal-deepeval-and-ragas-metrics-real-adapters-run-in-colab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiment 4 — literal deepeval AND ragas metrics (real adapters, run in Colab)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#real-metric-validation-reproducible-with-an-api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Real-metric validation (reproducible with an API key)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-supports-and-what-it-doesnt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this supports — and what it doesn't
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproduce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproduce
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="findings-does-mutevals-mutation-score-measure-eval-suite-quality">Findings: does muteval's mutation score measure eval-suite quality?<a class="headerlink" href="#findings-does-mutevals-mutation-score-measure-eval-suite-quality" title="Permanent link">&para;</a></h1>
+<p>muteval's central claim is a <em>meta</em> one: the mutation score isn't a property of
+your system, it's a property of your <strong>eval suite</strong> — a higher score means your
+evals would catch more real regressions. This document reports what we've
+actually measured against that claim, and is deliberately honest about what the
+evidence does and does not show.</p>
+<h2 id="tldr">TL;DR<a class="headerlink" href="#tldr" title="Permanent link">&para;</a></h2>
+<ul>
+<li>In a controlled experiment where a deterministic system genuinely reacts to
+  prompt and context mutations, the effective mutation score <strong>rose
+  monotonically with eval-suite coverage, from 0% (empty suite) to 100%
+  (complete suite)</strong> — and it holds across <strong>four independent domains</strong>
+  (support bot, code review, RAG grounding, HR policy), each climbing 0% -&gt; 100%
+  with coverage (e.g. support bot <code>0 -&gt; 33 -&gt; 67 -&gt; 100%</code>; code review
+  <code>0 -&gt; 35 -&gt; 71 -&gt; 100%</code>). The relationship is <strong>enforced in CI</strong>
+  (<code>tests/test_eval_quality.py</code>) across all four, so it can't silently regress.
+  The metric behaves as advertised.</li>
+<li>On a <strong>live GPT-4o-mini run</strong>, a standard faithfulness + relevancy RAG suite
+  caught <strong>0 of 24</strong> prompt regressions; adding one unanswerable case + an
+  abstention check raised it to <strong>25% (6/24)</strong>, killing exactly the mutants that
+  break the abstain/don't-invent guardrail.</li>
+<li>Survivors are actionable: adding the specific evals that cover a survivor
+  <em>kills</em> it and lifts the score, which is the intended workflow.</li>
+<li>Some survivors are <strong>equivalent mutants</strong> (a weakening that doesn't change
+  behavior, or dropping a context doc irrelevant to the case). These are a known
+  limitation of mutation testing and are discussed below, not hidden.</li>
+</ul>
+<h2 id="the-claim-stated-precisely">The claim, stated precisely<a class="headerlink" href="#the-claim-stated-precisely" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>If eval suite B catches strictly more behavioral regressions than suite A,
+then <code>mutation_score(B) &gt;= mutation_score(A)</code> on the same system and mutants.</p>
+</blockquote>
+<p>This is the falsifiable core. If a stronger suite did <em>not</em> score higher, the
+metric would be measuring noise. So we built suites of strictly increasing
+coverage over one system and measured.</p>
+<h2 id="experiment-1-controlled-deterministic-no-api">Experiment 1 — controlled, deterministic, no API<a class="headerlink" href="#experiment-1-controlled-deterministic-no-api" title="Permanent link">&para;</a></h2>
+<p><code>validation/eval_quality_experiment/run_experiment.py</code></p>
+<p>We use a support-assistant prompt with four rules (cite the order ID; don't
+promise refunds; never reveal another customer's data; be polite) plus two
+retrieved context documents. The "model" is a deterministic function whose
+output <strong>faithfully reflects which rules survive in the prompt and which
+documents survive in the context</strong> — so a mutation that drops or inverts a rule
+genuinely produces a violating answer, exactly as a degraded real system would.
+The eval checks are independent of the prompt.</p>
+<p>We then grade the <em>same</em> system + mutants with four suites of increasing
+coverage (effective mutation score, i.e. excluding output-unchanged mutants):</p>
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Checks added</th>
+<th>Support bot</th>
+<th>Code review</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S0 smoke</td>
+<td>output non-empty</td>
+<td><strong>0%</strong></td>
+<td><strong>0%</strong></td>
+</tr>
+<tr>
+<td>S1 basic</td>
+<td>+ a core rule (cite / injection)</td>
+<td><strong>33%</strong></td>
+<td><strong>35%</strong></td>
+</tr>
+<tr>
+<td>S2 good</td>
+<td>+ more rules (refund+leak / approve+cite)</td>
+<td><strong>67%</strong></td>
+<td><strong>71%</strong></td>
+</tr>
+<tr>
+<td>S3 strong</td>
+<td>+ polite/concise + grounded in context</td>
+<td><strong>100%</strong></td>
+<td><strong>100%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The score climbs strictly with coverage in both domains, and the uncaught set
+shrinks at each step until the complete suite catches every degrading mutant.
+This is the result the claim predicts: <strong>the mutation score is a faithful proxy
+for how much real degradation the suite would catch</strong> — and, because the two
+domains agree and it's enforced in CI, it isn't a single-example fluke.</p>
+<h3 id="the-intended-workflow-demonstrated">The intended workflow, demonstrated<a class="headerlink" href="#the-intended-workflow-demonstrated" title="Permanent link">&para;</a></h3>
+<p>Each step from S(n) to S(n+1) means writing the specific evals a survivor named;
+those evals kill exactly the mutants that break that behavior and lift the score.
+That is the loop muteval is meant to drive: <em>a survivor names a missing eval; you
+write it; the score goes up.</em></p>
+<h2 id="honest-caveats">Honest caveats<a class="headerlink" href="#honest-caveats" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Equivalent mutants.</strong> Some of S3's 7 survivors are not real regressions:
+  weakening <code>must -&gt; should</code> on a rule the model still honors, or dropping the
+  billing context doc that the port question never needed. Classic mutation
+  testing has the same problem; a survivor is a <em>candidate</em> gap, not a proof of
+  one. Quantifying and filtering equivalents is future work (and the right place
+  to engage the related-work literature, e.g. MILE, arXiv 2409.04831).</li>
+<li><strong>Deterministic model.</strong> Experiment 1 removes LLM non-determinism on purpose,
+  to isolate the measurement. It demonstrates the metric behaves correctly; it
+  does <strong>not</strong> by itself prove the result holds under a noisy real model — that's
+  what Experiment 2 and the real-metric configs are for.</li>
+<li><strong>One system, hand-built suites.</strong> This is a controlled demonstration, not a
+  broad empirical study across many real repos. Scaling to several public suites
+  is the next step toward a publishable claim.</li>
+</ul>
+<h2 id="experiment-2-a-live-llm-run-on-gpt-4o-mini">Experiment 2 — a live LLM run on GPT-4o-mini<a class="headerlink" href="#experiment-2-a-live-llm-run-on-gpt-4o-mini" title="Permanent link">&para;</a></h2>
+<p><code>validation/openai_judge_rag/</code> (real model, real LLM-as-judge evals, run on
+GPT-4o-mini). A small RAG assistant graded by a <strong>faithfulness</strong> judge and a
+<strong>relevancy</strong> judge — the two metrics almost every RAG eval suite starts with.</p>
+<table>
+<thead>
+<tr>
+<th>Eval suite</th>
+<th>Mutation score</th>
+<th>Mutants killed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>faithfulness + relevancy (2 answerable cases)</td>
+<td><strong>0%</strong></td>
+<td>0 / 24</td>
+</tr>
+<tr>
+<td>+ 1 unanswerable case + an <code>abstains_when_unanswerable</code> check</td>
+<td><strong>25%</strong></td>
+<td>6 / 24</td>
+</tr>
+</tbody>
+</table>
+<p>Two things make this more than a toy — read them with the <em>Scope</em> caveat in
+"What this supports" below, which keeps the claim honest:</p>
+<ol>
+<li>
+<p><strong>The standard suite was completely blind.</strong> Faithfulness + relevancy caught
+   <strong>none</strong> of 24 prompt regressions — not inverting "do not invent facts", not
+   dropping "cite the source", not deleting half the prompt. The faithfulness
+   judge returned a flat 1.0 on <em>every</em> mutant (every survivor is the same
+   <code>+0.300</code> near-miss). When the test cases have answers sitting in the context,
+   these metrics simply can't see prompt degradation. That is exactly the kind of
+   blind spot muteval exists to surface on a given suite (read with the <em>Scope</em>
+   caveat below — this is a known property of reference-free metrics, not proof a
+   suite is "broken").</p>
+</li>
+<li>
+<p><strong>The kills were surgical.</strong> Adding one unanswerable case + an abstention
+   check killed exactly the 6 mutants that break the "if it's not in the
+   context, say I don't know — do not invent facts" guardrail (the weaken/flip of
+   that line, the two operators that delete it, and both truncations that chop
+   off the prompt tail where it lives). The eval we added caught precisely the
+   regressions it should, and nothing it shouldn't. The remaining 18 survivors
+   are honest, named gaps — citation, tone, greeting handling — each a concrete
+   "write this eval next."</p>
+</li>
+</ol>
+<p>A bonus finding from building this suite: the LLM judge itself was the weakest
+link. A first cut silently scored a perfect, fully-grounded answer <strong>0.0</strong> (a
+parsing artifact — the judge's reasoning mentioned a "0"), and a second cut gave
+a mushy <strong>0.5</strong> to the same answer (the 0-1 float scale invites hedging). Both
+would have sat invisibly inside a "passing" suite. Switching to a 0-10 integer
+scale with last-number parsing fixed it. Brittle judges are part of <em>why</em> green
+suites lie — and mutation testing is what dragged the problem into the light.</p>
+<h2 id="experiment-3-replicated-deepeval-and-ragas-suites-gpt-4o-mini">Experiment 3 — replicated deepeval and RAGAS suites (GPT-4o-mini)<a class="headerlink" href="#experiment-3-replicated-deepeval-and-ragas-suites-gpt-4o-mini" title="Permanent link">&para;</a></h2>
+<p>To check the blindness isn't an artifact of one rubric set, two more live configs
+replicate real frameworks' metric suites, graded by GPT-4o-mini (the <em>literal</em>
+framework objects are exercised by the adapter configs in the same folders, which
+need the package installed):</p>
+<table>
+<thead>
+<tr>
+<th>Suite (<code>validation/...</code>)</th>
+<th>Metrics</th>
+<th>Mutation score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>deepeval_style_rag</code></td>
+<td>AnswerRelevancy + Faithfulness (deepeval's RAG example prompt)</td>
+<td><strong>0%</strong> (0/12)</td>
+</tr>
+<tr>
+<td><code>ragas_style_rag</code></td>
+<td>Faithfulness + AnswerRelevancy + AnswerCorrectness (modeled on <code>benitomartin/rag-langchain-ragas</code>)</td>
+<td><strong>0%</strong> (0/9)</td>
+</tr>
+</tbody>
+</table>
+<p>Same story across three independent metric sets (these two plus the pair in
+Experiment 2): the faithfulness / relevancy / correctness judges saturate at the
+top of their scale on answerable cases — every survivor is the identical
+<code>+0.300</code> / <code>+0.200</code> near-miss — so prompt regressions pass straight through. The
+remedy is the one demonstrated in Experiment 2: add a case + check that actually
+exercises the degraded behavior, and survivors convert to kills.</p>
+<h2 id="experiment-4-literal-deepeval-and-ragas-metrics-real-adapters-run-in-colab">Experiment 4 — literal deepeval AND ragas metrics (real adapters, run in Colab)<a class="headerlink" href="#experiment-4-literal-deepeval-and-ragas-metrics-real-adapters-run-in-colab" title="Permanent link">&para;</a></h2>
+<p>With deepeval actually installed (<code>pip install -e ".[deepeval]"</code>), muteval grades
+through deepeval's <strong>real</strong> <code>AnswerRelevancyMetric</code> + <code>FaithfulnessMetric</code> objects
+— confirmed by deepeval's own "✨ running ... Metric" banners during the run. This
+upgrades Experiment 3's deepeval result from a stdlib replica to the actual
+framework code.</p>
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Metrics</th>
+<th>Mutation score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>deepeval RAG example (literal adapter, GPT-4o-mini, <code>--max-mutants 8</code>)</td>
+<td>AnswerRelevancy + Faithfulness</td>
+<td><strong>0%</strong> (0/7, 1 errored)</td>
+</tr>
+<tr>
+<td>ragas RAG suite (literal adapter, GPT-4o-mini, <code>--max-mutants 6</code>)</td>
+<td>Faithfulness + ResponseRelevancy</td>
+<td><strong>0%</strong> (0/6)</td>
+</tr>
+</tbody>
+</table>
+<p>Baseline passed; every survivor was a <code>+0.500</code> near-miss (Answer Relevancy pinned
+at the top of its scale). The same blindness seen with the replicas holds with
+deepeval's genuine metrics: standard relevancy + faithfulness did not catch the
+injected prompt regressions on these answerable cases.</p>
+<p>Both runs use the frameworks' genuine metric objects. With <strong>real ragas</strong>,
+<code>ResponseRelevancy</code> stayed near the top of its scale on every mutant (survivors
+are ~+0.28 near-misses) — the same blindness deepeval showed. Getting real ragas
+to import at all required a <em>patched</em> ragas: the released version hard-imports a
+removed langchain module (issue #2741; fix in PR #2746). That the leading RAG-eval
+library doesn't currently import on a fresh install is itself a small data point
+on eval-tooling fragility.</p>
+<h2 id="real-metric-validation-reproducible-with-an-api-key">Real-metric validation (reproducible with an API key)<a class="headerlink" href="#real-metric-validation-reproducible-with-an-api-key" title="Permanent link">&para;</a></h2>
+<p>To show the same machinery works on other frameworks' metrics, two more configs
+reuse real frameworks' metrics via muteval's adapters:</p>
+<ul>
+<li><strong>deepeval</strong> — <code>validation/deepeval_rag_qdrant/</code> reuses the <em>actual</em> metrics
+  and system prompt from deepeval's own RAG example
+  (<code>confident-ai/deepeval -&gt; examples/rag_evaluation/rag_evaluation_with_qdrant.py</code>),
+  using <code>AnswerRelevancyMetric</code> + <code>FaithfulnessMetric</code>.</li>
+<li><strong>RAGAS</strong> — <code>validation/ragas_rag/</code> reuses <code>Faithfulness</code> + <code>ResponseRelevancy</code>
+  via the ragas adapter, with a score threshold and near-miss reporting.</li>
+</ul>
+<p>Run either with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;muteval[deepeval]&quot;</span><span class="w">   </span><span class="c1"># or muteval[ragas] langchain-openai</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-...
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>muteval<span class="w"> </span>run<span class="w"> </span>--config<span class="w"> </span>validation/deepeval_rag_qdrant/muteval_config.py<span class="w"> </span>--max-mutants<span class="w"> </span><span class="m">8</span>
+</code></pre></div>
+<p>These are non-deterministic, so report them with <code>runs_per_mutant &gt; 1</code> and treat
+the score as an estimate. They demonstrate adapter coverage end-to-end; the
+controlled experiment is what isolates the core measurement claim.</p>
+<h2 id="what-this-supports-and-what-it-doesnt">What this supports — and what it doesn't<a class="headerlink" href="#what-this-supports-and-what-it-doesnt" title="Permanent link">&para;</a></h2>
+<p>Supports: muteval surfaces concrete eval-coverage gaps a green suite is hiding,
+and its score moves in the right direction as a suite improves. That is a strong,
+defensible basis for "your evals scored X% — here are the regressions they'd
+miss."</p>
+<p>Does not (yet) support: a quantitative claim that the score predicts real-world
+regression-catch rate across many production suites, or a handle on equivalent
+mutants. Those are the experiments that would turn this from a compelling tool
+into a citable result.</p>
+<p><strong>Scope of the RAG-blindness result (Experiments 2–4).</strong> These illustrate a
+<em>known</em> limitation, not a new discovery: reference-free metrics
+(faithfulness/relevancy) measure grounding, not correctness — so on answerable
+cases they pass prompt regressions that don't change the grounded answer.
+Competent teams already mitigate this with labeled/correctness evals and
+retrieval-quality checks, and it does <strong>not</strong> apply when the retrieved documents
+<em>are</em> the source of truth (there, faithful = correct). The point is not
+"faithfulness is broken" — it's that muteval <strong>surfaces this gap on your specific
+suite automatically and names the eval that closes it.</strong> Read every muteval
+result as a per-suite diagnostic, never a universal verdict.</p>
+<h2 id="reproduce">Reproduce<a class="headerlink" href="#reproduce" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pytest<span class="w"> </span>-q
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>python<span class="w"> </span>validation/eval_quality_experiment/run_experiment.py<span class="w">            </span><span class="c1"># offline, no key</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>muteval<span class="w"> </span>run<span class="w"> </span>--config<span class="w"> </span>validation/openai_judge_rag/muteval_config.py<span class="w">     </span><span class="c1"># live, needs OPENAI_API_KEY</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Apache-2.0
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.top", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

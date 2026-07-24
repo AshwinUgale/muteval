@@ -1,0 +1,1088 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Mutation testing for your LLM evals — find out if they'd actually catch a regression.">
+      
+      
+      
+        <link rel="canonical" href="https://ashwinugale.github.io/muteval/changelog/">
+      
+      
+        <link rel="prev" href="../PRIOR-ART/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Changelog - muteval</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="muteval" class="md-header__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            muteval
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="muteval" class="md-nav__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    muteval
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial (5 min)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../real-report.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Example — a promptfoo suite ↗
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LIMITATIONS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADOPTION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adopting muteval
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../findings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Findings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLUGINS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRIOR-ART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prior art
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-07-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 — 2026-07-24
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.0 — 2026-07-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reach-the-easy-on-ramps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reach the easy on-ramps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any-provider-for-the-system-under-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Any provider for the system under test
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#promptfoo-adapter-honest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        promptfoo adapter, honest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom targets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-polish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI polish
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-07-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 — 2026-07-23
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.0 — 2026-07-23">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trust-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust &amp; verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adoption-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adoption &amp; performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-eval-evaluator-muteval-probe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The eval-evaluator (muteval probe)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031-and-earlier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.1] and earlier
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-07-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 — 2026-07-24
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.0 — 2026-07-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reach-the-easy-on-ramps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reach the easy on-ramps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any-provider-for-the-system-under-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Any provider for the system under test
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#promptfoo-adapter-honest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        promptfoo adapter, honest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom targets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-polish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI polish
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-07-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 — 2026-07-23
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.0 — 2026-07-23">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trust-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust &amp; verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adoption-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adoption &amp; performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-eval-evaluator-muteval-probe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The eval-evaluator (muteval probe)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#031-and-earlier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.3.1] and earlier
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<p>All notable changes to muteval are documented here. This project adheres to
+<a href="https://semver.org">Semantic Versioning</a> (pre-1.0: minor versions may introduce
+additive features; the public API is not yet frozen — that lands at 1.0).</p>
+<h2 id="070-2026-07-24"><a href="https://github.com/AshwinUgale/muteval/releases/tag/v0.7.0">0.7.0</a> — 2026-07-24<a class="headerlink" href="#070-2026-07-24" title="Permanent link">&para;</a></h2>
+<p>Adoption pass, driven by a three-way audit of onboarding, integration, and UX.
+All additive — no behavior a 0.6 user relied on was removed.</p>
+<h3 id="reach-the-easy-on-ramps">Reach the easy on-ramps<a class="headerlink" href="#reach-the-easy-on-ramps" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>check</code>, <code>probe</code>, and <code>label</code> now accept the same inputs as <code>run</code></strong> —
+  <code>--promptfoo</code> and the zero-config flags, not just a Python <code>--config</code>. The
+  doctor and the probe report card finally work on every entry point.</li>
+<li><strong><code>muteval list [operators|checks|probes]</code></strong> — discover the operators, built-in
+  checks, and probes from the CLI.</li>
+<li><strong>Clean config errors</strong> — a hand-edited config that raises (SyntaxError,
+  NameError, …) now prints <code>your config &lt;path&gt; raised &lt;Error&gt;</code>, not a traceback.</li>
+<li><strong><code>muteval run</code> auto-picks <code>./muteval_config.py</code></strong> when no source is given.</li>
+<li><strong><code>eval_names</code> auto-derived</strong> from your eval function names — no parallel list to
+  hand-duplicate.</li>
+<li>deepeval/ragas adapters raise a <code>pip install "muteval[…]"</code> hint when missing.</li>
+</ul>
+<h3 id="any-provider-for-the-system-under-test">Any provider for the system under test<a class="headerlink" href="#any-provider-for-the-system-under-test" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>--base-url</code> / <code>OPENAI_BASE_URL</code></strong> for the model under test (not just the
+  judge) — Groq, Gemini-compat, GitHub Models, Ollama, a local server. Threaded
+  through zero-config and the promptfoo adapter.</li>
+</ul>
+<h3 id="promptfoo-adapter-honest">promptfoo adapter, honest<a class="headerlink" href="#promptfoo-adapter-honest" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>One eval per assertion type</strong> (<code>promptfoo:contains</code>, <code>promptfoo:llm-rubric</code>) so
+  survivors and severity stay per-check.</li>
+<li><strong>Warns</strong> on skipped unsupported assertions (is-json/javascript/…) and
+  <strong>refuses</strong> a case whose assertions are all unsupported — instead of passing it
+  vacuously and inflating the score.</li>
+</ul>
+<h3 id="custom-targets">Custom targets<a class="headerlink" href="#custom-targets" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>--endpoint</code> POSTs <code>context</code>/<code>model</code>/<code>tools</code> too (retrieval/model mutations reach
+  a deployed pipeline), plus <code>--header</code> for auth. muteval warns when
+  <code>--target</code>/<code>--endpoint</code> is combined with context/model mutation.</li>
+</ul>
+<h3 id="cli-polish">CLI polish<a class="headerlink" href="#cli-polish" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>run --help</code> flags grouped (input / mutation / cost &amp; speed / CI gates / output).</li>
+</ul>
+<h2 id="060-2026-07-23"><a href="https://github.com/AshwinUgale/muteval/releases/tag/v0.6.0">0.6.0</a> — 2026-07-23<a class="headerlink" href="#060-2026-07-23" title="Permanent link">&para;</a></h2>
+<p>The first release since 0.3.1, packaging three internal milestones: "provably
+honest" (verification hardening), "adopt in an hour" (ingestion + performance),
+and "the eval-evaluator, validated" (the probe layer). Everything below is
+additive — no behavior a 0.3.x user relied on was removed. The fail-closed
+validity gate, Wilson CIs, and majority-vote stability from 0.3.x are unchanged
+and now backed by reference cross-checks and Monte-Carlo coverage tests.</p>
+<h3 id="trust-verification">Trust &amp; verification<a class="headerlink" href="#trust-verification" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Reference cross-checks</strong> against <code>statsmodels</code>, <code>scipy</code>, <code>scikit-learn</code>,
+  <code>krippendorff</code>, and <code>pingouin</code> (behind the test-only <code>[verify]</code> extra):
+  Wilson/Jeffreys intervals to 1e-6, AUC/Spearman to 1e-9, Krippendorff's alpha,
+  Cohen's d, and ICC(2,1) all validated against the established libraries.</li>
+<li><strong>Property-based tests</strong> (Hypothesis) over the statistics and the runner
+  (intervals stay in <code>[0,1]</code>, <code>killed ≤ evaluated ≤ total</code>, <code>effective ≥ point</code>,
+  CI brackets the point estimate).</li>
+<li><strong>Monte-Carlo coverage</strong> — Wilson and Jeffreys intervals empirically cover in
+  <code>[0.93, 0.97]</code> across a <code>p × n</code> grid.</li>
+<li><strong>Determinism</strong> — a single <code>seed</code> threads through the whole run; same config +
+  seed produces byte-identical JSON on every OS × Python version.</li>
+<li><strong>Secret redaction</strong> — API keys never appear in emitted JSON or logs;
+  <code>schema_version</code> added to the result payload.</li>
+<li><strong>CI matrix</strong> — Python 3.9–3.13 × ubuntu/macos/windows, 90% coverage gate,
+  <code>mypy</code> type-check gate, and muteval dogfooded with <code>mutmut</code>.</li>
+<li><strong>Jeffreys (Beta-Binomial) interval</strong> added alongside Wilson for very small n.</li>
+</ul>
+<h3 id="adoption-performance">Adoption &amp; performance<a class="headerlink" href="#adoption-performance" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Zero-config ingestion</strong> — run straight from a <code>promptfoo</code> config
+  (<code>--promptfoo</code>), a deepeval test file, or a pytest path; no <code>.py</code> config needed.</li>
+<li><strong>Bring-your-own target</strong> — point at a callable (<code>--target pkg.mod:fn</code>) or a
+  deployed HTTP endpoint (<code>--endpoint URL</code>); no <code>run()</code> wrapper required.</li>
+<li><strong>Caching</strong> — <code>--cache runs.sqlite</code> memoizes outputs + eval outcomes; an
+  identical re-run makes zero model/judge calls.</li>
+<li><strong>Concurrency</strong> — <code>--concurrency N</code> evaluates mutants in parallel with
+  order-preserving, serial-identical results.</li>
+<li><strong>Cost control</strong> — <code>--max-calls</code> / <code>--budget-usd</code> fail closed before overspend;
+  cheap rule-based evals run before judges and short-circuit kills.</li>
+<li><strong>Triage UX</strong> — last run persisted to <code>.muteval/last_run.json</code>; <code>muteval
+  results</code> (ranked survivors), <code>muteval show &lt;id&gt;</code> (baseline→mutant diff), and
+  <code>muteval report --html</code> (shareable standalone report).</li>
+<li><strong>Typing &amp; plugins</strong> — <code>py.typed</code> ships; <code>docs/PLUGINS.md</code> documents the
+  operator/probe/adapter/reporter extension points with a contract test.</li>
+</ul>
+<h3 id="the-eval-evaluator-muteval-probe">The eval-evaluator (<code>muteval probe</code>)<a class="headerlink" href="#the-eval-evaluator-muteval-probe" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Report card</strong> across six lenses, no composite score: judge reliability
+  (flip-rate + Krippendorff's alpha + ICC(2,1)), discrimination (AUC + Cohen's d),
+  statistical adequacy (Wilson/Jeffreys), redundancy (Spearman + connected
+  families), threshold calibration, and <strong>human agreement</strong> (Cohen's κ via
+  <code>muteval label</code>). A separate <strong>judge-bias panel</strong> (position/verbosity/
+  self-preference) ships as a library function for pairwise A/B judges — it needs
+  a pairwise-judge harness, so it is not part of the default card.</li>
+<li>Every probe has a CI test asserting its signal is monotonic in injected
+  severity and hits its endpoints.</li>
+<li><strong>Autofix verify loop</strong> — <code>autofix.suggest_and_verify</code> proposes an eval for a
+  survivor and confirms it actually kills the mutant while the baseline stays
+  green; only verified suggestions are returned.</li>
+<li><strong>Eval-quality proof</strong> extended to four CI-enforced domains (support bot, code
+  review, RAG, HR policy): score rises monotonically 0% → 100% with coverage.</li>
+<li><code>muteval probe --html</code> renders the report card.</li>
+</ul>
+<h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Force UTF-8 stdout so the CLI report renders on Windows consoles (cp1252)
+  instead of raising <code>UnicodeEncodeError</code>.</li>
+<li>Satisfy the <code>mypy</code> verify gate (<code>stream.reconfigure</code> probe; typed <code>operators</code>).</li>
+</ul>
+<h2 id="031-and-earlier">[0.3.1] and earlier<a class="headerlink" href="#031-and-earlier" title="Permanent link">&para;</a></h2>
+<p>See the git history. 0.3.x delivered the fail-closed validity gate, partial-error
+handling, Wilson confidence intervals, the <code>muteval check</code> doctor, the RAG
+scaffold (<code>init --template rag</code>), OpenAI-compatible <code>base_url</code> judges, and the
+first four probes upgraded to their prior-art methods.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Apache-2.0
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.top", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

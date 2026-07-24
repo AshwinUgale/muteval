@@ -1,0 +1,936 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Mutation testing for your LLM evals — find out if they'd actually catch a regression.">
+      
+      
+      
+        <link rel="canonical" href="https://ashwinugale.github.io/muteval/LIMITATIONS/">
+      
+      
+        <link rel="prev" href="../real-report.html">
+      
+      
+        <link rel="next" href="../ADOPTION/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Limitations - muteval</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#muteval-limitations-when-to-distrust-the-number" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="muteval" class="md-header__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            muteval
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Limitations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="muteval" class="md-nav__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    muteval
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial (5 min)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../real-report.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Example — a promptfoo suite ↗
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limitations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-three-things-muteval-cannot-do-for-you-read-this-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The three things muteval cannot do for you (read this first)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-muteval-needs-and-where-it-doesnt-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What muteval needs (and where it doesn't apply)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-distrust-the-number" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to distrust the number
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-constraints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known constraints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-score-does-and-does-not-mean" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the score does and does NOT mean
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-honest-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The honest summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADOPTION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adopting muteval
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../findings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Findings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLUGINS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRIOR-ART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prior art
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-three-things-muteval-cannot-do-for-you-read-this-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The three things muteval cannot do for you (read this first)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-muteval-needs-and-where-it-doesnt-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What muteval needs (and where it doesn't apply)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-distrust-the-number" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to distrust the number
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-constraints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known constraints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-score-does-and-does-not-mean" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the score does and does NOT mean
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-honest-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The honest summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="muteval-limitations-when-to-distrust-the-number">muteval — limitations &amp; when to distrust the number<a class="headerlink" href="#muteval-limitations-when-to-distrust-the-number" title="Permanent link">&para;</a></h1>
+<p>muteval is deliberately honest about what it does <em>not</em> do. Reading this should
+make you trust the tool <em>more</em>, not less: a tool that names its own limits is
+more reliable than one that pretends to measure everything.</p>
+<h2 id="the-three-things-muteval-cannot-do-for-you-read-this-first">The three things muteval cannot do for you (read this first)<a class="headerlink" href="#the-three-things-muteval-cannot-do-for-you-read-this-first" title="Permanent link">&para;</a></h2>
+<p>These are the hard, structural limits — not bugs to be fixed later, but the
+nature of the technique. Internalize them before you act on any output.</p>
+<ol>
+<li>
+<p><strong>muteval can't tell you whether a survivor <em>matters</em> — only that your eval
+   didn't catch it.</strong> A survivor is a <em>candidate</em> gap. It's a <em>real</em> gap only if
+   the injected change (a) can actually happen in your system and (b) would
+   actually be wrong if it did. Counter-example: corrupting a retrieved document
+   is meaningless when the documents <em>are</em> your source of truth — the doc can't
+   be "wrong," so a faithfulness metric passing the changed answer is correct
+   behavior, not a gap. Every survivor needs a human to ask <em>"could this happen,
+   and would it be bad?"</em> Many won't survive that question. <strong>muteval surfaces
+   candidates; you triage them.</strong></p>
+</li>
+<li>
+<p><strong>muteval — and every label-free check — measures coverage/consistency, not
+   validity.</strong> Whether an eval is <em>correct</em> (agrees with ground truth or a human)
+   cannot be measured without labels. The mutation score, judge-reliability,
+   judge-bias, and redundancy all run label-free and catch <em>hygiene</em> problems
+   (does the suite notice a change? is the judge stable / unbiased / redundant?).
+   None of them tells you the eval is <em>right</em>. Validity requires the
+   discrimination / human-agreement checks, which require labeled examples. This
+   is the reliability-without-validity wall, and it's fundamental.</p>
+</li>
+<li>
+<p><strong>muteval is a per-suite diagnostic, not a universal flaw-finder.</strong> It tells
+   you where <em>your specific</em> suite has a hole. It does not discover new universal
+   truths about evaluation — the obvious gaps (faithfulness ≠ correctness,
+   reference-free ≠ ground truth) are already well known, and competent teams
+   mitigate them with other layers (offline labeled evals, retrieval-quality
+   metrics, human review). Read muteval's output as <em>"here's a hole in this suite
+   worth a look,"</em> never as <em>"we discovered that evals are broken."</em></p>
+</li>
+</ol>
+<h2 id="what-muteval-needs-and-where-it-doesnt-apply">What muteval needs (and where it doesn't apply)<a class="headerlink" href="#what-muteval-needs-and-where-it-doesnt-apply" title="Permanent link">&para;</a></h2>
+<p>muteval mutates the <strong>system under test</strong> and reruns your <strong>eval suite</strong>, so it
+only applies when both exist:</p>
+<ol>
+<li><strong>A re-runnable system.</strong> muteval degrades the prompt/context/tools/model and
+   needs a <em>fresh</em> output for each mutant. If all you have is a cached CSV of
+   outputs with no way to re-invoke the system, muteval can't help.</li>
+<li><strong>A programmatic, output-grading eval.</strong> Any <code>(output, case) -&gt; pass/fail</code>
+   works (hand-written, <code>checks</code>, deepeval/ragas metrics). It does <strong>not</strong> apply
+   to:</li>
+<li><strong>Model benchmarks</strong> (MMLU, HumanEval) — input-driven, no system to mutate.</li>
+<li><strong>Human / preference / A-B / Elo eval</strong> — you can't re-run a human per mutant.</li>
+<li><strong>Production / online monitoring</strong> — muteval is offline/CI, not observability.</li>
+</ol>
+<h2 id="when-to-distrust-the-number">When to distrust the number<a class="headerlink" href="#when-to-distrust-the-number" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Too few mutants/cases → wide CI.</strong> The score is a proportion; a handful of
+  mutants gives a near-useless interval (e.g. <code>50% [9-91%]</code>). <strong>Trust the CI, not
+  the point estimate.</strong> Add cases/mutants for a tighter number.</li>
+<li><strong>A red/errored baseline.</strong> If the suite fails or errors on the <em>original</em>
+  system, muteval <strong>refuses to emit a score</strong>: it reports the run as <code>INVALID</code>,
+  writes no badge, and the CLI exits non-zero. It does <strong>not</strong> report a
+  misleading 100%. Fix the baseline first.</li>
+<li><strong>No mutants / no evaluated mutants.</strong> If nothing could be mutated, or every
+  mutant errored, there is no evidence — muteval reports <code>N/A</code> (not a perfect
+  score). Use <code>--allow-empty</code> only if a zero-mutant run should pass CI.</li>
+<li><strong>Partial mutant errors.</strong> If <em>some</em> mutants error (timeouts/API blips), the
+  score is computed over a shrunken denominator and is not trustworthy. By
+  default muteval <strong>fails closed</strong>: any errored mutant makes the run
+  <code>partial_errors</code> (CLI exits non-zero, badge <code>n/a</code>, terminal shows the partial
+  score for diagnosis only). Set an error budget with <code>--max-error-rate</code> (or
+  <code>config.max_error_rate</code>), or <code>--allow-mutant-errors</code>, to accept it explicitly.</li>
+<li><strong>The raw score, when there are observationally-unchanged mutants.</strong> Read the
+  <strong>effective</strong> score; the raw one counts mutants whose output didn't change and
+  understates good suites.</li>
+<li><strong>A noisy LLM judge with <code>runs_per_mutant=1</code>.</strong> A single flaky verdict can
+  flip a mutant. Use <code>runs_per_mutant &gt; 1</code> (majority vote) for real judges; watch
+  the <code>flaky</code> count.</li>
+</ul>
+<h2 id="known-constraints">Known constraints<a class="headerlink" href="#known-constraints" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Third-party judge stability.</strong> The deepeval/ragas adapters are only as
+  reliable as those libraries. In testing, deepeval's async path hung on Windows
+  and its heaviest calls timed out on Colab. muteval retries and reports
+  honestly, but it cannot fix an upstream hang.</li>
+<li><strong>Rule-based mutations are approximations.</strong> Current operators are synthetic
+  string/context edits. They model real regressions but aren't identical to them;
+  LLM-driven semantic mutations (roadmap) are more realistic.</li>
+<li><strong>"Observationally unchanged" ≠ provably equivalent.</strong> A survivor whose output
+  matched the baseline is dropped from the effective score. For a <em>deterministic</em>
+  system that is a true equivalent mutant. For a <em>stochastic</em> one (an LLM at
+  temperature &gt; 0, a flaky judge), identical output on a few samples does not
+  prove the mutant is harmless — it may differ on an unseen sample. Raise
+  <code>runs_per_mutant</code> to shrink this risk; muteval labels these "observationally
+  unchanged," not "equivalent," on purpose.</li>
+<li><strong><code>downgrade_model</code> only knows a small model ladder.</strong> It will not guess an
+  ordering for models it doesn't recognize (it warns and emits nothing). Pass
+  your own strong→weak ladder via <code>make_downgrade_model([...])</code>.</li>
+<li><strong><code>downgrade_model</code> doesn't re-run inference by itself.</strong> Like all System-mode
+  operators, it only changes behavior if your <code>run(system, case)</code> actually reads
+  <code>system.model</code> and calls that model.</li>
+<li><strong>Cost &amp; time.</strong> Real-judge runs cost API money and run sequentially; total
+  work scales with mutants × cases × metrics × <code>runs_per_mutant</code>.</li>
+<li><strong>Non-prompt targets need System mode + a compatible <code>run()</code>.</strong> Context/tool/
+  model mutation only affects output if your <code>run(system, case)</code> actually consumes
+  the mutated <code>System</code>.</li>
+</ul>
+<h2 id="what-the-score-does-and-does-not-mean">What the score does and does NOT mean<a class="headerlink" href="#what-the-score-does-and-does-not-mean" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Does:</strong> measure how many <em>injected regressions your eval suite caught</em> — i.e.
+  eval <strong>coverage</strong> of degradations.</li>
+<li><strong>Does not:</strong> measure the correctness/safety of your <em>system</em>, or whether your
+  metric agrees with <em>humans</em> (that's validity — the optional human-agreement
+  probe, which needs labels).</li>
+</ul>
+<h2 id="the-honest-summary">The honest summary<a class="headerlink" href="#the-honest-summary" title="Permanent link">&para;</a></h2>
+<p>Trust muteval's number when: the <strong>baseline is green</strong>, you have <strong>enough
+mutants for a tight CI</strong>, you read the <strong>effective</strong> score, and (for real judges)
+you used <strong><code>runs_per_mutant &gt; 1</code></strong>. Outside that, treat the number as
+directional and lean on the survivor list — a concrete, reproducible gap is
+useful even when the exact percentage isn't.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Apache-2.0
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.top", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

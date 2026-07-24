@@ -1,0 +1,1111 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Mutation testing for your LLM evals — find out if they'd actually catch a regression.">
+      
+      
+      
+        <link rel="canonical" href="https://ashwinugale.github.io/muteval/ADOPTION/">
+      
+      
+        <link rel="prev" href="../LIMITATIONS/">
+      
+      
+        <link rel="next" href="../findings/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Adopting muteval - muteval</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adopting-muteval-on-a-real-eval-suite" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="muteval" class="md-header__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            muteval
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Adopting muteval
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="muteval" class="md-nav__button md-logo" aria-label="muteval" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    muteval
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/AshwinUgale/muteval" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AshwinUgale/muteval
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial (5 min)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../real-report.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Example — a promptfoo suite ↗
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LIMITATIONS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adopting muteval
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adopting muteval
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-supply-the-four-pieces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What you supply (the four pieces)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites-does-your-target-even-fit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites: does your target even fit?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step-integration-do-them-in-this-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step-by-step integration (do them in this order)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-it-breaks-and-what-to-change" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it breaks, and what to change
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-judge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a judge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#providers-what-runs-where" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Providers — what runs where
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validate-before-you-run-muteval-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validate before you run: muteval check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-rate-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost &amp; rate limits
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#minimal-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Minimal template
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../findings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Findings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLUGINS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRIOR-ART/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prior art
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-supply-the-four-pieces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What you supply (the four pieces)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites-does-your-target-even-fit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites: does your target even fit?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step-integration-do-them-in-this-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step-by-step integration (do them in this order)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-it-breaks-and-what-to-change" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it breaks, and what to change
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-judge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a judge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#providers-what-runs-where" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Providers — what runs where
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validate-before-you-run-muteval-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validate before you run: muteval check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-rate-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost &amp; rate limits
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#minimal-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Minimal template
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="adopting-muteval-on-a-real-eval-suite">Adopting muteval on a real eval suite<a class="headerlink" href="#adopting-muteval-on-a-real-eval-suite" title="Permanent link">&para;</a></h1>
+<p>Honest expectation first: running muteval against a <strong>real</strong> target (someone's
+RAG app + their eval suite) is a <strong>~1-hour integration, not plug-and-play.</strong> The
+mutation engine is turnkey; wiring it to <em>your</em> system is the work. This guide
+tells you exactly what you supply, the order to do it in, and — most usefully —
+<strong>where it tends to break and what to change</strong>, distilled from real integrations.</p>
+<p>If you just want to see muteval work, start with the offline examples
+(<code>examples/rag_context_offline/</code>, <code>examples/support_bot/</code>) — those need no keys
+and no wiring. This guide is for pointing it at <em>your own</em> or a third-party suite.</p>
+<hr />
+<h2 id="what-you-supply-the-four-pieces">What you supply (the four pieces)<a class="headerlink" href="#what-you-supply-the-four-pieces" title="Permanent link">&para;</a></h2>
+<p>muteval is deliberately tool-agnostic: it works with anything because you provide
+the glue. Every integration is these four things.</p>
+<ol>
+<li><strong>A re-runnable pipeline</strong> — <code>run(system, case) -&gt; output_text</code>. Given the
+   (possibly mutated) <code>System</code> and a case, produce a <strong>fresh</strong> output. This is
+   muteval's hard requirement: it must be able to mutate the prompt/context/model
+   and get a <em>new</em> output. Scoring a static file of pre-generated answers does
+   NOT work.</li>
+<li><strong>An eval suite</strong> — <code>evals</code>, a list of <code>(output, case) -&gt; bool | EvalOutcome</code>.
+   These are the checks you're <em>grading</em>. They can be hand-written <code>checks</code>,
+   deepeval/ragas/promptfoo metrics via the adapters, or your own functions that
+   call a target repo's metric classes.</li>
+<li><strong>A judge</strong> (only if your evals use an LLM) — a model + endpoint + key.</li>
+<li><strong>Test cases</strong> — <code>cases</code>, the inputs fed to <code>run</code> and every eval.</li>
+</ol>
+<p><code>muteval init</code> scaffolds a config with these four blocks clearly marked —
+<code>--template basic</code> (prompt-only) or <code>--template rag</code> (System mode; mutates the
+retrieved context, runs keyless with a mock retriever you replace with yours).</p>
+<hr />
+<h2 id="prerequisites-does-your-target-even-fit">Prerequisites: does your target even fit?<a class="headerlink" href="#prerequisites-does-your-target-even-fit" title="Permanent link">&para;</a></h2>
+<p>Before investing, confirm BOTH (muteval can't help without them):</p>
+<ul>
+<li>[ ] <strong>A real, programmatic eval suite</strong> — actual metric calls (ragas/deepeval/
+      custom <code>(output, expected) -&gt; score</code>), not just a README mention.</li>
+<li>[ ] <strong>A callable pipeline</strong> you can invoke for a fresh output — a
+      <code>query()</code>/<code>answer()</code>/chain, not a fixed answers.csv.</li>
+</ul>
+<p>If the target only <em>scores a static file</em>, or has a pipeline but no eval suite (or
+vice-versa), it does not fit. See <code>docs/OUTREACH-targets-and-plan.md</code> for a worked
+vetting checklist.</p>
+<hr />
+<h2 id="step-by-step-integration-do-them-in-this-order">Step-by-step integration (do them in this order)<a class="headerlink" href="#step-by-step-integration-do-them-in-this-order" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Wire the pipeline into <code>run()</code>.</strong> Return a serialized output that carries
+   everything your evals need (answer text, retrieved ids, citations…). JSON is
+   fine — the evals parse it back.</li>
+<li><strong>Wire the metrics into <code>evals</code>.</strong> Each returns <code>EvalOutcome(passed, score,
+   threshold)</code>. If a metric is skipped/NA on a case, return <code>passed=True</code> (a skip
+   is not a failure).</li>
+<li><strong>Pick a judge</strong> (if needed) — see the judge notes in the table below.</li>
+<li><strong>Get a GREEN baseline.</strong> The eval suite must PASS on the <em>original</em> (unmutated)
+   system. muteval 0.1.4 <strong>fails closed</strong> if it doesn't — that's a feature, but it
+   means the baseline is the first thing to get right.</li>
+<li><strong>Preflight</strong> (see below) — validate the wiring with ~4 calls before running.</li>
+<li><strong>1-mutant trial</strong> — <code>run_mutation_testing(config, sample=1)</code>; confirm
+   <code>status == "valid"</code>.</li>
+<li><strong>Full run</strong> — remove <code>sample</code>, or cap it to control cost.</li>
+</ol>
+<p>Steps 4–5 are where most time goes. Do NOT skip to the full run.</p>
+<hr />
+<h2 id="where-it-breaks-and-what-to-change">Where it breaks, and what to change<a class="headerlink" href="#where-it-breaks-and-what-to-change" title="Permanent link">&para;</a></h2>
+<p>This table is the real punch-list — the failure modes real integrations hit and
+the fix for each. None of these are muteval bugs; they're the friction of wiring a
+tool to a live system, and knowing them up front turns eight detours into two.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>What to change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ImportError</code> / <code>ModuleNotFoundError</code> on the target's package</td>
+<td>Target needs Python 3.11+ (uses <code>StrEnum</code>, <code>datetime.UTC</code>, <code>asyncio.timeout</code>) or a dependency SDK changed its API (e.g. <code>together.error</code> removed)</td>
+<td>Run on the right Python, or add small compat shims for the missing stdlib symbols; stub a stale SDK's missing attribute.</td>
+</tr>
+<tr>
+<td>Bizarre import crash (<code>'__file__' has no attribute 'endswith'</code>, <code>partially initialized module 'torch'</code>)</td>
+<td>A heavy ML dep (torch/transformers/sentence-transformers) is version-mismatched or half-installed (common on Colab)</td>
+<td>Don't install what you don't need. For small-corpus retrieval, use TF-IDF (scikit-learn) instead of sentence-transformers — no torch at all.</td>
+</tr>
+<tr>
+<td>Importing a metric drags in torch you don't use</td>
+<td>The target's <code>metrics/__init__.py</code> eagerly imports <em>all</em> metrics, incl. torch-based ones</td>
+<td>Stub the unused torch modules in <code>sys.modules</code> before importing the metric you want (a <code>ModuleType</code> with <code>__getattr__</code> returning dummy classes).</td>
+</tr>
+<tr>
+<td><code>BadRequestError: model does not support response_format json_schema</code></td>
+<td>Your judge model doesn't support strict structured outputs (many free/open models don't)</td>
+<td>Use a model that does (real OpenAI models, Groq <code>openai/gpt-oss-20b</code>/<code>120b</code>), OR monkeypatch the judge's <code>parse</code> to use <code>json_object</code> + manual pydantic validation (works on any model).</td>
+</tr>
+<tr>
+<td>A metric scores 0 on obviously-correct answers</td>
+<td>The judge is too weak/noisy for that metric (esp. claim-by-claim NLI)</td>
+<td>Drop that metric, or switch to a stronger judge. Watch the judge-reliability probe. A noisy judge silently poisons the whole score.</td>
+</tr>
+<tr>
+<td><strong>Baseline fails</strong> on a correct system</td>
+<td>A format mismatch (e.g. the model cites with <code>【doc-1】</code> full-width brackets but your extractor expects <code>[doc-1]</code>), or a noisy judge</td>
+<td>Turn on verbose baseline debug: print each eval's score AND the actual output per case. Fix the extraction/format; only adjust thresholds if the baseline <em>legitimately</em> clears them.</td>
+</tr>
+<tr>
+<td><code>status: partial_errors</code> (CLI exits non-zero, badge n/a)</td>
+<td>Too many mutants errored (usually free-tier rate/token limits)</td>
+<td>Shrink the run (fewer cases × mutants × metrics), raise <code>--max-error-rate</code> if a few flaky calls are acceptable, or spread across days. muteval fails closed on purpose — the number over a shrunken denominator isn't trustworthy.</td>
+</tr>
+<tr>
+<td>Everything shows up as <code>inert</code> / no mutants worth anything</td>
+<td>The pipeline ignores the thing you're mutating (e.g. a promptless retriever)</td>
+<td>Mutate the surface that actually drives behavior. For a promptless RAG pipeline, mutate <strong>context</strong> (<code>--operators drop_context_doc corrupt_context_doc …</code>), not the prompt.</td>
+</tr>
+<tr>
+<td>Survivors that a human thinks are fine</td>
+<td>Output text changed but behavior didn't (near-equivalent mutation); severity-by-pattern can over-flag</td>
+<td>Inspect baseline vs mutant outputs (the human-agreement step). A raw mutation score should never be read without it — a survivor is only a real gap if a human agrees the mutant is meaningfully worse.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="choosing-a-judge">Choosing a judge<a class="headerlink" href="#choosing-a-judge" title="Permanent link">&para;</a></h2>
+<p>If your evals use an LLM judge, two things bite most often:</p>
+<ul>
+<li><strong>Structured-output support.</strong> Many judge integrations (and some target repos)
+  request a strict <code>json_schema</code> response, which <strong>free/open models often don't
+  support</strong> (Groq's Llama, etc.) — you'll get a 400. Use a model that does
+  (real OpenAI models; Groq <code>openai/gpt-oss-20b</code>/<code>120b</code>), or a judge that asks for
+  plain text. muteval's own <code>checks.llm_judge</code> asks for a plain 0-10 score (no
+  <code>json_schema</code>), so it works on any model.</li>
+<li><strong>Point the built-in judge anywhere.</strong> <code>checks.llm_judge(rubric,
+  base_url="…/v1", model="…")</code> (or the <code>OPENAI_BASE_URL</code> env var) hits any
+  OpenAI-compatible endpoint — OpenAI, Groq, Gemini's compat API, GitHub Models,
+  Ollama, a local server — using just <code>OPENAI_API_KEY</code>. So you can run a full
+  suite on a free judge.</li>
+<li><strong>Judge reliability.</strong> A weak judge gives noisy verdicts (e.g. 0.0 on a correct
+  answer) and silently poisons the score. If a metric misbehaves, use a stronger
+  judge or drop that metric — and watch the <code>judge_reliability</code> probe.</li>
+</ul>
+<h2 id="providers-what-runs-where">Providers — what runs where<a class="headerlink" href="#providers-what-runs-where" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Provider support</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>System under test</strong> (zero-config / promptfoo generation)</td>
+<td>any OpenAI-compatible endpoint</td>
+<td><code>--base-url</code> / <code>OPENAI_BASE_URL</code> (Groq, Gemini-compat, GitHub Models, Ollama, local). Non-OpenAI-wire APIs (Anthropic Messages, Gemini native) need an OpenAI-compat shim — or write a <code>run()</code> that calls them directly.</td>
+</tr>
+<tr>
+<td><strong>Built-in judge</strong> (<code>checks.llm_judge</code> / <code>grounded</code>)</td>
+<td>any OpenAI-compatible endpoint</td>
+<td><code>base_url=</code> / <code>OPENAI_BASE_URL</code>.</td>
+</tr>
+<tr>
+<td><strong>deepeval / ragas metrics</strong></td>
+<td>each metric calls <strong>its own</strong> judge with its own config</td>
+<td>Set the metric's model as that framework documents. NOTE: those calls are <strong>not</strong> counted by muteval's <code>--max-calls</code> budget.</td>
+</tr>
+</tbody>
+</table>
+<p>For a fully custom stack (Anthropic, Gemini native, a local agent), write a
+Python config with your own <code>run(system, case)</code> — muteval never constrains what
+that function calls.</p>
+<h2 id="validate-before-you-run-muteval-check">Validate before you run: <code>muteval check</code><a class="headerlink" href="#validate-before-you-run-muteval-check" title="Permanent link">&para;</a></h2>
+<p>Run the built-in doctor before a full run. It validates the wiring layer by layer
+(cheapest first) and surfaces <strong>per-eval baseline diagnostics</strong>, so a wiring or
+format bug costs ~1 call instead of a whole run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>muteval check --config your_config.py          # structural checks + 1-case run/evals
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>muteval check --config your_config.py --no-model   # 0-call structural checks only
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>muteval check --config your_config.py --full       # baseline over EVERY case
+</code></pre></div>
+<p>It reports, in order: config loads · cases/evals present · mutants generate (0
+calls) · <code>run()</code> returns text (1 call) · each eval returns a valid outcome with its
+score · baseline passes on the original system. A red baseline shows <em>which</em> eval
+failed and its score — so a format mismatch (e.g. the citation-bracket bug above)
+or a noisy judge is obvious instead of an opaque "baseline failed". Exit code is
+0 when ready, non-zero otherwise (so you can gate CI on it). Fix the <code>FAIL</code> rows,
+re-check, then <code>muteval run</code>.</p>
+<hr />
+<h2 id="cost-rate-limits">Cost &amp; rate limits<a class="headerlink" href="#cost-rate-limits" title="Permanent link">&para;</a></h2>
+<p>muteval <strong>re-runs the whole pipeline + eval suite for every mutant</strong>, so cost ≈
+<code>baseline × (1 + number of mutants)</code>. Judge-heavy suites multiply fast. Control it:</p>
+<ul>
+<li>Start tiny — a few cases, a curated ~8–10 mutants, the minimum metric set.</li>
+<li>Trim the metric suite to your hypothesis (testing grounding? citation +
+  faithfulness is enough; you don't need every judge metric).</li>
+<li>On free tiers, the binding limit is usually <strong>tokens- or requests-per-day</strong>, not
+  wall-clock. Pick a provider with headroom, keep the run small, and let
+  fail-closed handling resume you if a cap trips.</li>
+</ul>
+<p>See <code>docs/LIMITATIONS.md</code> for when to distrust the number.</p>
+<hr />
+<h2 id="minimal-template">Minimal template<a class="headerlink" href="#minimal-template" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">muteval</span><span class="w"> </span><span class="kn">import</span> <span class="n">MutEvalConfig</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">muteval.system</span><span class="w"> </span><span class="kn">import</span> <span class="n">System</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">muteval.evals</span><span class="w"> </span><span class="kn">import</span> <span class="n">EvalOutcome</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># 1. YOUR PIPELINE — return a fresh output for the (possibly mutated) system.</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">case</span><span class="p">):</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="o">...</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="k">return</span> <span class="n">output_text</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># 2. YOUR EVALS — grade the output; return EvalOutcome(passed, score, threshold).</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_check</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">case</span><span class="p">):</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="o">...</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="k">return</span> <span class="n">EvalOutcome</span><span class="p">(</span><span class="n">passed</span><span class="o">=...</span><span class="p">,</span> <span class="n">score</span><span class="o">=...</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=...</span><span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># 3. YOUR JUDGE — only if an eval uses an LLM (endpoint/model/key). See the table.</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># 4. YOUR CASES.</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">cases</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">config</span> <span class="o">=</span> <span class="n">MutEvalConfig</span><span class="p">(</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>    <span class="n">system</span><span class="o">=</span><span class="n">System</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="p">(</span><span class="o">...</span><span class="p">)),</span>  <span class="c1"># the mutation target</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="n">cases</span><span class="o">=</span><span class="n">cases</span><span class="p">,</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="n">run</span><span class="o">=</span><span class="n">run</span><span class="p">,</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>    <span class="n">evals</span><span class="o">=</span><span class="p">[</span><span class="n">my_check</span><span class="p">],</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>    <span class="n">max_error_rate</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>   <span class="c1"># fail closed on any mutant error (raise to tolerate flaky judges)</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="p">)</span>
+</code></pre></div>
+<p>Then: <code>muteval run --config your_config.py</code> (add <code>--dry-run</code> first to see the
+mutant count without spending calls).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Apache-2.0
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.top", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
