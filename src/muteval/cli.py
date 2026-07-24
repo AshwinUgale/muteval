@@ -501,6 +501,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "what", nargs="?", choices=["operators", "checks", "probes", "all"],
         default="all", help="What to list (default: all).",
     )
+    lst.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
     return parser
 
 
@@ -983,7 +984,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.command == "list":
-        print(_format_list(args.what))
+        print(_format_list(args.what, use_color=not args.no_color))
         return 0
 
     return 2
