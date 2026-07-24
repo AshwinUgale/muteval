@@ -51,7 +51,12 @@ def _default_sample_factory(
 
     def factory(output: str, case: Any) -> Any:
         # Imported lazily so muteval core never depends on ragas.
-        from ragas.dataset_schema import SingleTurnSample
+        try:
+            from ragas.dataset_schema import SingleTurnSample
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(
+                'ragas adapter needs ragas: pip install "muteval[ragas]"'
+            ) from exc
 
         ctx = case_get(case, retrieval_context_key)
         if ctx is not None:

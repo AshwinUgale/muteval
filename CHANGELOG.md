@@ -4,6 +4,46 @@ All notable changes to muteval are documented here. This project adheres to
 [Semantic Versioning](https://semver.org) (pre-1.0: minor versions may introduce
 additive features; the public API is not yet frozen — that lands at 1.0).
 
+## [0.7.0] — 2026-07-24
+
+Adoption pass, driven by a three-way audit of onboarding, integration, and UX.
+All additive — no behavior a 0.6 user relied on was removed.
+
+### Reach the easy on-ramps
+- **`check`, `probe`, and `label` now accept the same inputs as `run`** —
+  `--promptfoo` and the zero-config flags, not just a Python `--config`. The
+  doctor and the probe report card finally work on every entry point.
+- **`muteval list [operators|checks|probes]`** — discover the operators, built-in
+  checks, and probes from the CLI.
+- **Clean config errors** — a hand-edited config that raises (SyntaxError,
+  NameError, …) now prints `your config <path> raised <Error>`, not a traceback.
+- **`muteval run` auto-picks `./muteval_config.py`** when no source is given.
+- **`eval_names` auto-derived** from your eval function names — no parallel list to
+  hand-duplicate.
+- deepeval/ragas adapters raise a `pip install "muteval[…]"` hint when missing.
+
+### Any provider for the system under test
+- **`--base-url` / `OPENAI_BASE_URL`** for the model under test (not just the
+  judge) — Groq, Gemini-compat, GitHub Models, Ollama, a local server. Threaded
+  through zero-config and the promptfoo adapter.
+
+### promptfoo adapter, honest
+- **One eval per assertion type** (`promptfoo:contains`, `promptfoo:llm-rubric`) so
+  survivors and severity stay per-check.
+- **Warns** on skipped unsupported assertions (is-json/javascript/…) and
+  **refuses** a case whose assertions are all unsupported — instead of passing it
+  vacuously and inflating the score.
+
+### Custom targets
+- `--endpoint` POSTs `context`/`model`/`tools` too (retrieval/model mutations reach
+  a deployed pipeline), plus `--header` for auth. muteval warns when
+  `--target`/`--endpoint` is combined with context/model mutation.
+
+### CLI polish
+- `run --help` flags grouped (input / mutation / cost & speed / CI gates / output).
+
+[0.7.0]: https://github.com/AshwinUgale/muteval/releases/tag/v0.7.0
+
 ## [0.6.0] — 2026-07-23
 
 The first release since 0.3.1, packaging three internal milestones: "provably

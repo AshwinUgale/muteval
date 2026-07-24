@@ -110,6 +110,18 @@ If your evals use an LLM judge, two things bite most often:
   answer) and silently poisons the score. If a metric misbehaves, use a stronger
   judge or drop that metric — and watch the `judge_reliability` probe.
 
+## Providers — what runs where
+
+| Path | Provider support | How |
+| --- | --- | --- |
+| **System under test** (zero-config / promptfoo generation) | any OpenAI-compatible endpoint | `--base-url` / `OPENAI_BASE_URL` (Groq, Gemini-compat, GitHub Models, Ollama, local). Non-OpenAI-wire APIs (Anthropic Messages, Gemini native) need an OpenAI-compat shim — or write a `run()` that calls them directly. |
+| **Built-in judge** (`checks.llm_judge` / `grounded`) | any OpenAI-compatible endpoint | `base_url=` / `OPENAI_BASE_URL`. |
+| **deepeval / ragas metrics** | each metric calls **its own** judge with its own config | Set the metric's model as that framework documents. NOTE: those calls are **not** counted by muteval's `--max-calls` budget. |
+
+For a fully custom stack (Anthropic, Gemini native, a local agent), write a
+Python config with your own `run(system, case)` — muteval never constrains what
+that function calls.
+
 ## Validate before you run: `muteval check`
 
 Run the built-in doctor before a full run. It validates the wiring layer by layer

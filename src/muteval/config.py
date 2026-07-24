@@ -104,6 +104,16 @@ class MutEvalConfig:
             raise ValueError("config.run must be provided")
         if not self.evals:
             raise ValueError("config.evals must contain at least one eval")
+        # Auto-derive eval labels from function names when not given, so users
+        # don't have to hand-duplicate `eval_names` (which silently drifts).
+        if not self.eval_names:
+            derived = []
+            for i, e in enumerate(self.evals):
+                nm = getattr(e, "__name__", "") or ""
+                if nm in ("", "<lambda>", "_eval", "eval", "_check", "check"):
+                    nm = f"eval_{i}"
+                derived.append(nm)
+            self.eval_names = derived
         if self.runs_per_mutant < 1:
             raise ValueError("config.runs_per_mutant must be >= 1")
         if self.kill_threshold is not None and not 0.0 < self.kill_threshold <= 1.0:

@@ -27,7 +27,7 @@ import ssl
 import urllib.request
 from typing import Any, Callable, Optional, Sequence
 
-_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+_DEFAULT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 
 _QUESTION_KEYS = ("question", "input", "query", "prompt", "text")
 _CONTEXT_KEY = "context"
@@ -42,7 +42,19 @@ def _ssl_context() -> ssl.SSLContext:
         return ssl.create_default_context()
 
 
-def _chat(messages: list, model: str, temperature: float = 0.0) -> str:
+def _endpoint(base_url: Optional[str]) -> str:
+    """Resolve the chat-completions URL from base_url / OPENAI_BASE_URL, so the
+    system under test can run on ANY OpenAI-compatible provider (OpenAI, Groq,
+    Gemini-compat, GitHub Models, Ollama, a local server)."""
+    base = base_url or os.environ.get("OPENAI_BASE_URL")
+    if not base:
+        return _DEFAULT_ENDPOINT
+    e = base.rstrip("/")
+    return e if e.endswith("/chat/completions") else e + "/chat/completions"
+
+
+def _chat(messages: list, model: str, temperature: float = 0.0,
+          base_url: Optional[str] = None) -> str:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
@@ -50,7 +62,7 @@ def _chat(messages: list, model: str, temperature: float = 0.0) -> str:
         {"model": model, "temperature": temperature, "messages": messages}
     ).encode("utf-8")
     req = urllib.request.Request(
-        _ENDPOINT,
+        _endpoint(base_url),
         data=body,
         headers={
             "Authorization": "Bearer " + api_key,
@@ -90,6 +102,7 @@ def _case_context(case: Any, context_key: str) -> str:
 def openai_run(
     model: str = "gpt-4o-mini",
     *,
+    base_url: Optional[str] = None,
     question_keys: Sequence[str] = _QUESTION_KEYS,
     context_key: str = _CONTEXT_KEY,
     temperature: float = 0.0,
@@ -118,6 +131,8 @@ def openai_run(
 
         question = _case_question(case, question_keys)
         user = f"Context:\n{context}\n\nQuestion: {question}" if context else question
+        # Only pass base_url when set, so stubs of _chat (in tests) stay compatible.
+        extra = {"base_url": base_url} if base_url else {}
         return _chat(
             [
                 {"role": "system", "content": prompt},
@@ -125,6 +140,7 @@ def openai_run(
             ],
             model=use_model,
             temperature=temperature,
+            **extra,
         )
 
     return run
@@ -140,10 +156,14 @@ def _prompt_of(target: Any) -> str:
 def callable_run(spec: str) -> Callable[[Any, Any], str]:
     """Use an existing function as the run, imported by dotted path.
 
-    ``spec`` is ``"package.module:function"``. The imported callable is invoked as
-    ``fn(prompt, case) -> str`` with the (possibly mutated) prompt, so a user can
-    point muteval at a pipeline they already have — no ``run()`` wrapper, no config
+    ``spec`` is ``"package.module:function"``. The callable is invoked as
+    ``fn(prompt, case) -> str`` with the (possibly mutated) prompt, so you can
+    point muteval at a pipeline you already have — no ``run()`` wrapper, no config
     file (``muteval run --target mypkg.app:answer --prompt-file p.txt --cases c.jsonl``).
+    NOTE: a ``--target`` function only sees the prompt, so context/model mutations
+    won't reach it — for RAG/agent mutation, write a config with
+    ``run(system, case)`` (the CLI warns when you combine ``--target`` with
+    ``--context``/``--mutate-model``).
     """
     module_path, sep, attr = spec.partition(":")
     if not sep or not module_path or not attr:
@@ -166,20 +186,37 @@ def callable_run(spec: str) -> Callable[[Any, Any], str]:
 _OUTPUT_KEYS = ("output", "text", "content", "answer", "response", "completion")
 
 
-def http_run(url: str, *, timeout: int = 60) -> Callable[[Any, Any], str]:
+def http_run(
+    url: str, *, timeout: int = 60, headers: Optional[dict] = None
+) -> Callable[[Any, Any], str]:
     """Drive an HTTP endpoint as the system under test.
 
-    POSTs ``{"prompt": <mutated prompt>, "case": <case>}`` as JSON to ``url`` and
-    returns the text output. The response may be plain text, or JSON carrying the
-    text under any of: output / text / content / answer / response / completion.
-    Lets muteval test a deployed pipeline without importing it.
+    POSTs JSON to ``url`` carrying the (mutated) ``prompt`` and the ``case``, plus
+    ``context`` / ``model`` / ``tools`` when the config is in System mode — so
+    retrieval-corruption and model-swap mutations actually reach the endpoint
+    instead of being silently inert. Pass ``headers=`` for auth
+    (``{"Authorization": "Bearer ..."}``). The response may be plain text, or JSON
+    carrying the text under any of: output / text / content / answer / response /
+    completion. Lets muteval test a deployed pipeline without importing it.
     """
+    from muteval.system import System
+
+    base_headers = {"Content-Type": "application/json"}
+    if headers:
+        base_headers.update(headers)
 
     def run(target: Any, case: Any) -> str:
-        body = json.dumps({"prompt": _prompt_of(target), "case": case}).encode("utf-8")
+        payload: dict = {"prompt": _prompt_of(target), "case": case}
+        if isinstance(target, System):
+            if target.context is not None:
+                payload["context"] = list(target.context)
+            if target.model is not None:
+                payload["model"] = target.model
+            if getattr(target, "tools", None) is not None:
+                payload["tools"] = list(target.tools)
+        body = json.dumps(payload, default=str).encode("utf-8")
         req = urllib.request.Request(
-            url, data=body,
-            headers={"Content-Type": "application/json"}, method="POST",
+            url, data=body, headers=base_headers, method="POST",
         )
         with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
             raw = resp.read().decode("utf-8")

@@ -55,7 +55,12 @@ def _default_test_case_factory(
 
     def factory(output: str, case: Any) -> Any:
         # Imported lazily so muteval core never depends on deepeval.
-        from deepeval.test_case import LLMTestCase
+        try:
+            from deepeval.test_case import LLMTestCase
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(
+                'deepeval adapter needs deepeval: pip install "muteval[deepeval]"'
+            ) from exc
 
         user_input = case_get(case, input_key)
         if user_input is None:

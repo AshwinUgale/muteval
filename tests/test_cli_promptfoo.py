@@ -60,8 +60,8 @@ def test_load_run_config_from_promptfoo(tmp_path):
     cfg = _load_run_config(args)
     assert len(cfg.cases) == 2
     assert "cite the source" in cfg.prompt
-    # The promptfoo assertions became the (single) suite eval.
-    assert cfg.eval_names == ["promptfoo_asserts"]
+    # One eval per translatable assertion TYPE (contains + not-contains here).
+    assert cfg.eval_names == ["promptfoo:contains", "promptfoo:not-contains"]
 
 
 def test_promptfoo_missing_file_errors_cleanly(capsys):

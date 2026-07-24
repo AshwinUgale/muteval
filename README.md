@@ -37,11 +37,21 @@ Mutation score: 33%  [████████░░░░░░░░░░░�
 
 ```bash
 pip install muteval        # pure Python, zero required dependencies
+pip install -U muteval     # already installed? upgrade (bare install is a no-op)
 ```
 
-That's the whole install. The core drags in **no** heavy LLM SDKs; optional
-adapters (`muteval[deepeval]`, `muteval[ragas]`, `muteval[promptfoo]`) only
-matter if you already use those tools.
+The core drags in **no** heavy LLM SDKs. Optional extras, only if you use them:
+
+| Extra | Adds | For |
+| --- | --- | --- |
+| `muteval[promptfoo]` | PyYAML | `--promptfoo` ingestion |
+| `muteval[deepeval]` | deepeval *(large tree)* | grading via deepeval metrics |
+| `muteval[ragas]` | ragas *(large tree)* | grading via RAGAS metrics |
+
+**Any provider for the system under test:** point it at any OpenAI-compatible
+endpoint with `--base-url` (or `OPENAI_BASE_URL`) — Groq, Gemini-compat, GitHub
+Models, Ollama, a local server. Discover what's available anytime with
+`muteval list` (operators, checks, probes).
 
 ## 60-second quickstart (no API key)
 

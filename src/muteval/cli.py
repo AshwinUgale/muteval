@@ -250,6 +250,8 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     evals = [_check_from_spec(s, args.threshold, args.model) for s in specs]
     names = [s.split(":", 1)[0] for s in specs]
 
+    base_url = getattr(args, "base_url", None)
+    custom_target = bool(getattr(args, "target", None) or getattr(args, "endpoint", None))
     if getattr(args, "target", None):
         from muteval.runners import callable_run
 
@@ -257,10 +259,23 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     elif getattr(args, "endpoint", None):
         from muteval.runners import http_run
 
-        run = http_run(args.endpoint)
+        hdrs = {}
+        for h in getattr(args, "header", None) or []:
+            k, _, v = h.partition(":")
+            if k.strip():
+                hdrs[k.strip()] = v.strip()
+        run = http_run(args.endpoint, headers=hdrs or None)
     else:
-        run = openai_run(model=args.model)
+        run = openai_run(model=args.model, base_url=base_url)
     context_docs = _load_context(args)
+    if custom_target and (context_docs or args.mutate_model):
+        print(
+            "muteval: note — with --target/--endpoint, context/model mutations "
+            "reach your system only if it consumes them (your function receives the "
+            "System; your endpoint gets context/model in the POST body). A "
+            "prompt-only target won't see them.",
+            file=sys.stderr,
+        )
     common = dict(
         cases=cases, run=run, evals=evals, eval_names=names,
         runs_per_mutant=args.runs_per_mutant,
@@ -279,6 +294,64 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     return MutEvalConfig(prompt=prompt, **common)
 
 
+def _add_input_args(p: argparse.ArgumentParser) -> None:
+    """The shared 'what to run against' flags — a Python config, a promptfoo
+    config, or zero-config flags. Accepted by run / check / probe / label so the
+    doctor and the probe card work on the same easy on-ramps as `run`."""
+    g = p.add_argument_group("input (pick one source)")
+    g.add_argument(
+        "--config", "-c",
+        help="Python file defining a module-level `config` (custom run/pipeline/metrics).",
+    )
+    g.add_argument(
+        "--promptfoo", metavar="promptfooconfig.yaml",
+        help="Ingest a promptfoo config (prompt + tests + assertions) — no muteval config file.",
+    )
+    g.add_argument("--prompt", help="System prompt to mutate (inline, zero-config).")
+    g.add_argument("--prompt-file", help="File with the system prompt to mutate (zero-config).")
+    g.add_argument("--cases", help="Cases file (.jsonl or .json list) for zero-config.")
+    g.add_argument(
+        "--target", metavar="pkg.mod:fn",
+        help="Your own function as the system under test: fn(prompt|system, case) -> str.",
+    )
+    g.add_argument(
+        "--endpoint", metavar="URL",
+        help="Drive an HTTP endpoint as the system (POSTs prompt/context/model/case).",
+    )
+    g.add_argument(
+        "--header", action="append", metavar="K:V",
+        help="HTTP header for --endpoint (repeatable), e.g. 'Authorization:Bearer xyz'.",
+    )
+    g.add_argument(
+        "--context", action="append",
+        help="A retrieved-context doc (repeatable); enables RAG mutation over a corpus.",
+    )
+    g.add_argument(
+        "--context-file",
+        help="File of retrieved context (split into docs on blank lines); enables RAG mutation.",
+    )
+    g.add_argument(
+        "--mutate-model", action="store_true",
+        help="Also test a model downgrade (downgrade_model) on --model.",
+    )
+    g.add_argument("--model", default="gpt-4o-mini", help="Model for the system under test (default gpt-4o-mini).")
+    g.add_argument(
+        "--base-url", default=None, metavar="URL",
+        help="OpenAI-compatible base URL for the system under test (or OPENAI_BASE_URL): "
+        "Groq / Gemini-compat / GitHub Models / Ollama / a local server.",
+    )
+    g.add_argument(
+        "--check", action="append",
+        help="Built-in check (repeatable): contains:TXT, not_contains:TXT, "
+        "contains_case:KEY, regex:PAT, is_json, equals, judge:<rubric>.",
+    )
+    g.add_argument("--judge", action="append", help="LLM-judge rubric (repeatable). Sugar for --check judge:<rubric>.")
+    g.add_argument("--scope-include", help="Only mutate prompt lines matching this regex.")
+    g.add_argument("--scope-exclude", help="Never mutate prompt lines matching this regex.")
+    g.add_argument("--threshold", type=float, default=0.7, help="Judge pass threshold (default 0.7).")
+    g.add_argument("--runs-per-mutant", type=int, default=1, help="Runs per mutant (default 1).")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="muteval",
@@ -289,121 +362,67 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=False)
 
     run = sub.add_parser("run", help="Run mutation testing against an eval suite.")
-    run.add_argument(
-        "--config", "-c",
-        help="Path to a Python file defining a module-level `config`. Use this "
-        "for custom run()/pipelines/metrics.",
-    )
-    run.add_argument(
-        "--promptfoo",
-        metavar="promptfooconfig.yaml",
-        help="Ingest an existing promptfoo config (prompt + tests + assertions) "
-        "and run muteval against it — no muteval config file needed.",
-    )
-    run.add_argument("--prompt", help="The system prompt to mutate (inline).")
-    run.add_argument("--prompt-file", help="File containing the system prompt to mutate.")
-    run.add_argument("--cases", help="Cases file (.jsonl or .json list).")
-    run.add_argument(
-        "--target",
-        metavar="pkg.mod:fn",
-        help="Use your own function as the system under test, imported by dotted "
-        "path and called as fn(prompt, case) -> str. No run() wrapper needed.",
-    )
-    run.add_argument(
-        "--endpoint",
-        metavar="URL",
-        help="Drive an HTTP endpoint as the system: POSTs {prompt, case} JSON, "
-        "reads the text output. Test a deployed pipeline without importing it.",
-    )
-    run.add_argument(
-        "--context", action="append",
-        help="A retrieved-context doc (repeatable). Enables RAG mutation "
-        "(drop_context_doc / clear_context) over a shared corpus.",
-    )
-    run.add_argument(
-        "--context-file",
-        help="File of retrieved context; split into docs on blank lines. "
-        "Enables RAG mutation.",
-    )
-    run.add_argument(
-        "--mutate-model", action="store_true",
-        help="Also test a model downgrade (downgrade_model): swaps --model for a "
-        "weaker one and checks whether your evals notice.",
-    )
-    run.add_argument("--model", default="gpt-4o-mini", help="OpenAI model (default: gpt-4o-mini).")
-    run.add_argument(
-        "--check", action="append",
-        help="A built-in check, repeatable: contains:TXT, not_contains:TXT, "
-        "contains_case:KEY, regex:PAT, is_json, equals, judge:<rubric>.",
-    )
-    run.add_argument("--judge", action="append", help="LLM-judge rubric (repeatable). Sugar for --check judge:<rubric>.")
-    run.add_argument("--scope-include", help="Only mutate prompt lines matching this regex.")
-    run.add_argument("--scope-exclude", help="Never mutate prompt lines matching this regex.")
-    run.add_argument("--threshold", type=float, default=0.7, help="Judge pass threshold (default 0.7).")
-    run.add_argument("--runs-per-mutant", type=int, default=1, help="Runs per mutant (default 1).")
-    run.add_argument(
+    _add_input_args(run)
+    mut = run.add_argument_group("mutation")
+    mut.add_argument(
         "--operators", nargs="+", choices=list(OPERATORS.keys()), default=None,
         help="Subset of mutation operators (default: all).",
     )
-    run.add_argument("--max-mutants", type=int, default=None, help="Cap the number of mutants (head).")
-    run.add_argument("--sample", type=int, default=None, help="Randomly sample N mutants (cheap runs).")
-    run.add_argument("--seed", type=int, default=None, help="Seed for --sample (reproducible).")
-    run.add_argument(
+    mut.add_argument("--max-mutants", type=int, default=None, help="Cap the number of mutants (head).")
+    mut.add_argument("--sample", type=int, default=None, help="Randomly sample N mutants (cheap runs).")
+    mut.add_argument("--seed", type=int, default=None, help="Seed for --sample (reproducible).")
+    cost = run.add_argument_group("cost & speed")
+    cost.add_argument(
         "--cache", metavar="PATH", default=None,
-        help="Memoize run outputs + eval outcomes in a sqlite file, so an "
-        "identical re-run makes zero model/judge calls. Ignored when "
-        "--runs-per-mutant > 1 (non-deterministic).",
+        help="Memoize run outputs + eval outcomes in a sqlite file, so an identical "
+        "re-run makes zero model/judge calls. Ignored when --runs-per-mutant > 1.",
     )
-    run.add_argument(
+    cost.add_argument(
         "--concurrency", type=int, default=1, metavar="N",
-        help="Evaluate N mutants in parallel (thread pool). Cuts wall-clock on "
-        "API-bound suites. Default 1 (sequential).",
+        help="Evaluate N mutants in parallel (thread pool). Default 1 (sequential).",
     )
-    run.add_argument(
+    cost.add_argument(
+        "--max-calls", type=int, default=None, metavar="N",
+        help="Cap model + judge calls (cache hits / skipped judges don't count). "
+        "Fails closed (exit 2) before overspending.",
+    )
+    gate = run.add_argument_group("CI gates")
+    gate.add_argument(
+        "--fail-under", type=float, default=None, metavar="PCT",
+        help="Exit non-zero if the mutation score is below this percent.",
+    )
+    gate.add_argument(
+        "--fail-on-severity", choices=["high", "medium", "low"], default=None,
+        help="Exit non-zero if any real survivor is at or above this severity.",
+    )
+    gate.add_argument(
+        "--max-error-rate", type=float, default=None, metavar="FRAC",
+        help="Fraction of mutants allowed to error before the run is INVALID "
+        "(default 0.0 = fail closed). Overrides the config value.",
+    )
+    gate.add_argument(
+        "--allow-mutant-errors", action="store_true",
+        help="Tolerate any number of errored mutants (== --max-error-rate 1.0).",
+    )
+    gate.add_argument(
+        "--allow-empty", action="store_true",
+        help="Treat a zero-mutant run as a pass (exit 0) instead of invalid.",
+    )
+    out = run.add_argument_group("output")
+    out.add_argument("--json", metavar="PATH", default=None,
+        help="Write machine-readable results (score, CI, survivors) to a JSON file.")
+    out.add_argument("--badge", metavar="PATH", default=None,
+        help="Write a shields.io endpoint JSON for the eval-coverage badge.")
+    out.add_argument(
         "--manifest", metavar="PATH", default=None,
         help="Write a reproducible-run manifest (version, model, seed, operators, "
-        "config fingerprint, result) — commit it beside a real run to make it auditable.",
+        "config fingerprint, result) to commit beside a run.",
     )
-    run.add_argument(
-        "--max-calls", type=int, default=None, metavar="N",
-        help="Cap the number of model + judge calls (cache hits / skipped judges "
-        "don't count). Fails closed (exit 2) before overspending.",
-    )
-    run.add_argument(
-        "--fail-under", type=float, default=None, metavar="PCT",
-        help="Exit non-zero if the mutation score is below this percent (gate CI).",
-    )
-    run.add_argument(
-        "--fail-on-severity", choices=["high", "medium", "low"], default=None,
-        help="Exit non-zero if any real survivor is at or above this severity "
-        "(e.g. 'high' fails on any unguarded high-severity gap, even if the "
-        "overall score looks fine).",
-    )
-    run.add_argument(
+    out.add_argument(
         "--dry-run", action="store_true",
         help="Build and validate the run WITHOUT calling the model.",
     )
-    run.add_argument(
-        "--allow-empty", action="store_true",
-        help="Treat a run that generates NO mutants as a pass (exit 0) instead "
-        "of an invalid run. Baseline failures/errors are never rescued by this.",
-    )
-    run.add_argument(
-        "--max-error-rate", type=float, default=None, metavar="FRAC",
-        help="Fraction of mutants allowed to error before the run is INVALID "
-        "(default 0.0 = fail closed on any errored mutant). Overrides the "
-        "config value.",
-    )
-    run.add_argument(
-        "--allow-mutant-errors", action="store_true",
-        help="Tolerate any number of errored mutants (equivalent to "
-        "--max-error-rate 1.0). Score is computed over the survivors.",
-    )
-    run.add_argument("--json", metavar="PATH", default=None,
-        help="Write machine-readable results (score, CI, survivors) to a JSON file.")
-    run.add_argument("--badge", metavar="PATH", default=None,
-        help="Write a shields.io endpoint JSON for the eval-coverage badge.")
-    run.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
+    out.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
 
     init = sub.add_parser("init", help="Scaffold a starter muteval_config.py you can edit.")
     init.add_argument("--path", "-p", default="muteval_config.py", help="Where to write the scaffold.")
@@ -416,7 +435,7 @@ def _build_parser() -> argparse.ArgumentParser:
     probe = sub.add_parser(
         "probe", help="Rate your eval suite's quality (a report card of probes)."
     )
-    probe.add_argument("--config", "-c", required=True, help="Path to a config file.")
+    _add_input_args(probe)
     probe.add_argument(
         "--probes", nargs="+", default=None,
         help="Subset of probes to run (default: all).",
@@ -431,7 +450,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "check",
         help="Doctor: validate a config's wiring (and baseline) BEFORE a full run.",
     )
-    check.add_argument("--config", "-c", required=True, help="Path to a config file.")
+    _add_input_args(check)
     check.add_argument(
         "--operators", nargs="+", choices=list(OPERATORS.keys()), default=None,
         help="Operators to check mutant generation for (default: all).",
@@ -471,10 +490,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Emit a worksheet (case/output/machine-verdict) to hand-label for "
         "the human-agreement probe.",
     )
-    label.add_argument("--config", "-c", required=True, help="Path to a config file.")
+    _add_input_args(label)
     label.add_argument(
         "--out", metavar="PATH", default=str(Path(".muteval") / "labels.csv"),
         help="Where to write the worksheet CSV (default: .muteval/labels.csv).",
+    )
+
+    lst = sub.add_parser("list", help="List available operators, checks, or probes.")
+    lst.add_argument(
+        "what", nargs="?", choices=["operators", "checks", "probes", "all"],
+        default="all", help="What to list (default: all).",
     )
     return parser
 
@@ -506,15 +531,42 @@ def _load_run_config(args: argparse.Namespace) -> MutEvalConfig:
     if getattr(args, "promptfoo", None):
         from muteval.adapters.promptfoo import from_promptfoo
 
-        return from_promptfoo(args.promptfoo, model=args.model)
+        return from_promptfoo(
+            args.promptfoo, model=args.model, base_url=getattr(args, "base_url", None)
+        )
     if args.prompt or args.prompt_file:
         if not args.cases:
             raise ValueError("--cases is required in zero-config mode")
         return _config_from_flags(args)
+    # Nothing explicit — fall back to ./muteval_config.py (what `init` writes).
+    default_cfg = Path("muteval_config.py")
+    if default_cfg.exists():
+        return load_config(str(default_cfg))
     raise ValueError(
         "nothing to run: pass --config FILE, --promptfoo FILE, or zero-config "
-        "flags (--prompt/--prompt-file + --cases + --check/--judge)"
+        "flags (--prompt/--prompt-file + --cases + --check/--judge). "
+        "No ./muteval_config.py found — run `muteval init` to scaffold one."
     )
+
+
+def _load_or_die(args: argparse.Namespace) -> Optional[MutEvalConfig]:
+    """Load a run config from any input source, printing a clean error and
+    returning None on failure. A hand-edited Python config can raise anything
+    (SyntaxError/NameError/KeyError/…) — surface it as a config error, not a
+    raw traceback."""
+    try:
+        return _load_run_config(args)
+    except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
+        print(f"muteval: {exc}", file=sys.stderr)
+        return None
+    except Exception as exc:  # noqa: BLE001 - executing a user config can raise anything
+        cfg = getattr(args, "config", None)
+        where = f" {cfg}" if cfg else ""
+        print(
+            f"muteval: your config{where} raised {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return None
 
 
 _LAST_RUN = Path(".muteval") / "last_run.json"
@@ -624,6 +676,47 @@ def _format_show(s: dict, use_color: bool = True) -> str:
     return "\n".join(lines)
 
 
+def _format_list(what: str, use_color: bool = True) -> str:
+    """Render `muteval list [operators|checks|probes|all]` — makes the mutation
+    operators, built-in checks, and probes discoverable from the CLI."""
+    def c(t, code):
+        return f"\033[{code}m{t}\033[0m" if use_color else t
+
+    def _doc(fn) -> str:
+        lines = (getattr(fn, "__doc__", "") or "").strip().splitlines()
+        return lines[0].strip() if lines else ""
+
+    out: List[str] = []
+    if what in ("operators", "all"):
+        out.append(c("operators — what gets mutated (--operators):", "1"))
+        for name in sorted(OPERATORS):
+            out.append(f"  {name.ljust(22)} {c(_doc(OPERATORS[name]), '2')}")
+        out.append("")
+    if what in ("checks", "all"):
+        out.append(c("checks — --check specs (zero-config):", "1"))
+        for spec, desc in [
+            ("contains:TXT", "output contains TXT"),
+            ("not_contains:TXT", "output does NOT contain TXT"),
+            ("contains_case:KEY", "output contains the case's [KEY] value"),
+            ("regex:PAT", "output matches regex PAT"),
+            ("is_json", "output is valid JSON"),
+            ("equals", "output equals case['expected']"),
+            ("judge:<rubric>", "LLM-as-judge on a plain-language rubric"),
+        ]:
+            out.append(f"  {spec.ljust(22)} {c(desc, '2')}")
+        out.append("")
+    if what in ("probes", "all"):
+        from muteval.probes import PROBES
+        from muteval.report import _PROBE_TIER
+
+        out.append(c("probes — eval-quality lenses (muteval probe):", "1"))
+        for name in sorted(PROBES):
+            tier = _PROBE_TIER.get(name, "")
+            tag = f"({tier}) " if tier else ""
+            out.append(f"  {name.ljust(22)} {c(tag + _doc(PROBES[name]), '2')}")
+    return "\n".join(out).rstrip()
+
+
 def _force_utf8_output() -> None:
     """Windows consoles default to cp1252, which can't encode the report's box/
     arrow glyphs and makes ``print`` raise UnicodeEncodeError. Reconfigure stdout
@@ -663,10 +756,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.command == "run":
-        try:
-            config = _load_run_config(args)
-        except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
-            print(f"muteval: {exc}", file=sys.stderr)
+        config = _load_or_die(args)
+        if config is None:
             return 2
 
         # CLI overrides for the error budget (config value is the default).
@@ -794,10 +885,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1 if failed else 0
 
     if args.command == "probe":
-        try:
-            config = load_config(args.config)
-        except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
-            print(f"muteval: {exc}", file=sys.stderr)
+        config = _load_or_die(args)
+        if config is None:
             return 2
         from muteval.probes import run_probes
         from muteval.report import format_probe_card
@@ -816,10 +905,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0 if all(r.ok for r in results) else 1
 
     if args.command == "check":
-        try:
-            config = load_config(args.config)
-        except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
-            print(f"muteval: {exc}", file=sys.stderr)
+        config = _load_or_die(args)
+        if config is None:
             return 2
         from muteval.doctor import all_ok, run_checks
 
@@ -855,10 +942,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.command == "label":
-        try:
-            config = load_config(args.config)
-        except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
-            print(f"muteval: {exc}", file=sys.stderr)
+        config = _load_or_die(args)
+        if config is None:
             return 2
         try:
             n = _write_label_worksheet(config, args.out)
@@ -895,6 +980,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"muteval: could not write {args.html}: {exc}", file=sys.stderr)
             return 2
         print(f"muteval: wrote {args.html}")
+        return 0
+
+    if args.command == "list":
+        print(_format_list(args.what))
         return 0
 
     return 2
