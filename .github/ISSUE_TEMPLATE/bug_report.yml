@@ -1,0 +1,33 @@
+name: Bug report
+description: Something in muteval is broken or behaves unexpectedly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for filing a bug! A small, ideally keyless reproduction helps most.
+  - type: input
+    id: version
+    attributes:
+      label: muteval version
+      description: Output of `muteval --version`.
+      placeholder: "0.7.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, what you expected, and what you got (paste the output).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A tiny config or command that reproduces it — offline/keyless if possible.
+      render: shell
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Python 3.12, Windows 11"

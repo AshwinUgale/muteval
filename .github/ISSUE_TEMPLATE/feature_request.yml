@@ -1,0 +1,26 @@
+name: Feature request / idea
+description: Suggest an operator, probe, adapter, or improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem / use case
+      description: What are you trying to do that muteval doesn't support yet?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed idea
+      description: A new operator? probe? adapter? CLI flag? Rough is fine.
+  - type: checkboxes
+    id: kind
+    attributes:
+      label: Kind (optional)
+      options:
+        - label: New mutation operator
+        - label: New probe (eval-quality lens)
+        - label: New adapter (another eval framework)
+        - label: CLI / UX
+        - label: Docs / examples

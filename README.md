@@ -272,7 +272,24 @@ agent/trace mutation · A/B suite comparison. The `muteval probe` layer stays a
 documented part of muteval — an honest eval-quality/judge-audit layer, not a
 separate product. Current focus is quality and honesty over new scope.
 
-## Contributing
+## Contributing & support
 
-Early, open project — contributions welcome, especially new operators and
-adapters. See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed [Apache-2.0](LICENSE).
+Early, open project — contributions are genuinely welcome, especially new
+mutation operators, probes, and adapters (each is a small, self-contained add).
+
+```bash
+git clone https://github.com/AshwinUgale/muteval && cd muteval
+pip install -e ".[dev]" && pytest -q          # dev setup + the suite
+```
+
+- **Start here:** [CONTRIBUTING.md](CONTRIBUTING.md) (dev setup, PR checklist,
+  "add an operator" walkthrough) and [ARCHITECTURE.md](ARCHITECTURE.md) (a
+  one-page map of the codebase).
+- **Extend it:** [docs/PLUGINS.md](docs/PLUGINS.md) — the operator / probe /
+  adapter / reporter API. `muteval list` shows what already exists.
+- **Bugs & ideas:** open an [issue](https://github.com/AshwinUgale/muteval/issues)
+  (there are templates); look for `good first issue`.
+- **Docs:** <https://ashwinugale.github.io/muteval/>
+
+Licensed [Apache-2.0](LICENSE). By participating you agree to the
+[Code of Conduct](CODE_OF_CONDUCT.md).

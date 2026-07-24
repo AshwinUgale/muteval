@@ -51,5 +51,7 @@ nav:
   - Adopting muteval: ADOPTION.md
   - Findings: findings.md
   - Plugins: PLUGINS.md
+  - Contributing: contributing.md
+  - Architecture: architecture.md
   - Prior art: PRIOR-ART.md
   - Changelog: changelog.md
