@@ -46,6 +46,7 @@ exclude_docs: |
 
 nav:
   - Home: index.md
+  - Tutorial (5 min): tutorial.md
   - "Example — a promptfoo suite ↗": real-report.html
   - Limitations: LIMITATIONS.md
   - Adopting muteval: ADOPTION.md

@@ -31,6 +31,9 @@ muteval check --config muteval_config.py     # validate wiring + baseline first
 muteval run   --config muteval_config.py     # score + ranked survivors + suggested fixes
 ```
 
+New here? The **[5-minute tutorial](tutorial.md)** walks the whole loop with the
+output explained.
+
 ## What it is — and isn't
 
 muteval is a **per-suite diagnostic**. What that means:
