@@ -2,6 +2,8 @@
 
 **Mutation testing for your LLM evals — find out if they'd actually catch a regression.**
 
+![muteval run](assets/muteval-run.png)
+
 Your evals are passing. That doesn't mean they work. muteval deliberately degrades the
 system under test (the prompt, retrieved context, tool outputs, or model), reruns your
 **existing** eval suite against each degraded version (a "mutant"), and reports a

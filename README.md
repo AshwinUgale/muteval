@@ -7,6 +7,8 @@
 
 **Mutation testing for your LLM evals — find out if they'd actually catch a regression.**
 
+![muteval run — mutation score, survivors, and the eval that would catch each](https://raw.githubusercontent.com/AshwinUgale/muteval/main/docs/assets/muteval-run.png)
+
 Your evals are passing. That doesn't mean they work.
 
 muteval answers the question every eval suite quietly dodges: *would my evals
