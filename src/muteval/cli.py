@@ -216,6 +216,14 @@ def _check_from_spec(spec: str, threshold: float, model: str):
         return checks.regex_matches(arg)
     if name == "is_json":
         return checks.is_json()
+    if name == "max_words":
+        if not arg:
+            raise ValueError("max_words:<n> needs a word limit, e.g. max_words:50")
+        try:
+            limit = int(arg)
+        except ValueError as exc:
+            raise ValueError("max_words:<n> needs an integer word limit") from exc
+        return checks.max_words(limit)
     if name == "equals":
         return checks.equals(arg or "expected")
     if name == "judge":
@@ -224,7 +232,7 @@ def _check_from_spec(spec: str, threshold: float, model: str):
         return checks.llm_judge(arg, threshold=threshold, model=model)
     raise ValueError(
         f"unknown check '{name}'. Use one of: contains, not_contains, "
-        "contains_case, regex, is_json, equals, judge"
+        "contains_case, regex, is_json, max_words, equals, judge"
     )
 
 
@@ -501,6 +509,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "what", nargs="?", choices=["operators", "checks", "probes", "all"],
         default="all", help="What to list (default: all).",
     )
+    lst.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
     return parser
 
 
@@ -700,6 +709,7 @@ def _format_list(what: str, use_color: bool = True) -> str:
             ("contains_case:KEY", "output contains the case's [KEY] value"),
             ("regex:PAT", "output matches regex PAT"),
             ("is_json", "output is valid JSON"),
+            ("max_words:N", "output has at most N words"),
             ("equals", "output equals case['expected']"),
             ("judge:<rubric>", "LLM-as-judge on a plain-language rubric"),
         ]:
@@ -983,7 +993,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.command == "list":
-        print(_format_list(args.what))
+        print(_format_list(args.what, use_color=not args.no_color))
         return 0
 
     return 2

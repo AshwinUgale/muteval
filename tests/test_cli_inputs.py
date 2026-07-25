@@ -80,6 +80,13 @@ def test_list_command(capsys):
     assert "weaken_modals" in out and "judge_reliability" in out
 
 
+def test_list_no_color_suppresses_ansi(capsys):
+    code = main(["list", "--no-color"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "\033[" not in out
+
+
 def test_base_url_endpoint_resolution(monkeypatch):
     from muteval.runners import _endpoint
 
