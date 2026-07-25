@@ -104,7 +104,8 @@ def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
 
     if not have:
         return ProbeResult(
-            name="discrimination", ok=True,
+            name="discrimination",
+            ok=True,
             summary="not assessed (no good/bad exemplars provided)",
             detail="add per-case 'good' and 'bad' example outputs to enable this probe.",
             metrics={"assessed": False},
@@ -119,7 +120,8 @@ def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
             "gap": _mean(g) - _mean(b),
             "cohen_d": _cohens_d(g, b),
             "p": _mw_pvalue(g, b, u),
-            "n_good": len(g), "n_bad": len(b),
+            "n_good": len(g),
+            "n_bad": len(b),
         }
 
     worst = min(stats, key=lambda n: stats[n]["auc"])
@@ -141,9 +143,14 @@ def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
         )
 
     return ProbeResult(
-        name="discrimination", ok=ok, summary=summary, detail=detail,
+        name="discrimination",
+        ok=ok,
+        summary=summary,
+        detail=detail,
         metrics={
-            "assessed": True, "worst_eval": worst, "min_auc": w["auc"],
+            "assessed": True,
+            "worst_eval": worst,
+            "min_auc": w["auc"],
             "stats": stats,
             # back-compat: flat gap map kept for existing consumers
             "gaps": {n: stats[n]["gap"] for n in stats},

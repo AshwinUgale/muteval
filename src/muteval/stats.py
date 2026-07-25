@@ -20,7 +20,9 @@ _Z = {
 }
 
 
-def wilson_interval(successes: int, n: int, confidence: float = 0.95) -> Tuple[float, float]:
+def wilson_interval(
+    successes: int, n: int, confidence: float = 0.95
+) -> Tuple[float, float]:
     """Wilson score interval for a binomial proportion, in [0, 1].
 
     Returns (low, high). With n == 0 the proportion is unknown -> (0.0, 1.0).
@@ -100,7 +102,9 @@ def _beta_ppf(p: float, a: float, b: float) -> float:
     return 0.5 * (lo + hi)
 
 
-def jeffreys_interval(successes: int, n: int, confidence: float = 0.95) -> Tuple[float, float]:
+def jeffreys_interval(
+    successes: int, n: int, confidence: float = 0.95
+) -> Tuple[float, float]:
     """Jeffreys (Beta-Binomial) credible interval for a binomial proportion.
 
     The Bayesian interval with a Beta(1/2, 1/2) prior — the small-n recommendation

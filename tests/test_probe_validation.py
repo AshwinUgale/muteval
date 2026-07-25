@@ -32,21 +32,21 @@ _vr = _load("validate_redundancy.py")
 
 
 def test_redundancy_flags_the_redundant_family():
-    r = redundancy(_vr.redundant_config())            # spearman (default)
+    r = redundancy(_vr.redundant_config())  # spearman (default)
     assert r.ok is False
     fam = next(f for f in r.metrics["families"] if "lin" in f)
     assert {"lin", "dup", "mono"}.issubset(set(fam))  # all three grouped
-    assert "indep" not in fam                          # independent left alone
+    assert "indep" not in fam  # independent left alone
 
 
 def test_spearman_catches_monotonic_that_pearson_misses():
     cfg = _vr.redundant_config()
     sp_fam = next(f for f in redundancy(cfg).metrics["families"] if "lin" in f)
-    assert "mono" in sp_fam                            # Spearman groups mono with lin
+    assert "mono" in sp_fam  # Spearman groups mono with lin
 
     pe = redundancy(cfg, method="pearson")
     pe_lin_fam = next((f for f in pe.metrics["families"] if "lin" in f), [])
-    assert "mono" not in pe_lin_fam                    # Pearson misses the nonlinear dup
+    assert "mono" not in pe_lin_fam  # Pearson misses the nonlinear dup
 
 
 def test_redundancy_passes_on_distinct_metrics():
@@ -73,7 +73,7 @@ def test_discrimination_flags_a_nonseparating_metric():
 
 def test_auc_catches_overlap_that_raw_mean_gap_misses():
     r = discrimination(_vd.overlapping_large_gap_config())
-    assert r.ok is False                                   # AUC flags it
+    assert r.ok is False  # AUC flags it
     assert r.metrics["stats"]["parsed"]["auc"] < 0.7
     # ...even though the raw mean gap is large (the old probe would have passed)
     assert r.metrics["gaps"]["parsed"] > 1.0
@@ -86,7 +86,7 @@ _vs = _load("validate_statistical_adequacy.py")
 def test_adequacy_flags_a_too_small_suite():
     r = statistical_adequacy(_vs.small_config())
     assert r.ok is False
-    assert r.metrics["cases_needed"] > r.metrics["n"]      # tells you how many more
+    assert r.metrics["cases_needed"] > r.metrics["n"]  # tells you how many more
 
 
 def test_adequacy_passes_a_large_suite():
@@ -114,17 +114,17 @@ def test_reliability_passes_a_deterministic_judge():
     r = judge_reliability(_vj.reliable_config())
     assert r.ok is True
     assert r.metrics["flip_rate"] == 0.0
-    assert r.metrics["min_alpha"] == 1.0        # perfect chance-corrected agreement
+    assert r.metrics["min_alpha"] == 1.0  # perfect chance-corrected agreement
 
 
 def test_reliability_flags_a_coin_flip_judge():
     r = judge_reliability(_vj.noisy_config())
     assert r.ok is False
     assert r.metrics["flip_rate"] > 0.5
-    assert r.metrics["min_alpha"] < 0.5         # alpha ~ 0 (chance-level)
+    assert r.metrics["min_alpha"] < 0.5  # alpha ~ 0 (chance-level)
 
 
 def test_alpha_separates_reliable_from_noisy():
     rel = judge_reliability(_vj.reliable_config()).metrics["min_alpha"]
     noisy = judge_reliability(_vj.noisy_config()).metrics["min_alpha"]
-    assert rel > noisy                          # chance-correction distinguishes them
+    assert rel > noisy  # chance-correction distinguishes them

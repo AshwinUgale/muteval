@@ -7,16 +7,14 @@ built-in OpenAI runner — no run() wrapper, no config file.
 
 from __future__ import annotations
 
-import io
 import json
 
 import pytest
 
-from muteval import System
-from muteval import runners
-
+from muteval import System, runners
 
 # --- callable_run ------------------------------------------------------------
+
 
 def test_callable_run_imports_and_calls(tmp_path, monkeypatch):
     mod = tmp_path / "mypipe.py"
@@ -45,6 +43,7 @@ def test_callable_run_rejects_non_callable(tmp_path, monkeypatch):
 
 
 # --- http_run ----------------------------------------------------------------
+
 
 class _FakeResp:
     def __init__(self, payload: str):
@@ -100,6 +99,7 @@ def test_http_run_alternate_output_keys(monkeypatch):
 
 # --- CLI wiring (dry-run: no network, no key) --------------------------------
 
+
 def test_cli_target_dry_run(tmp_path, capsys, monkeypatch):
     from muteval.cli import main
 
@@ -108,11 +108,20 @@ def test_cli_target_dry_run(tmp_path, capsys, monkeypatch):
     cases = tmp_path / "cases.jsonl"
     cases.write_text('{"q": "hi"}\n')
 
-    code = main([
-        "run", "--target", "mypipe:answer",
-        "--prompt", "You are a bot. Always cite the source. Do not lie.",
-        "--cases", str(cases), "--check", "contains:x", "--dry-run",
-    ])
+    code = main(
+        [
+            "run",
+            "--target",
+            "mypipe:answer",
+            "--prompt",
+            "You are a bot. Always cite the source. Do not lie.",
+            "--cases",
+            str(cases),
+            "--check",
+            "contains:x",
+            "--dry-run",
+        ]
+    )
     out = capsys.readouterr().out
     assert code == 0
     assert "dry-run OK" in out

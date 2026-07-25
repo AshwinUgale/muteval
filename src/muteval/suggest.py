@@ -11,7 +11,7 @@ import re
 
 # Structural mutations imply a specific *kind* of missing eval.
 _STRUCTURAL = {
-    "drop_context_doc": 'add a groundedness eval — the answer must contain/cite the '
+    "drop_context_doc": "add a groundedness eval — the answer must contain/cite the "
     'retrieved fact (e.g. checks.contains("<key fact>"))',
     "truncate_context_doc": "add a groundedness eval for the retrieved fact that was cut",
     "clear_context": 'add an eval that the answer refuses / says "I don\'t know" when '

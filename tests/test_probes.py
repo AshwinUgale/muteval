@@ -82,11 +82,13 @@ def test_flaky_judge_is_flagged():
 def _disc_cfg(evals):
     return MutEvalConfig(
         prompt="You are a bot.",
-        cases=[{
-            "i": 0,
-            "good": ["a good answer", "another good one"],
-            "bad": ["", "wrong nonsense"],
-        }],
+        cases=[
+            {
+                "i": 0,
+                "good": ["a good answer", "another good one"],
+                "bad": ["", "wrong nonsense"],
+            }
+        ],
         run=lambda p, c: "ok",
         evals=evals,
         eval_names=["ev"],
@@ -121,7 +123,7 @@ def _score_cfg(score_lists):
 
     n = len(score_lists[0])
     evals = [
-        (lambda sl: (lambda o, c: EvalOutcome(passed=True, score=sl[c["i"]])))(sl)
+        (lambda sl: lambda o, c: EvalOutcome(passed=True, score=sl[c["i"]]))(sl)  # noqa: B023 (IIFE binds sl)
         for sl in score_lists
     ]
     return MutEvalConfig(

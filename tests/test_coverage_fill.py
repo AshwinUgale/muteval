@@ -12,8 +12,8 @@ from muteval.adapters import base
 from muteval.report import format_probe_card, format_report
 from muteval.runner import MutationResult
 
-
 # --- adapters/base.py --------------------------------------------------------
+
 
 def test_case_get_dict_object_and_none():
     assert base.case_get({"a": 1}, "a") == 1
@@ -32,14 +32,21 @@ def test_scorer_to_eval_higher_is_better():
     out = ev("text", {})
     assert isinstance(out, EvalOutcome)
     assert out.passed and out.score == 0.8 and out.threshold == 0.7 and out.name == "q"
-    assert base.scorer_to_eval(lambda o, c: 0.5, threshold=0.7, name="q")("t", {}).passed is False
+    assert (
+        base.scorer_to_eval(lambda o, c: 0.5, threshold=0.7, name="q")("t", {}).passed
+        is False
+    )
 
 
 def test_scorer_to_eval_lower_is_better():
     # e.g. a toxicity/latency score where lower passes.
-    ev = base.scorer_to_eval(lambda o, c: 0.2, threshold=0.5, name="tox", higher_is_better=False)
+    ev = base.scorer_to_eval(
+        lambda o, c: 0.2, threshold=0.5, name="tox", higher_is_better=False
+    )
     assert ev("t", {}).passed is True
-    ev2 = base.scorer_to_eval(lambda o, c: 0.9, threshold=0.5, name="tox", higher_is_better=False)
+    ev2 = base.scorer_to_eval(
+        lambda o, c: 0.9, threshold=0.5, name="tox", higher_is_better=False
+    )
     assert ev2("t", {}).passed is False
 
 
@@ -52,9 +59,9 @@ def test_named_sets_name_and_survives_unsettable():
 
 # --- runners.py (stdlib OpenAI run), no network via monkeypatch --------------
 
+
 def test_openai_run_system_and_legacy_modes(monkeypatch):
-    from muteval import System
-    from muteval import runners
+    from muteval import System, runners
 
     captured = {}
 
@@ -75,7 +82,7 @@ def test_openai_run_system_and_legacy_modes(monkeypatch):
     assert "doc A" in user_msg and "why?" in user_msg
 
     # Legacy prompt mode: uses the default model + case context.
-    out2 = run("bare prompt", {"question": "q", "context": ["ctx doc"]})
+    run("bare prompt", {"question": "q", "context": ["ctx doc"]})
     assert captured["model"] == "gpt-4o-mini"
     assert "ctx doc" in captured["messages"][1]["content"]
 
@@ -84,7 +91,11 @@ def test_openai_run_question_key_fallbacks(monkeypatch):
     from muteval import runners
 
     captured = {}
-    monkeypatch.setattr(runners, "_chat", lambda m, model, temperature=0.0: captured.setdefault("m", m) or "x")
+    monkeypatch.setattr(
+        runners,
+        "_chat",
+        lambda m, model, temperature=0.0: captured.setdefault("m", m) or "x",
+    )
     run = runners.openai_run()
     run("p", "just a string case")  # str case path
     assert "just a string case" in captured["m"][1]["content"]
@@ -121,8 +132,11 @@ def test_runner_text_helpers():
 
 # --- report.py terminal / invalid states ------------------------------------
 
+
 def test_report_baseline_errored():
-    txt = format_report(MutationResult(baseline_passed=True, baseline_error="kaboom"), use_color=False)
+    txt = format_report(
+        MutationResult(baseline_passed=True, baseline_error="kaboom"), use_color=False
+    )
     assert "INVALID RUN" in txt and "kaboom" in txt
 
 
@@ -133,7 +147,9 @@ def test_report_baseline_failed():
 
 def test_report_no_mutants():
     # baseline passes, but no outcomes -> total == 0.
-    txt = format_report(MutationResult(baseline_passed=True, outcomes=[]), use_color=False)
+    txt = format_report(
+        MutationResult(baseline_passed=True, outcomes=[]), use_color=False
+    )
     assert "NO MUTANTS" in txt
 
 
@@ -143,13 +159,16 @@ def test_probe_card_empty_and_populated():
     assert "No probes ran" in format_probe_card([], use_color=False)
     rs = [
         ProbeResult(name="statistical_adequacy", ok=True, summary="ok", detail="d"),
-        ProbeResult(name="redundancy", ok=False, summary="two evals correlate", detail=""),
+        ProbeResult(
+            name="redundancy", ok=False, summary="two evals correlate", detail=""
+        ),
     ]
     card = format_probe_card(rs, use_color=False)
     assert "report card" in card and "statistical_adequacy" in card and "WARN" in card
 
 
 # --- scope.py edges ----------------------------------------------------------
+
 
 def test_scope_include_exclude_on_lines():
     from muteval.scope import make_scope
@@ -167,7 +186,7 @@ def test_strip_markers_extracts_ranges():
     clean, ranges = strip_markers("fixed [[mutate]]MUTABLE[[/mutate]] tail")
     assert clean == "fixed MUTABLE tail"
     assert ranges == [(6, 13)]  # the MUTABLE region in clean coordinates
-    assert clean[ranges[0][0]:ranges[0][1]] == "MUTABLE"
+    assert clean[ranges[0][0] : ranges[0][1]] == "MUTABLE"
     # No markers -> everything mutable.
     assert strip_markers("no markers here") == ("no markers here", None)
 
@@ -177,11 +196,11 @@ def test_strip_markers_unterminated():
 
     clean, ranges = strip_markers("keep [[mutate]]rest is mutable")
     assert clean == "keep rest is mutable"
-    assert ranges and clean[ranges[0][0]:ranges[0][1]] == "rest is mutable"
+    assert ranges and clean[ranges[0][0] : ranges[0][1]] == "rest is mutable"
 
 
 def test_scope_ranges_only_keeps_edits_inside_region():
-    from muteval.scope import strip_markers, make_scope
+    from muteval.scope import make_scope, strip_markers
 
     clean, ranges = strip_markers("safe prefix [[mutate]]changeme[[/mutate]] safe suffix")
     scope = make_scope(ranges=ranges)

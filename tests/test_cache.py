@@ -24,7 +24,9 @@ def _counting_config(calls):
         return EvalOutcome(passed=case["gt"] in output, name="correct")
 
     return MutEvalConfig(
-        system=System(prompt="Answer the question. Always cite the source.", model="gpt-4o-mini"),
+        system=System(
+            prompt="Answer the question. Always cite the source.", model="gpt-4o-mini"
+        ),
         cases=[{"gt": "8080"}, {"gt": "1986"}],
         run=run,
         evals=[correct],
@@ -80,7 +82,9 @@ def test_cache_roundtrips_output_and_outcome(tmp_path):
     assert cache.get_outcome(sys_a, case, "judge") is None
     cache.set_outcome(sys_a, case, "judge", oc)
     got = cache.get_outcome(sys_a, case, "judge")
-    assert got.passed and got.score == 0.71 and got.threshold == 0.70 and got.name == "judge"
+    assert (
+        got.passed and got.score == 0.71 and got.threshold == 0.70 and got.name == "judge"
+    )
     assert got.margin == 0.71 - 0.70  # scored fields survive the roundtrip
     assert cache.hits > 0 and cache.misses > 0
     cache.close()

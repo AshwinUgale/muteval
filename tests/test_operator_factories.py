@@ -36,9 +36,9 @@ def test_make_downgrade_model_refuses_off_ladder_model():
 
 def test_make_downgrade_model_validates_ladder():
     with pytest.raises(ValueError):
-        make_downgrade_model(["only-one"])          # needs >= 2
+        make_downgrade_model(["only-one"])  # needs >= 2
     with pytest.raises(ValueError):
-        make_downgrade_model(["a", "a"])            # no duplicates
+        make_downgrade_model(["a", "a"])  # no duplicates
 
 
 def test_factory_registers_and_runs_by_name():

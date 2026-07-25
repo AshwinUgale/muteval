@@ -74,7 +74,9 @@ def run_checks(
         )
     except Exception as exc:  # noqa: BLE001
         results.append(
-            CheckResult("mutants generate", False, f"{type(exc).__name__}: {exc}", fatal=True)
+            CheckResult(
+                "mutants generate", False, f"{type(exc).__name__}: {exc}", fatal=True
+            )
         )
 
     if _has_fatal_failure(results) or not use_model:
@@ -98,7 +100,9 @@ def run_checks(
         )
     except Exception as exc:  # noqa: BLE001
         results.append(
-            CheckResult("run() returns text", False, f"{type(exc).__name__}: {exc}", fatal=True)
+            CheckResult(
+                "run() returns text", False, f"{type(exc).__name__}: {exc}", fatal=True
+            )
         )
 
     if _has_fatal_failure(results):
@@ -110,7 +114,9 @@ def run_checks(
         try:
             output = first_output if i == 0 else config.invoke(config.system, case)
         except Exception as exc:  # noqa: BLE001
-            results.append(CheckResult(f"run() on case[{i}]", False, f"{type(exc).__name__}: {exc}"))
+            results.append(
+                CheckResult(f"run() on case[{i}]", False, f"{type(exc).__name__}: {exc}")
+            )
             baseline_ok = False
             continue
         for j, ev in enumerate(config.evals):
@@ -136,7 +142,8 @@ def run_checks(
                 CheckResult(
                     f"eval '{label}' on case[{i}]",
                     outcome.passed,
-                    ("passed" if outcome.passed else "FAILED on the ORIGINAL system") + score,
+                    ("passed" if outcome.passed else "FAILED on the ORIGINAL system")
+                    + score,
                 )
             )
             if not outcome.passed:

@@ -15,7 +15,9 @@ def _scored_eval(threshold):
     # 0.9, bad exemplars 0.2, so the separation point is ~0.55.
     def ev(output, case):
         score = 0.9 if "GOOD" in output else 0.2
-        return EvalOutcome(passed=score >= threshold, score=score, threshold=threshold, name="judge")
+        return EvalOutcome(
+            passed=score >= threshold, score=score, threshold=threshold, name="judge"
+        )
 
     return ev
 
@@ -51,8 +53,11 @@ def test_too_strict_threshold_is_flagged():
 
 def test_not_assessed_without_exemplars():
     cfg = MutEvalConfig(
-        prompt="answer.", cases=[{"question": "q"}], run=lambda p, c: "x",
-        evals=[_scored_eval(0.5)], eval_names=["judge"],
+        prompt="answer.",
+        cases=[{"question": "q"}],
+        run=lambda p, c: "x",
+        evals=[_scored_eval(0.5)],
+        eval_names=["judge"],
     )
     r = threshold_calibration(cfg)
     assert r.metrics.get("assessed") is False

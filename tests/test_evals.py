@@ -27,8 +27,7 @@ def test_outcome_bool_protocol():
 
 
 def test_margin_computed_when_both_present():
-    assert EvalOutcome(passed=True, score=0.72, threshold=0.70).margin == \
-        0.72 - 0.70
+    assert EvalOutcome(passed=True, score=0.72, threshold=0.70).margin == 0.72 - 0.70
 
 
 def test_margin_none_when_missing():

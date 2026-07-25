@@ -30,15 +30,17 @@ def _score_and_threshold(ev, output, case):
     return score, oc.threshold
 
 
-def _verdict(good_scores: List[float], bad_scores: List[float], threshold: float) -> Dict[str, Any]:
+def _verdict(
+    good_scores: List[float], bad_scores: List[float], threshold: float
+) -> Dict[str, Any]:
     max_bad = max(bad_scores)
     min_good = min(good_scores)
     separates = min_good > max_bad
     v = "ok"
     if threshold <= max_bad:
-        v = "too_lenient"   # a bad-example score is >= threshold -> would pass
+        v = "too_lenient"  # a bad-example score is >= threshold -> would pass
     elif threshold > min_good:
-        v = "too_strict"    # a good-example score is < threshold -> would fail
+        v = "too_strict"  # a good-example score is < threshold -> would fail
     return {
         "threshold": round(threshold, 3),
         "max_bad": round(max_bad, 3),
@@ -76,7 +78,8 @@ def threshold_calibration(config) -> ProbeResult:
 
     if not have:
         return ProbeResult(
-            name="threshold_calibration", ok=True,
+            name="threshold_calibration",
+            ok=True,
             summary="not assessed (no good/bad exemplars provided)",
             detail="add per-case 'good' and 'bad' example outputs to enable this probe.",
             metrics={"assessed": False},
@@ -85,11 +88,14 @@ def threshold_calibration(config) -> ProbeResult:
     results = {}
     for name in good:
         if name in bad and thr.get(name) is not None:
-            results[name] = _verdict(good[name], bad[name], thr[name])  # scored evals only
+            results[name] = _verdict(
+                good[name], bad[name], thr[name]
+            )  # scored evals only
 
     if not results:
         return ProbeResult(
-            name="threshold_calibration", ok=True,
+            name="threshold_calibration",
+            ok=True,
             summary="not assessed (no scored eval with a threshold)",
             detail="only evals returning a score + threshold can be calibrated.",
             metrics={"assessed": False},
@@ -100,12 +106,17 @@ def threshold_calibration(config) -> ProbeResult:
     if ok:
         summary = f"{len(results)} threshold(s) well-calibrated"
     else:
-        summary = f"{len(bad_ones)}/{len(results)} threshold(s) miscalibrated: " + ", ".join(
-            f"{n} ({results[n]['verdict']}; recommend ~{results[n]['recommended']})"
-            for n in bad_ones
+        summary = (
+            f"{len(bad_ones)}/{len(results)} threshold(s) miscalibrated: "
+            + ", ".join(
+                f"{n} ({results[n]['verdict']}; recommend ~{results[n]['recommended']})"
+                for n in bad_ones
+            )
         )
     return ProbeResult(
-        name="threshold_calibration", ok=ok, summary=summary,
+        name="threshold_calibration",
+        ok=ok,
+        summary=summary,
         detail="A good threshold sits above every bad-example score and at/below "
         "every good-example score.",
         metrics={"assessed": True, "evals": results},

@@ -41,6 +41,7 @@ def _a_survivor():
 
 # --- candidate fixes ---------------------------------------------------------
 
+
 def good_fix(output, case):
     # passes on baseline ("I cannot promise a refund"), fails on mutant.
     return "sure, refund" not in output.lower()
@@ -56,7 +57,9 @@ def noop(output, case):
 
 
 def test_only_the_good_candidate_is_verified():
-    verified = suggest_and_verify(_config(), _a_survivor(), [good_fix, breaks_baseline, noop])
+    verified = suggest_and_verify(
+        _config(), _a_survivor(), [good_fix, breaks_baseline, noop]
+    )
     names = {v.name for v in verified}
     assert "good_fix" in names
     assert "breaks_baseline" not in names  # would redden the baseline
@@ -84,6 +87,7 @@ def test_verified_fix_carries_the_catching_case():
 
 # --- LLM candidate generation (offline, injected chat) -----------------------
 
+
 def test_parse_specs_builds_checks_from_vocabulary():
     from muteval.autofix import parse_specs
 
@@ -91,7 +95,7 @@ def test_parse_specs_builds_checks_from_vocabulary():
     evals = parse_specs(raw)
     assert len(evals) == 2
     # they behave like the real checks
-    assert bool(evals[0]("I cannot promise a refund.", {})) is True   # not_contains passes
+    assert bool(evals[0]("I cannot promise a refund.", {})) is True  # not_contains passes
     assert bool(evals[0]("Sure, refund now!", {})) is False
 
 
@@ -144,14 +148,20 @@ def test_generated_fix_closes_the_gap_in_a_full_rerun():
 
     # Add the verified eval to the suite and re-run the WHOLE thing.
     fixed = MutEvalConfig(
-        system=SYSTEM, cases=CASES, run=_run,
-        evals=[_weak, fixes[0].eval], eval_names=["weak", fixes[0].name],
+        system=SYSTEM,
+        cases=CASES,
+        run=_run,
+        evals=[_weak, fixes[0].eval],
+        eval_names=["weak", fixes[0].name],
     )
     after = run_mutation_testing(fixed)
 
     assert after.status == "valid"  # baseline still passes -> run is trustworthy
     # the exact mutant that survived before is no longer a survivor.
-    still = [o for o in after.real_survivors
-             if o.mutant.operator == op and o.mutant.description == desc]
+    still = [
+        o
+        for o in after.real_survivors
+        if o.mutant.operator == op and o.mutant.description == desc
+    ]
     assert not still
     assert after.effective_score >= before.effective_score  # coverage rose

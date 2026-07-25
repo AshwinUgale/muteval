@@ -6,8 +6,15 @@ from muteval.probes.base import ProbeResult
 from muteval.report import format_probe_card, format_probe_card_html
 
 RESULTS = [
-    ProbeResult(name="statistical_adequacy", ok=True, summary="60 cases, adequate", detail="fine"),
-    ProbeResult(name="judge_reliability", ok=False, summary="18% flaky", detail="use temperature 0"),
+    ProbeResult(
+        name="statistical_adequacy", ok=True, summary="60 cases, adequate", detail="fine"
+    ),
+    ProbeResult(
+        name="judge_reliability",
+        ok=False,
+        summary="18% flaky",
+        detail="use temperature 0",
+    ),
 ]
 
 
@@ -16,8 +23,8 @@ def test_card_labels_and_orders_by_tier():
     # show the load-bearing lenses first. A hygiene probe passed BEFORE a core
     # probe in the input must render AFTER it.
     txt = format_probe_card(RESULTS, use_color=False)
-    assert "(core)" in txt and "(hygiene)" in txt          # tiers are labelled
-    assert "core = catches a real eval defect" in txt      # legend present
+    assert "(core)" in txt and "(hygiene)" in txt  # tiers are labelled
+    assert "core = catches a real eval defect" in txt  # legend present
     assert txt.index("judge_reliability") < txt.index("statistical_adequacy")
 
     html_doc = format_probe_card_html(RESULTS)
@@ -34,7 +41,9 @@ def test_card_html_renders_pass_and_warn():
 
 
 def test_card_html_escapes_summary():
-    evil = [ProbeResult(name="x", ok=True, summary="<script>alert(1)</script>", detail=None)]
+    evil = [
+        ProbeResult(name="x", ok=True, summary="<script>alert(1)</script>", detail=None)
+    ]
     doc = format_probe_card_html(evil)
     assert "<script>alert(1)</script>" not in doc
     assert "&lt;script&gt;" in doc

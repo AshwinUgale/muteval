@@ -153,6 +153,7 @@ class MutationResult:
     def high_severity_survivors(self) -> List[MutantOutcome]:
         """Real coverage gaps ranked HIGH — the dangerous ones."""
         from muteval.severity import HIGH
+
         return [o for o in self.real_survivors if o.severity == HIGH]
 
     @property
@@ -167,13 +168,16 @@ class MutationResult:
         """Wilson 95% CI on the effective score (excludes inert mutants)."""
         from muteval.stats import wilson_interval
 
-        return wilson_interval(self.killed, max(self.evaluated - len(self.inert_survivors), 0))
+        return wilson_interval(
+            self.killed, max(self.evaluated - len(self.inert_survivors), 0)
+        )
 
     @property
     def flaky(self) -> List[MutantOutcome]:
         """Mutants whose verdict flipped between runs (0 < kill_rate < 1)."""
         return [
-            o for o in self.outcomes
+            o
+            for o in self.outcomes
             if o.kill_rate is not None and 0.0 < o.kill_rate < 1.0
         ]
 
@@ -222,7 +226,9 @@ def _ordered_evals(config: MutEvalConfig):
     return sorted(items, key=lambda t: bool(getattr(t[1], "is_llm", False)))
 
 
-def _run_suite(system: System, config: MutEvalConfig, cache=None, baseline=None, budget=None) -> _SuiteRun:
+def _run_suite(
+    system: System, config: MutEvalConfig, cache=None, baseline=None, budget=None
+) -> _SuiteRun:
     """Run the eval suite once over all cases.
 
     Three cost savers, all safe for deterministic suites:
@@ -257,8 +263,10 @@ def _run_suite(system: System, config: MutEvalConfig, cache=None, baseline=None,
         ):
             collected.extend(base_by_case[ci])
             continue
-        for idx, ev, label in ordered:
-            outcome = cache.get_outcome(system, case, label) if cache is not None else None
+        for _idx, ev, label in ordered:
+            outcome = (
+                cache.get_outcome(system, case, label) if cache is not None else None
+            )
             if outcome is None:
                 if budget is not None and getattr(ev, "is_llm", False):
                     budget.charge()  # a real (paid) judge call
@@ -273,9 +281,7 @@ def _run_suite(system: System, config: MutEvalConfig, cache=None, baseline=None,
 
 def _near_miss(outcomes: List[EvalOutcome]) -> tuple[Optional[str], Optional[float]]:
     """Of the passing outcomes that expose a margin, find the closest call."""
-    margins = [
-        (o.name, o.margin) for o in outcomes if o.margin is not None and o.passed
-    ]
+    margins = [(o.name, o.margin) for o in outcomes if o.margin is not None and o.passed]
     if not margins:
         return None, None
     name, margin = min(margins, key=lambda nm: nm[1])
@@ -318,12 +324,16 @@ def select_mutants(
     return mutants
 
 
-def _evaluate_mutant(mutant, config, cache, baseline_arg, baseline_outputs, budget=None) -> MutantOutcome:
+def _evaluate_mutant(
+    mutant, config, cache, baseline_arg, baseline_outputs, budget=None
+) -> MutantOutcome:
     """Evaluate a single mutant into a MutantOutcome. Pure w.r.t. the mutant, so
     it is safe to run concurrently across a thread pool."""
     try:
         runs = [
-            _run_suite(mutant.system, config, cache=cache, baseline=baseline_arg, budget=budget)
+            _run_suite(
+                mutant.system, config, cache=cache, baseline=baseline_arg, budget=budget
+            )
             for _ in range(config.runs_per_mutant)
         ]
         fails = sum(1 for r in runs if r.failing_eval is not None)
@@ -332,9 +342,7 @@ def _evaluate_mutant(mutant, config, cache, baseline_arg, baseline_outputs, budg
             killed = fails * 2 > len(runs)  # strict majority; ties survive
         else:
             killed = kill_rate >= config.kill_threshold
-        rep = next(
-            (r for r in runs if (r.failing_eval is not None) == killed), runs[0]
-        )
+        rep = next((r for r in runs if (r.failing_eval is not None) == killed), runs[0])
         closest_eval = min_margin = None
         output_changed: Optional[bool] = None
         sample_base = sample_mut = None
@@ -358,10 +366,16 @@ def _evaluate_mutant(mutant, config, cache, baseline_arg, baseline_outputs, budg
             else:
                 output_changed = False
         return MutantOutcome(
-            mutant=mutant, killed=killed, failing_eval=rep.failing_eval,
-            closest_eval=closest_eval, min_margin=min_margin,
-            output_changed=output_changed, severity=severity_of(mutant),
-            kill_rate=kill_rate, baseline_output=sample_base, mutant_output=sample_mut,
+            mutant=mutant,
+            killed=killed,
+            failing_eval=rep.failing_eval,
+            closest_eval=closest_eval,
+            min_margin=min_margin,
+            output_changed=output_changed,
+            severity=severity_of(mutant),
+            kill_rate=kill_rate,
+            baseline_output=sample_base,
+            mutant_output=sample_mut,
         )
     except BudgetExceeded:
         raise  # budget is a hard stop, not a per-mutant error
@@ -369,8 +383,11 @@ def _evaluate_mutant(mutant, config, cache, baseline_arg, baseline_outputs, budg
         # A flaky eval call (timeout, rate limit, API error) must not nuke the
         # whole run. Record this mutant as errored and keep going.
         return MutantOutcome(
-            mutant=mutant, killed=False, errored=True,
-            error=f"{type(exc).__name__}: {exc}", severity=severity_of(mutant),
+            mutant=mutant,
+            killed=False,
+            errored=True,
+            error=f"{type(exc).__name__}: {exc}",
+            severity=severity_of(mutant),
         )
 
 
@@ -454,11 +471,15 @@ def run_mutation_testing(
         n_evals = len(config.evals)
         oc = baseline_run.outcomes
         if len(oc) == len(config.cases) * n_evals:  # baseline ran fully (it passed)
-            base_by_case = [oc[i * n_evals:(i + 1) * n_evals] for i in range(len(config.cases))]
+            base_by_case = [
+                oc[i * n_evals : (i + 1) * n_evals] for i in range(len(config.cases))
+            ]
             baseline_arg = (baseline_outputs, base_by_case)
 
     def _worker(mutant: Mutant) -> MutantOutcome:
-        return _evaluate_mutant(mutant, config, cache, baseline_arg, baseline_outputs, budget)
+        return _evaluate_mutant(
+            mutant, config, cache, baseline_arg, baseline_outputs, budget
+        )
 
     concurrency = max(1, int(concurrency or 1))
     try:

@@ -75,7 +75,9 @@ def test_min_samples_lower_bound_range(rate, target):
 
 
 @settings(max_examples=100)
-@given(st.floats(min_value=0.01, max_value=0.99), st.floats(min_value=0.02, max_value=0.5))
+@given(
+    st.floats(min_value=0.01, max_value=0.99), st.floats(min_value=0.02, max_value=0.5)
+)
 def test_min_samples_precision_range(rate, half_width):
     n = min_samples_for_precision(rate, half_width)
     assert 1 <= n <= 100_000
@@ -141,7 +143,9 @@ def test_cohens_d_finite_or_none(pair):
 
 
 @settings(max_examples=200)
-@given(st.lists(st.lists(st.integers(0, 3), min_size=2, max_size=5), min_size=1, max_size=30))
+@given(
+    st.lists(st.lists(st.integers(0, 3), min_size=2, max_size=5), min_size=1, max_size=30)
+)
 def test_krippendorff_alpha_upper_bounded_by_one(items):
     alpha = _krippendorff_alpha_nominal(items)
     assert alpha <= 1.0 + 1e-9  # alpha can be negative, never exceeds 1

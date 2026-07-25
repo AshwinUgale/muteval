@@ -20,7 +20,7 @@ There is no composite score — each is a separately-interpretable rate in [0, 1
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 from muteval.judge import TIE, WIN_A, WIN_B, normalize_verdict
 
@@ -85,7 +85,9 @@ def verbosity_bias(judge, pairs: Sequence[Pair]) -> Optional[float]:
     return (prefer_long / n) if n else None
 
 
-def self_preference(judge, labeled_pairs: Optional[Sequence[Tuple[str, str, Any, str]]]) -> Optional[float]:
+def self_preference(
+    judge, labeled_pairs: Optional[Sequence[Tuple[str, str, Any, str]]]
+) -> Optional[float]:
     """``labeled_pairs`` are (own_output, other_output, case, _) where the first
     is from the judge's own model. Fraction that pick the own-model answer,
     averaged over both orders. None (not assessed) if no labeled pairs given."""
@@ -116,6 +118,8 @@ def run_judge_bias_panel(
     verb = verbosity_bias(judge, verbosity_pairs) if verbosity_pairs else None
     selfp = self_preference(judge, self_pref_pairs)
     return BiasPanel(
-        position_bias=pos, verbosity_bias=verb, self_preference=selfp,
+        position_bias=pos,
+        verbosity_bias=verb,
+        self_preference=selfp,
         detail={"n_pairs": len(pairs)},
     )

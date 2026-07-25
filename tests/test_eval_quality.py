@@ -16,13 +16,14 @@ from muteval import MutEvalConfig, run_mutation_testing
 
 _DIR = (
     pathlib.Path(__file__).resolve().parent.parent
-    / "validation" / "eval_quality_experiment"
+    / "validation"
+    / "eval_quality_experiment"
 )
 _EXPERIMENTS = [
-    _DIR / "run_experiment.py",              # domain 1: support bot
-    _DIR / "run_experiment_codereview.py",   # domain 2: code review
-    _DIR / "run_experiment_rag.py",          # domain 3: RAG / context grounding
-    _DIR / "run_experiment_hr.py",           # domain 4: HR policy
+    _DIR / "run_experiment.py",  # domain 1: support bot
+    _DIR / "run_experiment_codereview.py",  # domain 2: code review
+    _DIR / "run_experiment_rag.py",  # domain 3: RAG / context grounding
+    _DIR / "run_experiment_hr.py",  # domain 4: HR policy
 ]
 
 
@@ -38,8 +39,11 @@ def _effective_scores(path):
     return [
         run_mutation_testing(
             MutEvalConfig(
-                system=m.SYSTEM, cases=[m.CASE], run=m.run,
-                evals=evals, eval_names=names,
+                system=m.SYSTEM,
+                cases=[m.CASE],
+                run=m.run,
+                evals=evals,
+                eval_names=names,
             )
         ).effective_score
         for evals, names in m.SUITES.values()

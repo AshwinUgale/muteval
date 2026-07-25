@@ -28,14 +28,22 @@ from muteval.config import MutEvalConfig
 
 # Assertion types muteval can translate into a graded eval.
 _SUPPORTED_TYPES = {
-    "contains", "icontains", "not-contains", "not-icontains",
-    "equals", "regex", "is-json", "llm-rubric", "model-graded",
+    "contains",
+    "icontains",
+    "not-contains",
+    "not-icontains",
+    "equals",
+    "regex",
+    "is-json",
+    "llm-rubric",
+    "model-graded",
 }
 
 
 def _render(template: str, variables: dict) -> str:
     """Minimal {{ var }} substitution (promptfoo uses nunjucks; we cover the
     common variable case)."""
+
     def repl(m):
         return str(variables.get(m.group(1).strip(), m.group(0)))
 
@@ -90,6 +98,7 @@ def _assertion_check(assertion: dict, base_url=None):
 def _type_eval(typ: str, base_url=None):
     """A muteval eval for ONE assertion type: passes iff every assertion of that
     type on the case passes (and iff there is none of that type)."""
+
     def _eval(output, case) -> bool:
         for a in case.get("_asserts", []):
             if _norm_type(a) == typ:
@@ -112,7 +121,7 @@ def _prompt_from(data) -> str:
         p = p.get("raw") or p.get("content") or p.get("id") or ""
     p = str(p)
     if p.startswith("file://"):
-        p = Path(p[len("file://"):]).read_text(encoding="utf-8")
+        p = Path(p[len("file://") :]).read_text(encoding="utf-8")
     return p
 
 
@@ -189,7 +198,9 @@ def config_from_promptfoo_dict(
     )
 
 
-def from_promptfoo(path, model: str = "gpt-4o-mini", run=None, base_url=None) -> MutEvalConfig:
+def from_promptfoo(
+    path, model: str = "gpt-4o-mini", run=None, base_url=None
+) -> MutEvalConfig:
     """Load a promptfooconfig.yaml and return a MutEvalConfig."""
     try:
         import yaml

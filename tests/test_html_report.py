@@ -17,7 +17,9 @@ SAMPLE = {
     "high_severity_survivors": 1,
     "survivors": [
         {
-            "id": 0, "operator": "flip_negation", "severity": "high",
+            "id": 0,
+            "operator": "flip_negation",
+            "severity": "high",
             "description": "inverted 'Do not' -> 'do'",
             "fix": "add an eval for the no-refunds rule",
             "baseline_output": "I cannot promise a refund.",
@@ -39,8 +41,9 @@ def test_html_contains_score_and_survivor():
 
 def test_html_escapes_untrusted_output():
     evil = dict(SAMPLE)
-    evil["survivors"] = [dict(SAMPLE["survivors"][0],
-                              mutant_output="<script>alert(1)</script>")]
+    evil["survivors"] = [
+        dict(SAMPLE["survivors"][0], mutant_output="<script>alert(1)</script>")
+    ]
     doc = format_report_html(evil)
     assert "<script>alert(1)</script>" not in doc
     assert "&lt;script&gt;" in doc

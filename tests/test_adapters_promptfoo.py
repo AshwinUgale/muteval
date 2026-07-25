@@ -14,7 +14,10 @@ SAMPLE = {
     "defaultTest": {"assert": [{"type": "contains", "value": "source"}]},
     "tests": [
         {"vars": {"topic": "ports"}, "assert": [{"type": "contains", "value": "8080"}]},
-        {"vars": {"topic": "keys"}, "assert": [{"type": "not-contains", "value": "password"}]},
+        {
+            "vars": {"topic": "keys"},
+            "assert": [{"type": "not-contains", "value": "password"}],
+        },
     ],
 }
 
@@ -44,10 +47,12 @@ def test_config_built_with_merged_default_asserts():
 
 
 def test_type_eval_honors_all_asserts_of_that_type():
-    case = {"_asserts": [
-        {"type": "contains", "value": "8080"},
-        {"type": "contains", "value": "source"},
-    ]}
+    case = {
+        "_asserts": [
+            {"type": "contains", "value": "8080"},
+            {"type": "contains", "value": "source"},
+        ]
+    }
     ev = _type_eval("contains")
     assert ev("port 8080, source: server.md", case) is True
     assert ev("no port, source: server.md", case) is False
@@ -56,10 +61,15 @@ def test_type_eval_honors_all_asserts_of_that_type():
 def test_skipped_types_warn_and_build(capsys):
     data = {
         "prompts": ["p {{x}}"],
-        "tests": [{"vars": {"x": "1"}, "assert": [
-            {"type": "contains", "value": "a"},
-            {"type": "javascript"},  # unsupported -> skipped, not graded
-        ]}],
+        "tests": [
+            {
+                "vars": {"x": "1"},
+                "assert": [
+                    {"type": "contains", "value": "a"},
+                    {"type": "javascript"},  # unsupported -> skipped, not graded
+                ],
+            }
+        ],
     }
     cfg = config_from_promptfoo_dict(data, run=lambda p, c: "a")
     err = capsys.readouterr().err

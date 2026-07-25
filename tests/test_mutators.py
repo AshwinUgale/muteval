@@ -45,7 +45,7 @@ def test_unknown_operator_raises():
 
 def test_all_registered_operators_callable():
     prompt = "- You must cite the order ID.\n- Do not promise refunds."
-    for name, op in OPERATORS.items():
+    for op in OPERATORS.values():
         result = op(prompt)
         assert isinstance(result, list)
 
@@ -147,9 +147,7 @@ def test_context_operators_noop_without_context():
 
 
 def test_generate_mutants_accepts_system_and_includes_context_mutants():
-    system = System(
-        prompt="- You must cite the source.", context=("doc A", "doc B")
-    )
+    system = System(prompt="- You must cite the source.", context=("doc A", "doc B"))
     mutants = generate_mutants(system)
     operators = {m.operator for m in mutants}
     assert "drop_context_doc" in operators
@@ -170,7 +168,7 @@ def test_corrupt_context_doc_changes_a_number():
     ms = corrupt_context_doc(s)
     assert len(ms) == 1
     assert ms[0].target == "context"
-    assert "8080" not in ms[0].system.context[0]   # the fact was altered
+    assert "8080" not in ms[0].system.context[0]  # the fact was altered
 
 
 def test_swap_context_doc_replaces_each_doc():
@@ -212,8 +210,11 @@ def test_truncate_context_doc_skips_short_docs():
 
 def test_new_context_operators_noop_without_context():
     for op in (
-        corrupt_context_doc, swap_context_doc, shuffle_context,
-        duplicate_context_doc, truncate_context_doc,
+        corrupt_context_doc,
+        swap_context_doc,
+        shuffle_context,
+        duplicate_context_doc,
+        truncate_context_doc,
     ):
         assert op("just a prompt, no context") == []
 
@@ -230,8 +231,8 @@ def test_downgrade_model_emits_weaker_models():
 
 def test_downgrade_model_noop_when_weakest_or_unset():
     assert downgrade_model(System(prompt="p", model="gpt-3.5-turbo")) == []
-    assert downgrade_model(System(prompt="p")) == []          # no model set
-    assert downgrade_model("just a prompt") == []             # prompt-only target
+    assert downgrade_model(System(prompt="p")) == []  # no model set
+    assert downgrade_model("just a prompt") == []  # prompt-only target
 
 
 def test_downgrade_model_refuses_to_guess_unknown_model():

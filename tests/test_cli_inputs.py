@@ -93,8 +93,10 @@ def test_base_url_endpoint_resolution(monkeypatch):
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     assert _endpoint(None).endswith("api.openai.com/v1/chat/completions")
     # a bare base gets /chat/completions appended...
-    assert _endpoint("https://api.groq.com/openai/v1") == \
-        "https://api.groq.com/openai/v1/chat/completions"
+    assert (
+        _endpoint("https://api.groq.com/openai/v1")
+        == "https://api.groq.com/openai/v1/chat/completions"
+    )
     # ...a full endpoint is left alone (not doubled)
     assert _endpoint("https://x/v1/chat/completions") == "https://x/v1/chat/completions"
     monkeypatch.setenv("OPENAI_BASE_URL", "https://env/v1")
@@ -107,6 +109,7 @@ def test_eval_names_auto_derived():
     def cites_id(o, c):
         return True
 
-    cfg = MutEvalConfig(prompt="p.\n- x.", cases=[{"x": 1}], run=lambda p, c: "ok",
-                        evals=[cites_id])
+    cfg = MutEvalConfig(
+        prompt="p.\n- x.", cases=[{"x": 1}], run=lambda p, c: "ok", evals=[cites_id]
+    )
     assert cfg.eval_names == ["cites_id"]  # derived from the function name, no dup needed

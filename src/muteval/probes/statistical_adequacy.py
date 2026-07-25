@@ -69,8 +69,12 @@ def statistical_adequacy(
         summary=summary,
         detail=detail,
         metrics={
-            "n": n, "passed": passed, "pass_rate": rate,
-            "ci_low": lo, "ci_high": hi, "cases_needed": need,
+            "n": n,
+            "passed": passed,
+            "pass_rate": rate,
+            "ci_low": lo,
+            "ci_high": hi,
+            "cases_needed": need,
             "target_margin": target_margin,
         },
     )

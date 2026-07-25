@@ -43,12 +43,12 @@ def strip_markers(text: str) -> Tuple[str, Optional[List[Tuple[int, int]]]]:
         out_len += o - pos
         c = text.find(_CLOSE, o + len(_OPEN))
         if c == -1:  # unterminated marker: treat rest as mutable
-            region = text[o + len(_OPEN):]
+            region = text[o + len(_OPEN) :]
             clean_parts.append(region)
             ranges.append((out_len, out_len + len(region)))
             out_len += len(region)
             break
-        region = text[o + len(_OPEN):c]
+        region = text[o + len(_OPEN) : c]
         clean_parts.append(region)
         ranges.append((out_len, out_len + len(region)))
         out_len += len(region)
@@ -80,7 +80,9 @@ def _changed_hunks(a: str, b: str) -> List[Tuple[int, int]]:
     between them) can be judged region-by-region instead of as one span that
     straddles the protected text."""
     hunks: List[Tuple[int, int]] = []
-    for tag, i1, i2, _j1, _j2 in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+    for tag, i1, i2, _j1, _j2 in SequenceMatcher(
+        None, a, b, autojunk=False
+    ).get_opcodes():
         if tag != "equal":
             hunks.append((i1, i2))
     return hunks
@@ -107,9 +109,9 @@ def _affected_lines(original: str, mutant: str) -> List[str]:
 
 @dataclass
 class Scope:
-    ranges: Optional[List[Tuple[int, int]]] = None       # marker regions (char)
-    include: Optional[Pattern] = None                     # keep if a changed line matches
-    exclude: Optional[Pattern] = None                     # drop if a changed line matches
+    ranges: Optional[List[Tuple[int, int]]] = None  # marker regions (char)
+    include: Optional[Pattern] = None  # keep if a changed line matches
+    exclude: Optional[Pattern] = None  # drop if a changed line matches
 
     def is_active(self) -> bool:
         return bool(self.ranges or self.include or self.exclude)
@@ -132,7 +134,9 @@ class Scope:
                     return False
         if self.include is not None or self.exclude is not None:
             lines = _affected_lines(original_prompt, mutant_prompt)
-            if self.include is not None and not any(self.include.search(ln) for ln in lines):
+            if self.include is not None and not any(
+                self.include.search(ln) for ln in lines
+            ):
                 return False
             if self.exclude is not None and any(self.exclude.search(ln) for ln in lines):
                 return False

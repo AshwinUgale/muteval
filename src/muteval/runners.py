@@ -53,8 +53,9 @@ def _endpoint(base_url: Optional[str]) -> str:
     return e if e.endswith("/chat/completions") else e + "/chat/completions"
 
 
-def _chat(messages: list, model: str, temperature: float = 0.0,
-          base_url: Optional[str] = None) -> str:
+def _chat(
+    messages: list, model: str, temperature: float = 0.0, base_url: Optional[str] = None
+) -> str:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
@@ -167,9 +168,7 @@ def callable_run(spec: str) -> Callable[[Any, Any], str]:
     """
     module_path, sep, attr = spec.partition(":")
     if not sep or not module_path or not attr:
-        raise ValueError(
-            f"--target must be 'package.module:function', got {spec!r}"
-        )
+        raise ValueError(f"--target must be 'package.module:function', got {spec!r}")
     import importlib
 
     mod = importlib.import_module(module_path)
@@ -216,7 +215,10 @@ def http_run(
                 payload["tools"] = list(target.tools)
         body = json.dumps(payload, default=str).encode("utf-8")
         req = urllib.request.Request(
-            url, data=body, headers=base_headers, method="POST",
+            url,
+            data=body,
+            headers=base_headers,
+            method="POST",
         )
         with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
             raw = resp.read().decode("utf-8")

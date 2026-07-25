@@ -33,7 +33,18 @@ pingouin = pytest.importorskip("pingouin")
 np = pytest.importorskip("numpy")
 
 
-CASES = [(0, 1), (1, 1), (1, 10), (5, 10), (9, 10), (19, 20), (0, 5), (5, 5), (50, 200), (137, 400)]
+CASES = [
+    (0, 1),
+    (1, 1),
+    (1, 10),
+    (5, 10),
+    (9, 10),
+    (19, 20),
+    (0, 5),
+    (5, 5),
+    (50, 200),
+    (137, 400),
+]
 
 
 @pytest.mark.parametrize("k,n", CASES)
@@ -112,7 +123,9 @@ def test_krippendorff_nominal_matches_library(items):
     ours = _krippendorff_alpha_nominal(items)
     # Library wants reliability_data as raters x units; our items are units x raters.
     reliability_data = np.array(items, dtype=float).T
-    ref = krippendorff.alpha(reliability_data=reliability_data, level_of_measurement="nominal")
+    ref = krippendorff.alpha(
+        reliability_data=reliability_data, level_of_measurement="nominal"
+    )
     assert math.isclose(ours, ref, abs_tol=1e-6)
 
 
@@ -138,10 +151,14 @@ _ABX = [
 @pytest.mark.parametrize("a,b,x", _ABX)
 def test_betai_matches_scipy_betainc(a, b, x):
     # _betai is the regularized incomplete beta I_x(a,b) == scipy.special.betainc.
-    assert math.isclose(_betai(a, b, x), float(scipy_special.betainc(a, b, x)), abs_tol=1e-9)
+    assert math.isclose(
+        _betai(a, b, x), float(scipy_special.betainc(a, b, x)), abs_tol=1e-9
+    )
 
 
-@pytest.mark.parametrize("a,b", [(0.5, 0.5), (2.0, 3.0), (5.5, 2.5), (10.0, 20.0), (50.0, 50.0)])
+@pytest.mark.parametrize(
+    "a,b", [(0.5, 0.5), (2.0, 3.0), (5.5, 2.5), (10.0, 20.0), (50.0, 50.0)]
+)
 @pytest.mark.parametrize("p", [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975, 0.99])
 def test_beta_ppf_matches_scipy_betaincinv(p, a, b):
     # _beta_ppf inverts I_x(a,b) == scipy.special.betaincinv. Bisection is exact
@@ -168,7 +185,9 @@ def test_icc_matches_pingouin(matrix):
             rows.append({"subject": si, "rater": ri, "score": float(val)})
     pd = pytest.importorskip("pandas")
     df = pd.DataFrame(rows)
-    res = pingouin.intraclass_corr(data=df, targets="subject", raters="rater", ratings="score")
+    res = pingouin.intraclass_corr(
+        data=df, targets="subject", raters="rater", ratings="score"
+    )
     # ICC(2,1) absolute-agreement, single rater == pingouin's "ICC(A,1)"
     # (older pingouin labelled the same row "ICC2").
     types = res.set_index("Type")["ICC"]
@@ -182,7 +201,7 @@ def test_icc_matches_pingouin(matrix):
     [
         ([1, 0, 1, 0, 1, 1, 0, 0], [1, 0, 1, 1, 1, 0, 0, 0]),
         ([2, 2, 1, 0, 1, 2, 0, 1, 2], [2, 1, 1, 0, 1, 2, 0, 0, 2]),  # 3 categories
-        ([1, 1, 1, 1, 0, 0, 0, 0], [1, 1, 1, 1, 0, 0, 0, 0]),         # perfect
+        ([1, 1, 1, 1, 0, 0, 0, 0], [1, 1, 1, 1, 0, 0, 0, 0]),  # perfect
     ],
 )
 def test_cohens_kappa_matches_sklearn(a, b):

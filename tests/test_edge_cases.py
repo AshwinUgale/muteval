@@ -7,16 +7,14 @@ is pinned here.
 
 from __future__ import annotations
 
-import math
-
-from muteval import EvalOutcome, MutEvalConfig, System, checks
+from muteval import EvalOutcome, MutEvalConfig, checks
 from muteval.probes.discrimination import _auc, _cohens_d, discrimination
 from muteval.probes.judge_reliability import _krippendorff_alpha_nominal
 from muteval.probes.redundancy import redundancy
 from muteval.stats import jeffreys_interval, wilson_interval
 
-
 # --- confidence intervals at n=0,1 ------------------------------------------
+
 
 def test_intervals_unknown_at_n0():
     assert wilson_interval(0, 0) == (0.0, 1.0)
@@ -67,6 +65,7 @@ def test_interval_dispatch_selects_method():
 
 # --- AUC / Cohen's d degeneracies -------------------------------------------
 
+
 def test_auc_all_tie_is_half():
     auc, u = _auc([1.0, 1.0], [1.0, 1.0])
     assert auc == 0.5
@@ -89,6 +88,7 @@ def test_cohens_d_zero_spread_is_none():
 
 # --- Krippendorff single value ----------------------------------------------
 
+
 def test_krippendorff_single_value_is_one():
     # Every rater said the same thing on every item -> perfect agreement.
     assert _krippendorff_alpha_nominal([[1, 1, 1], [1, 1]]) == 1.0
@@ -100,6 +100,7 @@ def test_krippendorff_total_disagreement_is_nonpositive():
 
 
 # --- probe "not assessed" paths ---------------------------------------------
+
 
 def _cfg(cases, evals, names):
     return MutEvalConfig(

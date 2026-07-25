@@ -32,9 +32,9 @@ def test_noisy_is_between_zero_and_one():
 
 
 def test_degenerate_returns_none():
-    assert icc([[1.0, 1.0]]) is None            # n < 2 subjects
-    assert icc([[1.0], [2.0]]) is None           # k < 2 raters
-    assert icc([[1.0, 2.0], [3.0]]) is None       # ragged
+    assert icc([[1.0, 1.0]]) is None  # n < 2 subjects
+    assert icc([[1.0], [2.0]]) is None  # k < 2 raters
+    assert icc([[1.0, 2.0], [3.0]]) is None  # ragged
     assert icc([[3.0, 3.0], [3.0, 3.0]]) is None  # zero total variance
 
 
@@ -48,7 +48,8 @@ def test_judge_reliability_reports_icc_for_scored_judge():
         system=System(prompt="answer.", model="gpt-4o-mini"),
         cases=[{"q": "a", "s": 0.9}, {"q": "b", "s": 0.2}, {"q": "c", "s": 0.6}],
         run=lambda system, case: "out",
-        evals=[scored], eval_names=["j"],
+        evals=[scored],
+        eval_names=["j"],
     )
     r = judge_reliability(cfg, runs=3)
     assert "j" in r.metrics["icc_by_eval"]
@@ -61,8 +62,11 @@ def test_judge_reliability_omits_icc_for_boolean_judge():
         return True
 
     cfg = MutEvalConfig(
-        prompt="answer.", cases=[{"q": "a"}, {"q": "b"}],
-        run=lambda p, c: "out", evals=[boolean], eval_names=["b"],
+        prompt="answer.",
+        cases=[{"q": "a"}, {"q": "b"}],
+        run=lambda p, c: "out",
+        evals=[boolean],
+        eval_names=["b"],
     )
     r = judge_reliability(cfg, runs=3)
     assert r.metrics["icc_by_eval"] == {}

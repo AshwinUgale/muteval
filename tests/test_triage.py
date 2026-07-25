@@ -9,7 +9,7 @@ from __future__ import annotations
 from muteval.cli import _load_last_run, _save_last_run, main
 
 # An offline config (no API key) whose weak eval lets an output change survive.
-OFFLINE_CONFIG = '''
+OFFLINE_CONFIG = """
 from muteval import MutEvalConfig, System, EvalOutcome
 
 SYSTEM = System(
@@ -34,7 +34,7 @@ config = MutEvalConfig(
     system=SYSTEM, cases=[{"q": "can I get a refund?"}],
     run=run, evals=[weak], eval_names=["mentions_refund"],
 )
-'''
+"""
 
 
 def _write_cfg(tmp_path):
@@ -54,7 +54,11 @@ def test_run_persists_and_results_lists_survivors(tmp_path, monkeypatch, capsys)
     assert main(["results", "--no-color"]) == 0
     out = capsys.readouterr().out
     assert "survivors from the last run" in out
-    assert "[weaken_modals]" in out or "[flip_negation]" in out or "[drop_instruction_lines]" in out
+    assert (
+        "[weaken_modals]" in out
+        or "[flip_negation]" in out
+        or "[drop_instruction_lines]" in out
+    )
 
 
 def test_show_renders_output_diff(tmp_path, monkeypatch, capsys):

@@ -21,7 +21,7 @@ def test_drop_tool_output_one_at_a_time():
 
 def test_corrupt_tool_output_changes_a_number():
     ms = corrupt_tool_output(_sys())
-    assert len(ms) == 1                       # only the doc with a number
+    assert len(ms) == 1  # only the doc with a number
     assert "42" not in ms[0].system.tools[0]
 
 

@@ -149,7 +149,10 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         lines.append(header + "):")
         lines.append(
             c("  ranked by severity: ", "2")
-            + c("HIGH", "31") + c(" › ", "2") + c("MED", "33") + c(" › ", "2")
+            + c("HIGH", "31")
+            + c(" › ", "2")
+            + c("MED", "33")
+            + c(" › ", "2")
             + c("LOW", "2")
         )
         lines.append("")
@@ -245,7 +248,9 @@ def format_probe_card(results, use_color: bool = True) -> str:
     return "\n".join(lines)
 
 
-def format_probe_card_html(results, title: str = "muteval — eval quality report card") -> str:
+def format_probe_card_html(
+    results, title: str = "muteval — eval quality report card"
+) -> str:
     """Render the probe panel as a standalone HTML page. Deliberately NO composite
     score — the panel is a set of separately-interpretable signals."""
     order = {"core": 0, "validity": 1, "hygiene": 2}
@@ -258,18 +263,19 @@ def format_probe_card_html(results, title: str = "muteval — eval quality repor
         tier_html = f'<span class="tier">{tier}</span>' if tier else ""
         detail = f'<div class="pd">{html.escape(r.detail)}</div>' if r.detail else ""
         cards.append(
-            f'''<div class="card {state}">
+            f"""<div class="card {state}">
   <div class="chd"><span class="badge {state}">{badge}</span>
     <span class="pn">{html.escape(r.name)}</span>{tier_html}</div>
   <div class="psum">{html.escape(r.summary)}</div>
   {detail}
-</div>'''
+</div>"""
         )
     body = "\n".join(cards) or "<p>No probes ran.</p>"
     n_warn = sum(1 for r in results if not r.ok)
     subtitle = (
         f"{n_warn} of {len(results)} probes flagged an issue — {_PROBE_TIER_LEGEND}"
-        if results else "no probes ran"
+        if results
+        else "no probes ran"
     )
     return f"""<!doctype html>
 <meta charset="utf-8"><title>{html.escape(title)}</title>
@@ -298,9 +304,9 @@ RESULT_SCHEMA_VERSION = 1
 # Patterns that must never appear in emitted JSON/logs (defense in depth: a
 # survivor description or error string could echo a prompt containing a key).
 _SECRET_RE = re.compile(
-    r"(sk-[A-Za-z0-9_\-]{8,}"          # OpenAI-style
-    r"|gsk_[A-Za-z0-9_\-]{8,}"          # Groq-style
-    r"|AIza[A-Za-z0-9_\-]{20,}"         # Google API keys
+    r"(sk-[A-Za-z0-9_\-]{8,}"  # OpenAI-style
+    r"|gsk_[A-Za-z0-9_\-]{8,}"  # Groq-style
+    r"|AIza[A-Za-z0-9_\-]{20,}"  # Google API keys
     r"|(?i:(?:api[_-]?key|authorization|bearer)\s*[:=]\s*)\S+)"
 )
 
@@ -332,35 +338,37 @@ def result_to_dict(result) -> dict:
 
     score = result.score
     eff = result.effective_score
-    return _redact({
-        "schema_version": RESULT_SCHEMA_VERSION,
-        "status": result.status,
-        "baseline_passed": result.baseline_passed,
-        "baseline_error": result.baseline_error,
-        "score": round(score, 4) if score is not None else None,
-        "effective_score": round(eff, 4) if eff is not None else None,
-        "score_ci": [round(x, 4) for x in result.score_ci],
-        "effective_score_ci": [round(x, 4) for x in result.effective_score_ci],
-        "killed": result.killed,
-        "evaluated": result.evaluated,
-        "total": result.total,
-        "errored": result.errored,
-        "error_rate": round(result.error_rate, 4),
-        "inert": len(result.inert_survivors),
-        "high_severity_survivors": len(result.high_severity_survivors),
-        "survivors": [
-            {
-                "id": i,
-                "operator": o.mutant.operator,
-                "description": o.mutant.description,
-                "severity": o.severity,
-                "fix": suggest_eval(o),
-                "baseline_output": o.baseline_output,
-                "mutant_output": o.mutant_output,
-            }
-            for i, o in enumerate(_severity_sorted(result.real_survivors))
-        ],
-    })
+    return _redact(
+        {
+            "schema_version": RESULT_SCHEMA_VERSION,
+            "status": result.status,
+            "baseline_passed": result.baseline_passed,
+            "baseline_error": result.baseline_error,
+            "score": round(score, 4) if score is not None else None,
+            "effective_score": round(eff, 4) if eff is not None else None,
+            "score_ci": [round(x, 4) for x in result.score_ci],
+            "effective_score_ci": [round(x, 4) for x in result.effective_score_ci],
+            "killed": result.killed,
+            "evaluated": result.evaluated,
+            "total": result.total,
+            "errored": result.errored,
+            "error_rate": round(result.error_rate, 4),
+            "inert": len(result.inert_survivors),
+            "high_severity_survivors": len(result.high_severity_survivors),
+            "survivors": [
+                {
+                    "id": i,
+                    "operator": o.mutant.operator,
+                    "description": o.mutant.description,
+                    "severity": o.severity,
+                    "fix": suggest_eval(o),
+                    "baseline_output": o.baseline_output,
+                    "mutant_output": o.mutant_output,
+                }
+                for i, o in enumerate(_severity_sorted(result.real_survivors))
+            ],
+        }
+    )
 
 
 def run_manifest(result, config, operators=None, seed=None) -> dict:
@@ -376,33 +384,41 @@ def run_manifest(result, config, operators=None, seed=None) -> dict:
     from muteval import __version__
 
     system = getattr(config, "system", None)
-    key = repr(system.key()) if system is not None else repr(getattr(config, "prompt", ""))
+    key = (
+        repr(system.key()) if system is not None else repr(getattr(config, "prompt", ""))
+    )
     fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
-    return _redact({
-        "manifest_version": 1,
-        "muteval_version": __version__,
-        "python": _sys.version.split()[0],
-        "platform": platform.platform(),
-        "created_utc": datetime.now(timezone.utc).isoformat(),
-        "run": {
-            "model": getattr(system, "model", None) if system is not None else None,
-            "operators": list(operators) if operators else "all",
-            "seed": seed,
-            "n_cases": len(config.cases) if config.cases else 0,
-            "eval_names": list(config.eval_names),
-            "runs_per_mutant": config.runs_per_mutant,
-            "system_fingerprint": fingerprint,
-        },
-        "result": result_to_dict(result),
-    })
+    return _redact(
+        {
+            "manifest_version": 1,
+            "muteval_version": __version__,
+            "python": _sys.version.split()[0],
+            "platform": platform.platform(),
+            "created_utc": datetime.now(timezone.utc).isoformat(),
+            "run": {
+                "model": getattr(system, "model", None) if system is not None else None,
+                "operators": list(operators) if operators else "all",
+                "seed": seed,
+                "n_cases": len(config.cases) if config.cases else 0,
+                "eval_names": list(config.eval_names),
+                "runs_per_mutant": config.runs_per_mutant,
+                "system_fingerprint": fingerprint,
+            },
+            "result": result_to_dict(result),
+        }
+    )
 
 
 def badge_dict(result, label: str = "eval coverage") -> dict:
     """A shields.io endpoint payload for the effective mutation score."""
     eff = result.effective_score
     if eff is None or result.status != "valid":
-        return {"schemaVersion": 1, "label": label, "message": "n/a",
-                "color": "lightgrey"}
+        return {
+            "schemaVersion": 1,
+            "label": label,
+            "message": "n/a",
+            "color": "lightgrey",
+        }
     pct = round(eff * 100)
     color = "brightgreen" if pct >= 80 else "yellow" if pct >= 50 else "red"
     return {"schemaVersion": 1, "label": label, "message": f"{pct}%", "color": color}
@@ -414,8 +430,11 @@ def _diff_html(base: str, mutant: str) -> str:
 
     rows = []
     for ln in difflib.unified_diff(
-        base.splitlines(), mutant.splitlines(),
-        fromfile="baseline", tofile="mutant", lineterm="",
+        base.splitlines(),
+        mutant.splitlines(),
+        fromfile="baseline",
+        tofile="mutant",
+        lineterm="",
     ):
         cls = "add" if ln.startswith("+") else "del" if ln.startswith("-") else "ctx"
         rows.append(f'<div class="dl {cls}">{html.escape(ln)}</div>')
@@ -425,6 +444,7 @@ def _diff_html(base: str, mutant: str) -> str:
 def format_report_html(data: dict, title: str = "muteval — eval coverage report") -> str:
     """Render a result_to_dict() payload (or a saved last_run.json) as a
     self-contained HTML report: score, survivors, and baseline→mutant diffs."""
+
     def pct(x):
         return "n/a" if x is None else f"{round(x * 100)}%"
 
@@ -441,23 +461,33 @@ def format_report_html(data: dict, title: str = "muteval — eval coverage repor
     for s in survivors:
         sev = (s.get("severity") or "medium").lower()
         base, mut = s.get("baseline_output"), s.get("mutant_output")
-        diff = _diff_html(base, mut) if (base is not None and mut is not None) else \
-            '<div class="dl ctx">(output unchanged / not captured)</div>'
+        diff = (
+            _diff_html(base, mut)
+            if (base is not None and mut is not None)
+            else '<div class="dl ctx">(output unchanged / not captured)</div>'
+        )
         cards.append(
-            f'''<div class="card {sev}">
+            f"""<div class="card {sev}">
   <div class="chd"><span class="sev {sev}">{sev.upper()}</span>
     <span class="op">{html.escape(str(s.get("operator", "")))}</span>
     <span class="cid">#{s.get("id", "")}</span></div>
   <div class="desc">{html.escape(str(s.get("description", "")))}</div>
   <div class="fix"><b>fix:</b> {html.escape(str(s.get("fix", "") or "—"))}</div>
   <div class="diff">{diff}</div>
-</div>'''
+</div>"""
         )
-    cards_html = "\n".join(cards) or '<p class="ok">No survivors — your evals caught every injected regression.</p>'
+    cards_html = (
+        "\n".join(cards)
+        or '<p class="ok">No survivors — your evals caught every injected regression.</p>'
+    )
 
-    banner = "" if valid else (
-        f'<div class="warn">⚠ INVALID / INCOMPLETE run (status: {html.escape(status)}) '
-        "— the score below is not trustworthy.</div>"
+    banner = (
+        ""
+        if valid
+        else (
+            f'<div class="warn">⚠ INVALID / INCOMPLETE run (status: {html.escape(status)}) '
+            "— the score below is not trustworthy.</div>"
+        )
     )
 
     return f"""<!doctype html>
@@ -483,13 +513,13 @@ def format_report_html(data: dict, title: str = "muteval — eval coverage repor
 <h1>{html.escape(title)}</h1>
 {banner}
 <div class="score">{pct(eff)} <span class="muted" style="font-size:1rem">effective coverage</span></div>
-<div class="track"><div class="fill" style="width:{round((eff or 0)*100)}%"></div></div>
+<div class="track"><div class="fill" style="width:{round((eff or 0) * 100)}%"></div></div>
 <div class="stats">
  <div><b>{pct(data.get("score"))}</b>raw score</div>
- <div><b>{ci[0]*100:.0f}–{ci[1]*100:.0f}%</b>95% CI</div>
- <div><b>{data.get("killed",0)}/{data.get("evaluated",0)}</b>killed / evaluated</div>
- <div><b>{data.get("inert",0)}</b>inert (excluded)</div>
- <div><b>{data.get("high_severity_survivors",0)}</b>high-severity survivors</div>
+ <div><b>{ci[0] * 100:.0f}–{ci[1] * 100:.0f}%</b>95% CI</div>
+ <div><b>{data.get("killed", 0)}/{data.get("evaluated", 0)}</b>killed / evaluated</div>
+ <div><b>{data.get("inert", 0)}</b>inert (excluded)</div>
+ <div><b>{data.get("high_severity_survivors", 0)}</b>high-severity survivors</div>
 </div>
 <h2>Survivors <span class="muted">({len(survivors)})</span></h2>
 {cards_html}

@@ -11,7 +11,9 @@ _PROMPT = (
 
 def _cfg():
     return MutEvalConfig(
-        prompt=_PROMPT, cases=[{"input": "x"}], run=lambda p, c: p,
+        prompt=_PROMPT,
+        cases=[{"input": "x"}],
+        run=lambda p, c: p,
         evals=[lambda o, c: True],
     )
 

@@ -99,14 +99,21 @@ class Cache:
         self.hits += 1
         d = json.loads(v)
         return EvalOutcome(
-            passed=d["passed"], score=d["score"], threshold=d["threshold"],
-            name=d["name"], detail=d["detail"],
+            passed=d["passed"],
+            score=d["score"],
+            threshold=d["threshold"],
+            name=d["name"],
+            detail=d["detail"],
         )
 
-    def set_outcome(self, system: System, case: Any, label: str, outcome: EvalOutcome) -> None:
+    def set_outcome(
+        self, system: System, case: Any, label: str, outcome: EvalOutcome
+    ) -> None:
         d = {
-            "passed": bool(outcome.passed), "score": outcome.score,
-            "threshold": outcome.threshold, "name": outcome.name,
+            "passed": bool(outcome.passed),
+            "score": outcome.score,
+            "threshold": outcome.threshold,
+            "name": outcome.name,
             "detail": outcome.detail,
         }
         self._set(self._outcome_key(system, case, label), json.dumps(d))
