@@ -6,11 +6,11 @@ translated to muteval evals. So muteval can ask "would your promptfoo asserts
 catch a prompt regression?"
 
 Supported assertions (translated to graded muteval evals): contains, icontains,
-not-contains, not-icontains, equals, regex, and llm-rubric / model-graded-*
-(-> muteval's stdlib LLM judge). Unsupported types (is-json, javascript, python,
-cost, latency, custom, …) are SKIPPED — muteval prints which types it skipped,
-and refuses a case whose assertions are *all* unsupported (rather than passing it
-vacuously and inflating the score). One eval is emitted per assertion TYPE
+not-contains, not-icontains, equals, regex, is-json, and llm-rubric /
+model-graded-* (-> muteval's stdlib LLM judge). Unsupported types (javascript,
+python, cost, latency, custom, …) are SKIPPED — muteval prints which types it
+skipped, and refuses a case whose assertions are *all* unsupported (rather than
+passing it vacuously and inflating the score). One eval is emitted per assertion TYPE
 (`promptfoo:contains`, `promptfoo:llm-rubric`, …) so the survivor report and
 severity stay per-check.
 
@@ -29,7 +29,7 @@ from muteval.config import MutEvalConfig
 # Assertion types muteval can translate into a graded eval.
 _SUPPORTED_TYPES = {
     "contains", "icontains", "not-contains", "not-icontains",
-    "equals", "regex", "llm-rubric", "model-graded",
+    "equals", "regex", "is-json", "llm-rubric", "model-graded",
 }
 
 
@@ -75,12 +75,16 @@ def _assertion_check(assertion: dict, base_url=None):
         return lambda o, c: o.strip() == str(val).strip()
     if typ == "regex":
         return lambda o, c: re.search(str(val), o) is not None
+    if typ == "is-json":
+        from muteval import checks
+
+        return checks.is_json()
     if typ in ("llm-rubric", "model-graded"):
         from muteval import checks
 
         judge = checks.llm_judge(str(val), base_url=base_url)
         return lambda o, c: bool(judge(o, c))
-    return None  # is-json / javascript / python / custom -> not translatable
+    return None  # javascript / python / custom -> not translatable
 
 
 def _type_eval(typ: str, base_url=None):
@@ -163,7 +167,7 @@ def config_from_promptfoo_dict(
     if not supported:
         raise ValueError(
             "promptfoo config has no translatable assertions (supported: "
-            "contains, icontains, not-contains, equals, regex, llm-rubric)."
+            "contains, icontains, not-contains, equals, regex, is-json, llm-rubric)."
         )
     if skipped:
         print(
