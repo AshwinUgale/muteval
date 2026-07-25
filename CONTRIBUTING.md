@@ -12,7 +12,8 @@ one-page map of how a run flows through the code.
 ```bash
 git clone https://github.com/AshwinUgale/muteval
 cd muteval
-pip install -e ".[dev]"          # editable install + test/type tools
+pip install -e ".[dev]"          # editable install + test/lint/type tools
+pre-commit install               # auto-run ruff + hygiene checks on each commit
 pytest -q                        # the suite (all green)
 muteval run --config examples/support_bot/muteval_config.py   # no API key needed
 ```
@@ -20,10 +21,14 @@ muteval run --config examples/support_bot/muteval_config.py   # no API key neede
 Before opening a PR, run what CI runs:
 
 ```bash
-pytest -q                        # unit + property + edge tests
+ruff check src tests             # lint
+ruff format src tests            # auto-format (CI checks this)
 mypy                             # type gate (config in pyproject.toml)
+pytest -q                        # unit + property + edge tests
 pytest -q tests/test_ci_coverage.py -m slow   # (optional) Monte-Carlo coverage
 ```
+
+(If you ran `pre-commit install`, ruff runs automatically on commit — no surprises in CI.)
 
 Reference cross-checks against statsmodels/scipy/etc. need the `[verify]` extra
 (`pip install -e ".[dev,verify]"`); they're skipped if those libs aren't present.

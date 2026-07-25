@@ -1,0 +1,5 @@
+# Reformatting-only commits to skip in git blame. After you commit the one-time
+# "style: adopt ruff format" commit, paste its full 40-char SHA on a line below,
+# then run:  git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# <sha-of-the-style-adopt-ruff-commit>
