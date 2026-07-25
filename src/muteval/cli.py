@@ -619,7 +619,12 @@ def _load_last_run() -> Optional[dict]:
         return None
 
 
-_SEV_TAG = {"high": ("[HIGH]", "31"), "medium": ("[MED ]", "33"), "low": ("[LOW ]", "2")}
+_SEV_TAG = {"high": ("[HIGH]", "31"), "medium": ("[MED]", "33"), "low": ("[LOW]", "2")}
+
+
+def _severity_tag(s: dict, colorize) -> str:
+    tag, code = _SEV_TAG.get(s.get("severity") or "medium", _SEV_TAG["medium"])
+    return colorize(tag, code) + " " * (len("[HIGH]") - len(tag))
 
 
 def _format_results(data: dict, use_color: bool = True) -> str:
@@ -636,9 +641,9 @@ def _format_results(data: dict, use_color: bool = True) -> str:
         lines.append(c("✓ No survivors saved — your evals caught everything.", "32"))
         return "\n".join(lines)
     for s in survs:
-        tag, code = _SEV_TAG.get(s.get("severity") or "medium", ("[MED ]", "33"))
+        tag = _severity_tag(s, c)
         lines.append(
-            f"  {c(str(s['id']).rjust(3), '1')} {c(tag, code)} "
+            f"  {c(str(s['id']).rjust(3), '1')} {tag} "
             f"[{s['operator']}] {s['description']}"
         )
     lines.append("")
@@ -652,7 +657,7 @@ def _format_show(s: dict, use_color: bool = True) -> str:
     def c(t, code):
         return f"\033[{code}m{t}\033[0m" if use_color else t
 
-    tag, code = _SEV_TAG.get(s.get("severity") or "medium", ("[MED ]", "33"))
+    tag, _ = _SEV_TAG.get(s.get("severity") or "medium", _SEV_TAG["medium"])
     lines = [
         "",
         c(f"muteval — survivor #{s['id']}  {tag}", "1"),

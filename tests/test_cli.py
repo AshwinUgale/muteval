@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from muteval.cli import _check_from_spec, _load_cases, main
+from muteval.cli import _check_from_spec, _format_results, _format_show, _load_cases, main
 from muteval.evals import EvalOutcome
 
 
@@ -25,6 +25,52 @@ def test_check_from_spec_builds_known_checks():
 
     isj = _check_from_spec("is_json", 0.7, "gpt-4o-mini")
     assert isj('{"a":1}', {}).passed is True
+
+
+def test_results_format_pads_severity_tags_outside_brackets():
+    out = _format_results(
+        {
+            "effective_score": 0.5,
+            "survivors": [
+                {
+                    "id": 1,
+                    "operator": "remove_emphasis",
+                    "description": "removed bold",
+                    "severity": "medium",
+                },
+                {
+                    "id": 2,
+                    "operator": "duplicate_context_doc",
+                    "description": "duplicated context",
+                    "severity": "low",
+                },
+            ],
+        },
+        use_color=False,
+    )
+
+    assert "[MED ]" not in out
+    assert "[LOW ]" not in out
+    assert "[MED]  [remove_emphasis]" in out
+    assert "[LOW]  [duplicate_context_doc]" in out
+
+
+def test_show_format_uses_unpadded_severity_tag():
+    out = _format_show(
+        {
+            "id": 1,
+            "operator": "remove_emphasis",
+            "description": "removed bold",
+            "severity": "medium",
+            "fix": "add an eval",
+            "baseline_output": None,
+            "mutant_output": None,
+        },
+        use_color=False,
+    )
+
+    assert "[MED ]" not in out
+    assert "survivor #1  [MED]" in out
 
 
 def test_check_from_spec_judge_is_lazy_no_api():
