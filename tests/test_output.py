@@ -5,7 +5,11 @@ redaction (no API key may leak into emitted JSON/logs).
 """
 
 from muteval import MutEvalConfig, run_mutation_testing
+from muteval.mutators import Mutant
 from muteval.report import RESULT_SCHEMA_VERSION, _redact, badge_dict, result_to_dict
+from muteval.report import format_report
+from muteval.runner import MutantOutcome, MutationResult
+from muteval.system import System
 
 
 def _run():
@@ -74,3 +78,38 @@ def test_real_run_json_has_no_secret_patterns():
 
     blob = str(result_to_dict(_run()))
     assert not re.search(r"sk-[A-Za-z0-9]{8,}|gsk_[A-Za-z0-9]{8,}", blob)
+
+
+def test_terminal_report_pads_severity_tags_outside_brackets():
+    result = MutationResult(
+        baseline_passed=True,
+        outcomes=[
+            MutantOutcome(
+                mutant=Mutant(
+                    operator="remove_emphasis",
+                    description="removed bold",
+                    system=System(prompt="plain"),
+                ),
+                killed=False,
+                output_changed=True,
+                severity="medium",
+            ),
+            MutantOutcome(
+                mutant=Mutant(
+                    operator="duplicate_context_doc",
+                    description="duplicated context",
+                    system=System(prompt="plain"),
+                ),
+                killed=False,
+                output_changed=True,
+                severity="low",
+            ),
+        ],
+    )
+
+    out = format_report(result, use_color=False)
+
+    assert "[MED ]" not in out
+    assert "[LOW ]" not in out
+    assert "[MED]  SURVIVED" in out
+    assert "[LOW]  SURVIVED" in out
