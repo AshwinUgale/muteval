@@ -33,8 +33,14 @@ def test_kappa_ci_brackets_point_estimate():
 
 def test_probe_flags_weak_agreement():
     # machine and human agree only at chance level -> low kappa -> not ok.
-    pairs = [(True, False), (False, True), (True, True), (False, False),
-             (True, False), (False, True)]
+    pairs = [
+        (True, False),
+        (False, True),
+        (True, True),
+        (False, False),
+        (True, False),
+        (False, True),
+    ]
     r = human_agreement_from_rows(pairs)
     assert r.metrics["assessed"] is True
     assert r.ok is False  # weak agreement
@@ -73,9 +79,11 @@ def test_label_worksheet_roundtrip(tmp_path, monkeypatch):
     text = out.read_text().splitlines()
     header = text[0]
     assert "human_label" in header
-    filled = [header,
-              text[1].rsplit(",", 1)[0] + ",pass",
-              text[2].rsplit(",", 1)[0] + ",fail"]
+    filled = [
+        header,
+        text[1].rsplit(",", 1)[0] + ",pass",
+        text[2].rsplit(",", 1)[0] + ",fail",
+    ]
     out.write_text("\n".join(filled) + "\n")
 
     rows = load_label_rows(out)

@@ -62,7 +62,9 @@ def verify_fix(config, mutant_system, candidate) -> tuple[bool, bool]:
     return kills_mutant, keeps_baseline
 
 
-def suggest_and_verify(config, survivor, candidates: Iterable[EvalFn]) -> List[VerifiedFix]:
+def suggest_and_verify(
+    config, survivor, candidates: Iterable[EvalFn]
+) -> List[VerifiedFix]:
     """Keep only the candidate evals that provably close ``survivor``'s gap.
 
     ``survivor`` may be a ``MutantOutcome`` or a ``Mutant`` (anything exposing a
@@ -122,7 +124,9 @@ def _spec_to_eval(spec: dict) -> Optional[EvalFn]:
         elif t == "regex_matches":
             ev = checks.regex_matches(str(spec["value"]))
         else:  # llm_judge
-            ev = checks.llm_judge(str(spec["rubric"]), threshold=float(spec.get("threshold", 0.7)))
+            ev = checks.llm_judge(
+                str(spec["rubric"]), threshold=float(spec.get("threshold", 0.7))
+            )
     except (KeyError, ValueError, TypeError, re.error):
         return None
     ev.__name__ = f"suggested_{t}"
@@ -161,8 +165,11 @@ def _sample_outputs(config, survivor):
 
 
 def generate_candidates(
-    config, survivor, chat: Optional[Callable[[str, str], str]] = None,
-    model: str = "gpt-4o-mini", n: int = 3,
+    config,
+    survivor,
+    chat: Optional[Callable[[str, str], str]] = None,
+    model: str = "gpt-4o-mini",
+    n: int = 3,
 ) -> List[EvalFn]:
     """Ask an LLM to propose candidate checks that would catch ``survivor``.
 
@@ -175,13 +182,22 @@ def generate_candidates(
 
         chat = _openai_chat_stdlib
     base, mut = _sample_outputs(config, survivor)
-    prompt = _GEN_PROMPT.format(description=getattr(getattr(survivor, "mutant", survivor),
-                                                    "description", "(unknown)"),
-                                baseline=base, mutant=mut, n=n)
+    prompt = _GEN_PROMPT.format(
+        description=getattr(
+            getattr(survivor, "mutant", survivor), "description", "(unknown)"
+        ),
+        baseline=base,
+        mutant=mut,
+        n=n,
+    )
     return parse_specs(chat(prompt, model))
 
 
-def autofix(config, survivor, chat=None, model: str = "gpt-4o-mini", n: int = 3) -> List[VerifiedFix]:
+def autofix(
+    config, survivor, chat=None, model: str = "gpt-4o-mini", n: int = 3
+) -> List[VerifiedFix]:
     """Generate candidate fixes with an LLM, then return only the VERIFIED ones
     (each provably catches the mutant AND keeps the baseline green)."""
-    return suggest_and_verify(config, survivor, generate_candidates(config, survivor, chat, model, n))
+    return suggest_and_verify(
+        config, survivor, generate_candidates(config, survivor, chat, model, n)
+    )

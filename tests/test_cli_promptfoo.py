@@ -55,8 +55,14 @@ def test_load_run_config_from_promptfoo(tmp_path):
     from muteval.cli import _load_run_config
 
     path = _write(tmp_path)
-    args = SimpleNamespace(config=None, promptfoo=str(path), model="gpt-4o-mini",
-                           prompt=None, prompt_file=None, cases=None)
+    args = SimpleNamespace(
+        config=None,
+        promptfoo=str(path),
+        model="gpt-4o-mini",
+        prompt=None,
+        prompt_file=None,
+        cases=None,
+    )
     cfg = _load_run_config(args)
     assert len(cfg.cases) == 2
     assert "cite the source" in cfg.prompt

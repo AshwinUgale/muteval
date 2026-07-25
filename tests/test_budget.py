@@ -72,12 +72,22 @@ def test_cli_max_calls_exits_two(tmp_path, capsys):
 
     _sys.path.insert(0, str(tmp_path))
     try:
-        code = main([
-            "run", "--target", "p:answer",
-            "--prompt", "Answer. Always cite the source. Do not lie.",
-            "--cases", str(cases), "--check", "contains:x",
-            "--max-calls", "1", "--no-color",
-        ])
+        code = main(
+            [
+                "run",
+                "--target",
+                "p:answer",
+                "--prompt",
+                "Answer. Always cite the source. Do not lie.",
+                "--cases",
+                str(cases),
+                "--check",
+                "contains:x",
+                "--max-calls",
+                "1",
+                "--no-color",
+            ]
+        )
     finally:
         _sys.path.remove(str(tmp_path))
     assert code == 2

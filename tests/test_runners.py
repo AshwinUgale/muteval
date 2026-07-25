@@ -20,12 +20,14 @@ def _capture(monkeypatch):
 def test_system_mode_uses_mutated_context_and_model(monkeypatch):
     cap = _capture(monkeypatch)
     run = r.openai_run(model="gpt-4o-mini")
-    out = run(System(prompt="SYS", context=("alpha doc", "beta doc"), model="gpt-4o"),
-              {"question": "q?"})
+    out = run(
+        System(prompt="SYS", context=("alpha doc", "beta doc"), model="gpt-4o"),
+        {"question": "q?"},
+    )
     assert out == "out"
-    assert cap["model"] == "gpt-4o"          # system.model honored (model-swap)
+    assert cap["model"] == "gpt-4o"  # system.model honored (model-swap)
     assert cap["system"] == "SYS"
-    assert "alpha doc" in cap["user"]         # mutated context injected
+    assert "alpha doc" in cap["user"]  # mutated context injected
 
 
 def test_system_mode_dropped_context_changes_user_message(monkeypatch):

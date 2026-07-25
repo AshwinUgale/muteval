@@ -27,8 +27,10 @@ def test_check_flags_an_eval_that_raises():
 
     cfg = MutEvalConfig(
         prompt="You are a bot.\n- Cite the order ID.\n- Do not lie.",
-        cases=[{"order_id": "X1"}], run=lambda p, c: "order X1",
-        evals=[boom], eval_names=["boom"],
+        cases=[{"order_id": "X1"}],
+        run=lambda p, c: "order X1",
+        evals=[boom],
+        eval_names=["boom"],
     )
     results = run_checks(cfg)
     assert not all_ok(results)
@@ -40,7 +42,8 @@ def test_check_flags_an_eval_that_raises():
 def test_check_flags_a_failing_baseline_eval():
     cfg = MutEvalConfig(
         prompt="You are a bot.\n- Cite the order ID.\n- Do not lie.",
-        cases=[{"order_id": "X1"}], run=lambda p, c: "order X1",
+        cases=[{"order_id": "X1"}],
+        run=lambda p, c: "order X1",
         evals=[lambda o, c: False],  # never passes on the original system
     )
     results = run_checks(cfg)
@@ -57,7 +60,9 @@ def test_check_no_model_skips_run_and_evals():
 
     cfg = MutEvalConfig(
         prompt="You are a bot.\n- Cite the order ID.\n- Do not lie.",
-        cases=[{"x": 1}], run=run, evals=[lambda o, c: True],
+        cases=[{"x": 1}],
+        run=run,
+        evals=[lambda o, c: True],
     )
     results = run_checks(cfg, use_model=False)
     assert calls["n"] == 0  # no model calls at all
@@ -68,7 +73,9 @@ def test_check_no_model_skips_run_and_evals():
 def test_check_flags_zero_mutants():
     cfg = MutEvalConfig(
         prompt="short",  # too short to mutate
-        cases=[{"x": 1}], run=lambda p, c: "ok", evals=[lambda o, c: True],
+        cases=[{"x": 1}],
+        run=lambda p, c: "ok",
+        evals=[lambda o, c: True],
     )
     results = run_checks(cfg)
     assert any(r.name == "mutants generate" and not r.ok for r in results)
@@ -84,12 +91,13 @@ def test_check_only_touches_one_case_by_default():
     cfg = MutEvalConfig(
         prompt="You are a bot.\n- Cite the order ID.\n- Do not lie.",
         cases=[{"x": 1}, {"x": 2}, {"x": 3}],
-        run=run, evals=[lambda o, c: True],
+        run=run,
+        evals=[lambda o, c: True],
     )
-    run_checks(cfg)                 # default: first case only
+    run_checks(cfg)  # default: first case only
     assert calls["n"] == 1
     calls["n"] = 0
-    run_checks(cfg, full=True)      # full: every case
+    run_checks(cfg, full=True)  # full: every case
     assert calls["n"] == 3
 
 

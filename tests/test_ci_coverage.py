@@ -34,8 +34,8 @@ DRAWS = 4000
 SEED = 20260701
 
 # Floors/ceilings that reflect the literature, not wishful thinking.
-CELL_FLOOR = 0.90          # never severely undercover
-CELL_CEILING = 0.995       # never absurdly conservative
+CELL_FLOOR = 0.90  # never severely undercover
+CELL_CEILING = 0.995  # never absurdly conservative
 MEAN_LO, MEAN_HI = 0.935, 0.975  # average coverage ~ nominal
 
 

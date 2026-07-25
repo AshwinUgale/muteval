@@ -210,8 +210,7 @@ def truncate_prompt(target: Target) -> List[Mutant]:
             Mutant(
                 operator="truncate_prompt",
                 description=(
-                    f"truncated prompt — dropped the last {dropped} of "
-                    f"{len(lines)} lines"
+                    f"truncated prompt — dropped the last {dropped} of {len(lines)} lines"
                 ),
                 system=system.with_prompt(mutated),
             )
@@ -313,8 +312,7 @@ def clear_context(target: Target) -> List[Mutant]:
         Mutant(
             operator="clear_context",
             description=(
-                f"cleared all retrieved context "
-                f"(dropped {len(system.context)} doc(s))"
+                f"cleared all retrieved context (dropped {len(system.context)} doc(s))"
             ),
             system=system.replace(context=()),
             target="context",
@@ -507,7 +505,7 @@ def downgrade_model(target: Target) -> List[Mutant]:
 # when tools are present. Note: the built-in openai_run does not inject tools —
 # agent pipelines consume system.tools via their own run(system, case).
 
-_IRRELEVANT_TOOL = "tool_result: {\"status\": \"ok\", \"data\": \"unrelated\"}"
+_IRRELEVANT_TOOL = 'tool_result: {"status": "ok", "data": "unrelated"}'
 
 
 def drop_tool_output(target: Target) -> List[Mutant]:
@@ -668,7 +666,9 @@ OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
 }
 
 
-def register_operator(name: str, fn: "Callable[[Target], List[Mutant]]") -> "Callable[[Target], List[Mutant]]":
+def register_operator(
+    name: str, fn: "Callable[[Target], List[Mutant]]"
+) -> "Callable[[Target], List[Mutant]]":
     """Register a custom mutation operator under ``name`` so it runs by default
     and can be selected via ``--operators name`` / ``operators=[name]``.
 

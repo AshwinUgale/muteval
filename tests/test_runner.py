@@ -189,9 +189,9 @@ def test_output_change_uses_all_runs_not_just_representative():
     outputs = itertools.cycle(["A", "B", "A"])
 
     def run(prompt, case):
-        if "**" in prompt:      # baseline (unmutated) is stable "A"
+        if "**" in prompt:  # baseline (unmutated) is stable "A"
             return "A"
-        return next(outputs)    # mutant: A, B, A across 3 runs
+        return next(outputs)  # mutant: A, B, A across 3 runs
 
     cfg = MutEvalConfig(
         prompt="Answer **now**.",
@@ -203,8 +203,8 @@ def test_output_change_uses_all_runs_not_just_representative():
     result = run_mutation_testing(cfg, operators=["remove_emphasis"])
     o = result.outcomes[0]
     assert o.killed is False
-    assert o.output_changed is True          # observed "B" is not discarded
-    assert result.inert_survivors == []      # so it is NOT misclassified inert
+    assert o.output_changed is True  # observed "B" is not discarded
+    assert result.inert_survivors == []  # so it is NOT misclassified inert
 
 
 def test_strict_majority_thresholds():
@@ -213,9 +213,9 @@ def test_strict_majority_thresholds():
         return fails * 2 > n  # strict majority; ties survive
 
     assert verdict(1, 2) is False  # 1/2 tie -> survives
-    assert verdict(2, 2) is True   # 2/2 -> killed
+    assert verdict(2, 2) is True  # 2/2 -> killed
     assert verdict(2, 4) is False  # 2/4 tie -> survives
-    assert verdict(3, 4) is True   # 3/4 -> killed
+    assert verdict(3, 4) is True  # 3/4 -> killed
 
 
 def test_baseline_retries_past_a_transient_error():

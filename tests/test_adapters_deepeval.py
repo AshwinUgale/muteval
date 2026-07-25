@@ -7,8 +7,8 @@ The adapter now returns an EvalOutcome carrying score + threshold.
 
 from types import SimpleNamespace
 
-from muteval.evals import EvalOutcome
 from muteval.adapters.deepeval import metric_to_eval, metrics_to_evals
+from muteval.evals import EvalOutcome
 
 
 class StubMetric:

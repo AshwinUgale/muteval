@@ -61,8 +61,11 @@ def test_cache_is_thread_safe_under_concurrency(tmp_path):
 
     def make():
         return MutEvalConfig(
-            system=SYSTEM, cases=CASES, run=counting_run,
-            evals=[_correct], eval_names=["correct"],
+            system=SYSTEM,
+            cases=CASES,
+            run=counting_run,
+            evals=[_correct],
+            eval_names=["correct"],
         )
 
     cache = Cache(str(tmp_path / "c.sqlite"))

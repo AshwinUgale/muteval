@@ -5,7 +5,6 @@ import json
 import pytest
 
 from muteval.cli import _check_from_spec, _format_results, _format_show, _load_cases, main
-from muteval.evals import EvalOutcome
 
 
 def test_check_from_spec_builds_known_checks():
@@ -111,14 +110,19 @@ def test_dry_run_builds_config_without_api(tmp_path, capsys):
     prompt = tmp_path / "system.txt"
     prompt.write_text("Answer using only the context. Cite the source.", encoding="utf-8")
     cases = tmp_path / "cases.jsonl"
-    cases.write_text('{"question":"what port?","context":["port 8080"]}\n', encoding="utf-8")
+    cases.write_text(
+        '{"question":"what port?","context":["port 8080"]}\n', encoding="utf-8"
+    )
 
     code = main(
         [
             "run",
-            "--prompt-file", str(prompt),
-            "--cases", str(cases),
-            "--check", "contains:8080",
+            "--prompt-file",
+            str(prompt),
+            "--cases",
+            str(cases),
+            "--check",
+            "contains:8080",
             "--dry-run",
         ]
     )
@@ -143,14 +147,25 @@ def test_load_cases_tolerates_utf8_bom(tmp_path):
 
 def test_cli_context_builds_system_mode(tmp_path):
     import argparse
+
     from muteval.cli import _config_from_flags
 
     cases = tmp_path / "c.jsonl"
     cases.write_text('{"question":"q"}\n', encoding="utf-8")
     args = argparse.Namespace(
-        prompt="Answer from context.", prompt_file=None, cases=str(cases),
-        context=["doc A", "doc B"], context_file=None, mutate_model=False, model="gpt-4o-mini",
-        check=["contains:x"], judge=None, threshold=0.7, runs_per_mutant=1, scope_include=None, scope_exclude=None,
+        prompt="Answer from context.",
+        prompt_file=None,
+        cases=str(cases),
+        context=["doc A", "doc B"],
+        context_file=None,
+        mutate_model=False,
+        model="gpt-4o-mini",
+        check=["contains:x"],
+        judge=None,
+        threshold=0.7,
+        runs_per_mutant=1,
+        scope_include=None,
+        scope_exclude=None,
     )
     cfg = _config_from_flags(args)
     assert cfg.system.context == ("doc A", "doc B")
@@ -159,14 +174,25 @@ def test_cli_context_builds_system_mode(tmp_path):
 
 def test_cli_no_context_is_prompt_mode(tmp_path):
     import argparse
+
     from muteval.cli import _config_from_flags
 
     cases = tmp_path / "c.jsonl"
     cases.write_text('{"question":"q"}\n', encoding="utf-8")
     args = argparse.Namespace(
-        prompt="Answer.", prompt_file=None, cases=str(cases),
-        context=None, context_file=None, mutate_model=False, model="gpt-4o-mini",
-        check=["contains:x"], judge=None, threshold=0.7, runs_per_mutant=1, scope_include=None, scope_exclude=None,
+        prompt="Answer.",
+        prompt_file=None,
+        cases=str(cases),
+        context=None,
+        context_file=None,
+        mutate_model=False,
+        model="gpt-4o-mini",
+        check=["contains:x"],
+        judge=None,
+        threshold=0.7,
+        runs_per_mutant=1,
+        scope_include=None,
+        scope_exclude=None,
     )
     cfg = _config_from_flags(args)
     assert cfg._system_mode is False
@@ -175,14 +201,25 @@ def test_cli_no_context_is_prompt_mode(tmp_path):
 
 def test_cli_mutate_model_builds_system_with_model(tmp_path):
     import argparse
+
     from muteval.cli import _config_from_flags
 
     cases = tmp_path / "c.jsonl"
     cases.write_text('{"question":"q"}\n', encoding="utf-8")
     args = argparse.Namespace(
-        prompt="Answer.", prompt_file=None, cases=str(cases),
-        context=None, context_file=None, mutate_model=True, model="gpt-4o",
-        check=["contains:x"], judge=None, threshold=0.7, runs_per_mutant=1, scope_include=None, scope_exclude=None,
+        prompt="Answer.",
+        prompt_file=None,
+        cases=str(cases),
+        context=None,
+        context_file=None,
+        mutate_model=True,
+        model="gpt-4o",
+        check=["contains:x"],
+        judge=None,
+        threshold=0.7,
+        runs_per_mutant=1,
+        scope_include=None,
+        scope_exclude=None,
     )
     cfg = _config_from_flags(args)
     assert cfg._system_mode is True
@@ -193,25 +230,36 @@ def test_fail_on_severity_high_gates_when_high_survivors_exist():
     from muteval.cli import main
 
     # The offline support_bot example has unguarded high-severity survivors.
-    code = main([
-        "run", "--config", "examples/support_bot/muteval_config.py",
-        "--no-color", "--fail-on-severity", "high",
-    ])
+    code = main(
+        [
+            "run",
+            "--config",
+            "examples/support_bot/muteval_config.py",
+            "--no-color",
+            "--fail-on-severity",
+            "high",
+        ]
+    )
     assert code == 1
 
 
 def test_no_severity_gate_passes():
     from muteval.cli import main
 
-    code = main([
-        "run", "--config", "examples/support_bot/muteval_config.py", "--no-color",
-    ])
+    code = main(
+        [
+            "run",
+            "--config",
+            "examples/support_bot/muteval_config.py",
+            "--no-color",
+        ]
+    )
     assert code == 0
 
 
 # --- validity gate: invalid/empty runs must fail closed (exit 2) -------------
 
-_BASELINE_FAIL_CONFIG = '''
+_BASELINE_FAIL_CONFIG = """
 from muteval import MutEvalConfig
 
 config = MutEvalConfig(
@@ -220,9 +268,9 @@ config = MutEvalConfig(
     run=lambda p, c: "order X1",
     evals=[lambda o, c: False],  # never passes -> baseline FAILS
 )
-'''
+"""
 
-_NO_MUTANTS_CONFIG = '''
+_NO_MUTANTS_CONFIG = """
 from muteval import MutEvalConfig
 
 config = MutEvalConfig(
@@ -231,7 +279,7 @@ config = MutEvalConfig(
     run=lambda p, c: "ok",
     evals=[lambda o, c: True],
 )
-'''
+"""
 
 
 def _write_config(tmp_path, body, name="cfg.py"):
@@ -243,8 +291,9 @@ def _write_config(tmp_path, body, name="cfg.py"):
 def test_invalid_baseline_exits_2_and_writes_no_badge(tmp_path, capsys):
     cfg = _write_config(tmp_path, _BASELINE_FAIL_CONFIG)
     badge = tmp_path / "badge.json"
-    code = main(["run", "--config", cfg, "--no-color", "--badge", str(badge),
-                 "--fail-under", "0"])
+    code = main(
+        ["run", "--config", cfg, "--no-color", "--badge", str(badge), "--fail-under", "0"]
+    )
     assert code == 2  # fail closed BEFORE the (satisfiable) --fail-under 0 gate
     assert not badge.exists()  # never emit a green badge from an invalid run
     err = capsys.readouterr().err
@@ -273,7 +322,7 @@ def test_invalid_run_still_writes_json_with_status(tmp_path):
     assert data["score"] is None
 
 
-_PARTIAL_ERROR_CONFIG = '''
+_PARTIAL_ERROR_CONFIG = """
 from muteval import MutEvalConfig
 
 def run(prompt, case):
@@ -287,17 +336,29 @@ config = MutEvalConfig(
     run=run,
     evals=[lambda o, c: True],
 )
-'''
+"""
 
 
 def test_partial_errors_fail_closed_and_no_badge(tmp_path):
     cfg = _write_config(tmp_path, _PARTIAL_ERROR_CONFIG)
     badge = tmp_path / "b.json"
     out = tmp_path / "o.json"
-    code = main(["run", "--config", cfg, "--no-color", "--fail-under", "0",
-                 "--badge", str(badge), "--json", str(out)])
-    assert code == 2               # fails BEFORE the satisfiable --fail-under 0
-    assert not badge.exists()      # no green badge from a partly-errored run
+    code = main(
+        [
+            "run",
+            "--config",
+            cfg,
+            "--no-color",
+            "--fail-under",
+            "0",
+            "--badge",
+            str(badge),
+            "--json",
+            str(out),
+        ]
+    )
+    assert code == 2  # fails BEFORE the satisfiable --fail-under 0
+    assert not badge.exists()  # no green badge from a partly-errored run
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["status"] == "partial_errors"
     assert data["error_rate"] > 0.0
@@ -338,7 +399,7 @@ def test_init_rag_template_writes_and_runs(tmp_path):
     dest = tmp_path / "rag.py"
     assert main(["init", "--template", "rag", "--path", str(dest)]) == 0
     body = dest.read_text(encoding="utf-8")
-    assert "System(" in body and "context=CONTEXT" in body   # System-mode scaffold
+    assert "System(" in body and "context=CONTEXT" in body  # System-mode scaffold
 
     # the scaffold runs keyless and produces a VALID mutation run
     cfg = load_config(str(dest))
@@ -356,7 +417,12 @@ def test_cli_output_survives_a_cp1252_stdout(monkeypatch):
 
     buf = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", newline="")
     monkeypatch.setattr(sys, "stdout", buf)
-    code = main([
-        "run", "--config", "examples/support_bot/muteval_config.py", "--no-color",
-    ])
+    code = main(
+        [
+            "run",
+            "--config",
+            "examples/support_bot/muteval_config.py",
+            "--no-color",
+        ]
+    )
     assert code == 0

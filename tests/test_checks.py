@@ -71,20 +71,28 @@ def test_judge_endpoint_resolution(monkeypatch):
     # default -> OpenAI
     assert _judge_endpoint() == "https://api.openai.com/v1/chat/completions"
     # an OpenAI-style base ("/v1") gets "/chat/completions" appended
-    assert _judge_endpoint("https://api.groq.com/openai/v1") == \
-        "https://api.groq.com/openai/v1/chat/completions"
+    assert (
+        _judge_endpoint("https://api.groq.com/openai/v1")
+        == "https://api.groq.com/openai/v1/chat/completions"
+    )
     # trailing slash tolerated
-    assert _judge_endpoint("https://api.groq.com/openai/v1/") == \
-        "https://api.groq.com/openai/v1/chat/completions"
+    assert (
+        _judge_endpoint("https://api.groq.com/openai/v1/")
+        == "https://api.groq.com/openai/v1/chat/completions"
+    )
     # a full endpoint is left as-is
-    assert _judge_endpoint("https://x/v1/chat/completions") == \
-        "https://x/v1/chat/completions"
+    assert (
+        _judge_endpoint("https://x/v1/chat/completions")
+        == "https://x/v1/chat/completions"
+    )
     # OPENAI_BASE_URL env is honored when no explicit base_url
     monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
     assert _judge_endpoint() == "http://localhost:11434/v1/chat/completions"
     # explicit base_url overrides the env
-    assert _judge_endpoint("https://api.openai.com/v1") == \
-        "https://api.openai.com/v1/chat/completions"
+    assert (
+        _judge_endpoint("https://api.openai.com/v1")
+        == "https://api.openai.com/v1/chat/completions"
+    )
 
 
 def test_llm_judge_uses_custom_judge_without_network():
@@ -95,9 +103,9 @@ def test_llm_judge_uses_custom_judge_without_network():
 
 def test_cites_source_is_bracket_agnostic():
     ev = checks.cites_source(r"doc-\d+")
-    assert ev("see [doc-1] and (doc-2)", {}).passed is True         # ascii brackets
-    assert ev("per 【doc-1】", {}).passed is True                    # full-width brackets
-    assert ev("supported by doc-3", {}).passed is True              # bare
+    assert ev("see [doc-1] and (doc-2)", {}).passed is True  # ascii brackets
+    assert ev("per 【doc-1】", {}).passed is True  # full-width brackets
+    assert ev("supported by doc-3", {}).passed is True  # bare
     assert ev("no citation here", {}).passed is False
     # min_count
     two = checks.cites_source(r"doc-\d+", min_count=2)
@@ -107,8 +115,7 @@ def test_cites_source_is_bracket_agnostic():
 
 def test_grounded_preset_uses_context_and_judge_without_network():
     ev = checks.grounded("context", judge=lambda prompt: 0.9, threshold=0.5)
-    out = ev("The warranty is 24 months.",
-             {"context": ["The warranty is 24 months."]})
+    out = ev("The warranty is 24 months.", {"context": ["The warranty is 24 months."]})
     assert out.passed is True and out.score == 0.9 and out.name == "grounded"
     # a strict judge fails it
     ev2 = checks.grounded("context", judge=lambda prompt: 0.1, threshold=0.5)

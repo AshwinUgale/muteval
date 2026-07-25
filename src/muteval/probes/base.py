@@ -18,9 +18,9 @@ from typing import Any, Callable, Dict, List, Optional
 @dataclass
 class ProbeResult:
     name: str
-    ok: bool                       # did the suite pass this quality check?
-    summary: str                   # one-line headline (the number)
-    detail: Optional[str] = None   # what it means / what to do about it
+    ok: bool  # did the suite pass this quality check?
+    summary: str  # one-line headline (the number)
+    detail: Optional[str] = None  # what it means / what to do about it
     metrics: Dict[str, Any] = field(default_factory=dict)
 
 

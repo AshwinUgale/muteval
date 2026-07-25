@@ -252,8 +252,7 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     specs += [f"judge:{r}" for r in (args.judge or [])]
     if not specs:
         raise ValueError(
-            "provide at least one --check (e.g. --check contains:8080) "
-            "or --judge \"...\""
+            'provide at least one --check (e.g. --check contains:8080) or --judge "..."'
         )
     evals = [_check_from_spec(s, args.threshold, args.model) for s in specs]
     names = [s.split(":", 1)[0] for s in specs]
@@ -285,9 +284,13 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
             file=sys.stderr,
         )
     common = dict(
-        cases=cases, run=run, evals=evals, eval_names=names,
+        cases=cases,
+        run=run,
+        evals=evals,
+        eval_names=names,
         runs_per_mutant=args.runs_per_mutant,
-        scope_include=args.scope_include, scope_exclude=args.scope_exclude,
+        scope_include=args.scope_include,
+        scope_exclude=args.scope_exclude,
     )
     if context_docs or args.mutate_model:
         # System mode: the corpus is mutable (drop_context_doc / clear_context)
@@ -308,30 +311,39 @@ def _add_input_args(p: argparse.ArgumentParser) -> None:
     doctor and the probe card work on the same easy on-ramps as `run`."""
     g = p.add_argument_group("input (pick one source)")
     g.add_argument(
-        "--config", "-c",
+        "--config",
+        "-c",
         help="Python file defining a module-level `config` (custom run/pipeline/metrics).",
     )
     g.add_argument(
-        "--promptfoo", metavar="promptfooconfig.yaml",
+        "--promptfoo",
+        metavar="promptfooconfig.yaml",
         help="Ingest a promptfoo config (prompt + tests + assertions) — no muteval config file.",
     )
     g.add_argument("--prompt", help="System prompt to mutate (inline, zero-config).")
-    g.add_argument("--prompt-file", help="File with the system prompt to mutate (zero-config).")
+    g.add_argument(
+        "--prompt-file", help="File with the system prompt to mutate (zero-config)."
+    )
     g.add_argument("--cases", help="Cases file (.jsonl or .json list) for zero-config.")
     g.add_argument(
-        "--target", metavar="pkg.mod:fn",
+        "--target",
+        metavar="pkg.mod:fn",
         help="Your own function as the system under test: fn(prompt|system, case) -> str.",
     )
     g.add_argument(
-        "--endpoint", metavar="URL",
+        "--endpoint",
+        metavar="URL",
         help="Drive an HTTP endpoint as the system (POSTs prompt/context/model/case).",
     )
     g.add_argument(
-        "--header", action="append", metavar="K:V",
+        "--header",
+        action="append",
+        metavar="K:V",
         help="HTTP header for --endpoint (repeatable), e.g. 'Authorization:Bearer xyz'.",
     )
     g.add_argument(
-        "--context", action="append",
+        "--context",
+        action="append",
         help="A retrieved-context doc (repeatable); enables RAG mutation over a corpus.",
     )
     g.add_argument(
@@ -339,25 +351,45 @@ def _add_input_args(p: argparse.ArgumentParser) -> None:
         help="File of retrieved context (split into docs on blank lines); enables RAG mutation.",
     )
     g.add_argument(
-        "--mutate-model", action="store_true",
+        "--mutate-model",
+        action="store_true",
         help="Also test a model downgrade (downgrade_model) on --model.",
     )
-    g.add_argument("--model", default="gpt-4o-mini", help="Model for the system under test (default gpt-4o-mini).")
     g.add_argument(
-        "--base-url", default=None, metavar="URL",
+        "--model",
+        default="gpt-4o-mini",
+        help="Model for the system under test (default gpt-4o-mini).",
+    )
+    g.add_argument(
+        "--base-url",
+        default=None,
+        metavar="URL",
         help="OpenAI-compatible base URL for the system under test (or OPENAI_BASE_URL): "
         "Groq / Gemini-compat / GitHub Models / Ollama / a local server.",
     )
     g.add_argument(
-        "--check", action="append",
+        "--check",
+        action="append",
         help="Built-in check (repeatable): contains:TXT, not_contains:TXT, "
         "contains_case:KEY, regex:PAT, is_json, equals, judge:<rubric>.",
     )
-    g.add_argument("--judge", action="append", help="LLM-judge rubric (repeatable). Sugar for --check judge:<rubric>.")
-    g.add_argument("--scope-include", help="Only mutate prompt lines matching this regex.")
-    g.add_argument("--scope-exclude", help="Never mutate prompt lines matching this regex.")
-    g.add_argument("--threshold", type=float, default=0.7, help="Judge pass threshold (default 0.7).")
-    g.add_argument("--runs-per-mutant", type=int, default=1, help="Runs per mutant (default 1).")
+    g.add_argument(
+        "--judge",
+        action="append",
+        help="LLM-judge rubric (repeatable). Sugar for --check judge:<rubric>.",
+    )
+    g.add_argument(
+        "--scope-include", help="Only mutate prompt lines matching this regex."
+    )
+    g.add_argument(
+        "--scope-exclude", help="Never mutate prompt lines matching this regex."
+    )
+    g.add_argument(
+        "--threshold", type=float, default=0.7, help="Judge pass threshold (default 0.7)."
+    )
+    g.add_argument(
+        "--runs-per-mutant", type=int, default=1, help="Runs per mutant (default 1)."
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -373,70 +405,115 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_input_args(run)
     mut = run.add_argument_group("mutation")
     mut.add_argument(
-        "--operators", nargs="+", choices=list(OPERATORS.keys()), default=None,
+        "--operators",
+        nargs="+",
+        choices=list(OPERATORS.keys()),
+        default=None,
         help="Subset of mutation operators (default: all).",
     )
-    mut.add_argument("--max-mutants", type=int, default=None, help="Cap the number of mutants (head).")
-    mut.add_argument("--sample", type=int, default=None, help="Randomly sample N mutants (cheap runs).")
-    mut.add_argument("--seed", type=int, default=None, help="Seed for --sample (reproducible).")
+    mut.add_argument(
+        "--max-mutants", type=int, default=None, help="Cap the number of mutants (head)."
+    )
+    mut.add_argument(
+        "--sample", type=int, default=None, help="Randomly sample N mutants (cheap runs)."
+    )
+    mut.add_argument(
+        "--seed", type=int, default=None, help="Seed for --sample (reproducible)."
+    )
     cost = run.add_argument_group("cost & speed")
     cost.add_argument(
-        "--cache", metavar="PATH", default=None,
+        "--cache",
+        metavar="PATH",
+        default=None,
         help="Memoize run outputs + eval outcomes in a sqlite file, so an identical "
         "re-run makes zero model/judge calls. Ignored when --runs-per-mutant > 1.",
     )
     cost.add_argument(
-        "--concurrency", type=int, default=1, metavar="N",
+        "--concurrency",
+        type=int,
+        default=1,
+        metavar="N",
         help="Evaluate N mutants in parallel (thread pool). Default 1 (sequential).",
     )
     cost.add_argument(
-        "--max-calls", type=int, default=None, metavar="N",
+        "--max-calls",
+        type=int,
+        default=None,
+        metavar="N",
         help="Cap model + judge calls (cache hits / skipped judges don't count). "
         "Fails closed (exit 2) before overspending.",
     )
     gate = run.add_argument_group("CI gates")
     gate.add_argument(
-        "--fail-under", type=float, default=None, metavar="PCT",
+        "--fail-under",
+        type=float,
+        default=None,
+        metavar="PCT",
         help="Exit non-zero if the mutation score is below this percent.",
     )
     gate.add_argument(
-        "--fail-on-severity", choices=["high", "medium", "low"], default=None,
+        "--fail-on-severity",
+        choices=["high", "medium", "low"],
+        default=None,
         help="Exit non-zero if any real survivor is at or above this severity.",
     )
     gate.add_argument(
-        "--max-error-rate", type=float, default=None, metavar="FRAC",
+        "--max-error-rate",
+        type=float,
+        default=None,
+        metavar="FRAC",
         help="Fraction of mutants allowed to error before the run is INVALID "
         "(default 0.0 = fail closed). Overrides the config value.",
     )
     gate.add_argument(
-        "--allow-mutant-errors", action="store_true",
+        "--allow-mutant-errors",
+        action="store_true",
         help="Tolerate any number of errored mutants (== --max-error-rate 1.0).",
     )
     gate.add_argument(
-        "--allow-empty", action="store_true",
+        "--allow-empty",
+        action="store_true",
         help="Treat a zero-mutant run as a pass (exit 0) instead of invalid.",
     )
     out = run.add_argument_group("output")
-    out.add_argument("--json", metavar="PATH", default=None,
-        help="Write machine-readable results (score, CI, survivors) to a JSON file.")
-    out.add_argument("--badge", metavar="PATH", default=None,
-        help="Write a shields.io endpoint JSON for the eval-coverage badge.")
     out.add_argument(
-        "--manifest", metavar="PATH", default=None,
+        "--json",
+        metavar="PATH",
+        default=None,
+        help="Write machine-readable results (score, CI, survivors) to a JSON file.",
+    )
+    out.add_argument(
+        "--badge",
+        metavar="PATH",
+        default=None,
+        help="Write a shields.io endpoint JSON for the eval-coverage badge.",
+    )
+    out.add_argument(
+        "--manifest",
+        metavar="PATH",
+        default=None,
         help="Write a reproducible-run manifest (version, model, seed, operators, "
         "config fingerprint, result) to commit beside a run.",
     )
     out.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Build and validate the run WITHOUT calling the model.",
     )
     out.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
 
-    init = sub.add_parser("init", help="Scaffold a starter muteval_config.py you can edit.")
-    init.add_argument("--path", "-p", default="muteval_config.py", help="Where to write the scaffold.")
+    init = sub.add_parser(
+        "init", help="Scaffold a starter muteval_config.py you can edit."
+    )
+    init.add_argument(
+        "--path", "-p", default="muteval_config.py", help="Where to write the scaffold."
+    )
     init.add_argument("--force", action="store_true", help="Overwrite if it exists.")
     init.add_argument(
-        "--template", "-t", choices=["basic", "rag"], default="basic",
+        "--template",
+        "-t",
+        choices=["basic", "rag"],
+        default="basic",
         help="basic = prompt-only support-bot; rag = System-mode (mutates retrieved context).",
     )
 
@@ -445,12 +522,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_input_args(probe)
     probe.add_argument(
-        "--probes", nargs="+", default=None,
+        "--probes",
+        nargs="+",
+        default=None,
         help="Subset of probes to run (default: all).",
     )
     probe.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
     probe.add_argument(
-        "--html", metavar="PATH", default=None,
+        "--html",
+        metavar="PATH",
+        default=None,
         help="Also write the report card as a standalone HTML page.",
     )
 
@@ -460,36 +541,46 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_input_args(check)
     check.add_argument(
-        "--operators", nargs="+", choices=list(OPERATORS.keys()), default=None,
+        "--operators",
+        nargs="+",
+        choices=list(OPERATORS.keys()),
+        default=None,
         help="Operators to check mutant generation for (default: all).",
     )
     check.add_argument(
-        "--no-model", action="store_true",
+        "--no-model",
+        action="store_true",
         help="Only run the 0-call structural checks (skip run()/evals).",
     )
     check.add_argument(
-        "--full", action="store_true",
+        "--full",
+        action="store_true",
         help="Exercise run()/evals on EVERY case (a true baseline), not just the first.",
     )
     check.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
 
     results = sub.add_parser(
-        "results", help="Show the ranked survivors from the last run (no re-run).",
+        "results",
+        help="Show the ranked survivors from the last run (no re-run).",
     )
     results.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
 
     show = sub.add_parser(
-        "show", help="Show one survivor from the last run: details + output diff.",
+        "show",
+        help="Show one survivor from the last run: details + output diff.",
     )
     show.add_argument("id", type=int, help="Survivor id (from `muteval results`).")
     show.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
 
     report = sub.add_parser(
-        "report", help="Render a shareable HTML report from a run.",
+        "report",
+        help="Render a shareable HTML report from a run.",
     )
     report.add_argument("--html", required=True, metavar="PATH", help="Output HTML file.")
     report.add_argument(
-        "--json", metavar="PATH", default=None,
+        "--json",
+        metavar="PATH",
+        default=None,
         help="Input run JSON (default: the last run at .muteval/last_run.json).",
     )
 
@@ -500,14 +591,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_input_args(label)
     label.add_argument(
-        "--out", metavar="PATH", default=str(Path(".muteval") / "labels.csv"),
+        "--out",
+        metavar="PATH",
+        default=str(Path(".muteval") / "labels.csv"),
         help="Where to write the worksheet CSV (default: .muteval/labels.csv).",
     )
 
     lst = sub.add_parser("list", help="List available operators, checks, or probes.")
     lst.add_argument(
-        "what", nargs="?", choices=["operators", "checks", "probes", "all"],
-        default="all", help="What to list (default: all).",
+        "what",
+        nargs="?",
+        choices=["operators", "checks", "probes", "all"],
+        default="all",
+        help="What to list (default: all).",
     )
     lst.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
     return parser
@@ -528,7 +624,9 @@ def _format_checks(results, use_color: bool = True) -> str:
     from muteval.doctor import all_ok
 
     if all_ok(results):
-        lines.append(c("✓ Ready — nothing blocking. Run: muteval run --config <file>", "32"))
+        lines.append(
+            c("✓ Ready — nothing blocking. Run: muteval run --config <file>", "32")
+        )
     else:
         lines.append(c("✗ Not ready — fix the FAIL row(s) above, then re-check.", "1;31"))
     return "\n".join(lines)
@@ -608,7 +706,9 @@ def _write_label_worksheet(config, out) -> int:
     n = 0
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["case_index", "case", "output", "eval", "machine_verdict", "human_label"])
+        w.writerow(
+            ["case_index", "case", "output", "eval", "machine_verdict", "human_label"]
+        )
         for ci, case in enumerate(config.cases):
             output = config.invoke(config.system, case)
             for idx, ev in enumerate(config.evals):
@@ -644,7 +744,10 @@ def _format_results(data: dict, use_color: bool = True) -> str:
     lines = ["", c("muteval — survivors from the last run", "1")]
     eff = data.get("effective_score")
     if eff is not None:
-        lines.append(c(f"effective score {eff * 100:.0f}%  ", "2") + f"({len(survs)} real survivor(s))")
+        lines.append(
+            c(f"effective score {eff * 100:.0f}%  ", "2")
+            + f"({len(survs)} real survivor(s))"
+        )
     lines.append("")
     if not survs:
         lines.append(c("✓ No survivors saved — your evals caught everything.", "32"))
@@ -681,8 +784,11 @@ def _format_show(s: dict, use_color: bool = True) -> str:
         return "\n".join(lines)
     lines.append(c("  output diff (baseline → mutant):", "1"))
     diff = difflib.unified_diff(
-        base.splitlines(), mut.splitlines(),
-        fromfile="baseline", tofile="mutant", lineterm="",
+        base.splitlines(),
+        mut.splitlines(),
+        fromfile="baseline",
+        tofile="mutant",
+        lineterm="",
     )
     for ln in diff:
         col = "32" if ln.startswith("+") else "31" if ln.startswith("-") else "2"
@@ -693,6 +799,7 @@ def _format_show(s: dict, use_color: bool = True) -> str:
 def _format_list(what: str, use_color: bool = True) -> str:
     """Render `muteval list [operators|checks|probes|all]` — makes the mutation
     operators, built-in checks, and probes discoverable from the CLI."""
+
     def c(t, code):
         return f"\033[{code}m{t}\033[0m" if use_color else t
 
@@ -787,8 +894,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.dry_run:
             # Use the SAME selection path as a real run so the counts can't drift.
             mutants = select_mutants(
-                config, operators=args.operators, sample=args.sample,
-                seed=args.seed, max_mutants=args.max_mutants,
+                config,
+                operators=args.operators,
+                sample=args.sample,
+                seed=args.seed,
+                max_mutants=args.max_mutants,
             )
             ctx = config.system.context or ()
             print(
@@ -807,9 +917,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
             cache = Cache(args.cache)
         result = run_mutation_testing(
-            config, operators=args.operators, max_mutants=args.max_mutants,
-            sample=args.sample, seed=args.seed, cache=cache,
-            concurrency=args.concurrency, max_calls=args.max_calls,
+            config,
+            operators=args.operators,
+            max_mutants=args.max_mutants,
+            sample=args.sample,
+            seed=args.seed,
+            cache=cache,
+            concurrency=args.concurrency,
+            max_calls=args.max_calls,
         )
         if cache is not None:
             cache.close()
@@ -821,8 +936,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
             try:
                 Path(args.manifest).write_text(
-                    json.dumps(run_manifest(result, config, operators=args.operators,
-                                            seed=args.seed), indent=2),
+                    json.dumps(
+                        run_manifest(
+                            result, config, operators=args.operators, seed=args.seed
+                        ),
+                        indent=2,
+                    ),
                     encoding="utf-8",
                 )
                 print(f"muteval: wrote manifest {args.manifest}")
@@ -867,9 +986,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.badge:
             from muteval.report import badge_dict
 
-            Path(args.badge).write_text(
-                json.dumps(badge_dict(result)), encoding="utf-8"
-            )
+            Path(args.badge).write_text(json.dumps(badge_dict(result)), encoding="utf-8")
 
         failed = False
         if args.fail_under is not None and result.score * 100 < args.fail_under:
@@ -885,7 +1002,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
             threshold = severity_rank(args.fail_on_severity)
             offending = [
-                o for o in result.real_survivors
+                o
+                for o in result.real_survivors
                 if severity_rank(o.severity or MEDIUM) <= threshold
             ]
             if offending:
@@ -912,7 +1030,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             from muteval.report import format_probe_card_html
 
             try:
-                Path(args.html).write_text(format_probe_card_html(results), encoding="utf-8")
+                Path(args.html).write_text(
+                    format_probe_card_html(results), encoding="utf-8"
+                )
                 print(f"muteval: wrote {args.html}")
             except OSError as exc:
                 print(f"muteval: could not write {args.html}: {exc}", file=sys.stderr)

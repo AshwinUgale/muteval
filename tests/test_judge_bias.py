@@ -13,8 +13,8 @@ from muteval.probes.judge_bias import (
     verbosity_bias,
 )
 
-
 # --- synthetic judges (a, b, case) -> "A"|"B"|"tie" --------------------------
+
 
 def fair_judge(a, b, case):
     """Picks the answer containing the CORRECT token — content only."""
@@ -54,8 +54,16 @@ POSITION_PAIRS = [
 
 # same substance; `long` is `short` padded with filler.
 VERBOSITY_PAIRS = [
-    ("The CORRECT answer is 42.", "The CORRECT answer is 42. Furthermore, as the documentation thoroughly explains, this holds.", {}),
-    ("CORRECT: port 8080.", "CORRECT: port 8080. To be comprehensive and helpful, note this is the documented default value.", {}),
+    (
+        "The CORRECT answer is 42.",
+        "The CORRECT answer is 42. Furthermore, as the documentation thoroughly explains, this holds.",
+        {},
+    ),
+    (
+        "CORRECT: port 8080.",
+        "CORRECT: port 8080. To be comprehensive and helpful, note this is the documented default value.",
+        {},
+    ),
 ]
 
 # own-model output is tagged; content is otherwise equal.
@@ -90,6 +98,8 @@ def test_panel_ok_only_for_the_fair_judge():
     assert isinstance(fair, BiasPanel)
     assert fair.ok(threshold=0.1) is True
 
-    biased = run_judge_bias_panel(position_judge, POSITION_PAIRS, VERBOSITY_PAIRS, SELF_PAIRS)
+    biased = run_judge_bias_panel(
+        position_judge, POSITION_PAIRS, VERBOSITY_PAIRS, SELF_PAIRS
+    )
     assert biased.ok(threshold=0.1) is False
     assert biased.position_bias == 1.0

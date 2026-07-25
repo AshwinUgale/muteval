@@ -295,7 +295,9 @@ def _openai_chat_stdlib(prompt: str, model: str, base_url: Optional[str] = None)
         return json.load(resp)["choices"][0]["message"]["content"] or ""
 
 
-def _default_openai_judge(model: str, base_url: Optional[str] = None) -> Callable[[str], float]:
+def _default_openai_judge(
+    model: str, base_url: Optional[str] = None
+) -> Callable[[str], float]:
     def _judge(prompt: str) -> float:
         text = _openai_chat_stdlib(prompt, model, base_url).strip()
         # Parse the LAST number; normalize a 0-10 integer to [0, 1]; clamp.

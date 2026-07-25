@@ -54,7 +54,8 @@ def human_agreement_from_rows(pairs: List[Tuple[bool, bool]]) -> ProbeResult:
 
     if len(pairs) < 2:
         return ProbeResult(
-            name="human_agreement", ok=True,
+            name="human_agreement",
+            ok=True,
             summary="not assessed (need >= 2 human-labeled rows)",
             detail="run `muteval label`, fill the human_label column, then re-run.",
             metrics={"assessed": False, "n": len(pairs)},
@@ -68,17 +69,23 @@ def human_agreement_from_rows(pairs: List[Tuple[bool, bool]]) -> ProbeResult:
     ok = kappa is not None and kappa >= 0.6
     ci = f" [95% CI {lo:.2f}–{hi:.2f}]" if lo is not None else ""
     return ProbeResult(
-        name="human_agreement", ok=ok,
+        name="human_agreement",
+        ok=ok,
         summary=f"Cohen's kappa {kappa:.2f}{ci} over {len(pairs)} labeled rows "
         f"({agree * 100:.0f}% raw agreement)",
         detail=(
             "substantial agreement with the human (kappa >= 0.6)."
-            if ok else
-            "weak agreement — the eval and a human often disagree; revisit the "
+            if ok
+            else "weak agreement — the eval and a human often disagree; revisit the "
             "check or its threshold."
         ),
-        metrics={"assessed": True, "kappa": kappa, "ci": [lo, hi],
-                 "n": len(pairs), "raw_agreement": agree},
+        metrics={
+            "assessed": True,
+            "kappa": kappa,
+            "ci": [lo, hi],
+            "n": len(pairs),
+            "raw_agreement": agree,
+        },
     )
 
 
@@ -88,7 +95,8 @@ def human_agreement(config, labels_path=None) -> ProbeResult:
     path = Path(labels_path) if labels_path else Path(".muteval") / "labels.csv"
     if not path.exists():
         return ProbeResult(
-            name="human_agreement", ok=True,
+            name="human_agreement",
+            ok=True,
             summary="not assessed (no human labels)",
             detail=f"run `muteval label` to emit a worksheet, fill it, save as {path}.",
             metrics={"assessed": False},

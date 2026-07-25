@@ -4,8 +4,8 @@ These inject a stub sample_factory + score_fn so they run without ragas
 installed — we're testing the adapter's wiring, not ragas itself.
 """
 
-from muteval.evals import EvalOutcome
 from muteval.adapters.ragas import metric_to_eval, metrics_to_evals
+from muteval.evals import EvalOutcome
 
 
 class StubMetric:
@@ -26,9 +26,7 @@ def _sample_factory(output, case):
 
 
 def test_score_at_or_above_threshold_passes():
-    ev = metric_to_eval(
-        StubMetric(0.8), threshold=0.7, sample_factory=_sample_factory
-    )
+    ev = metric_to_eval(StubMetric(0.8), threshold=0.7, sample_factory=_sample_factory)
     out = ev("ans", {"input": "q"})
     assert isinstance(out, EvalOutcome)
     assert out.passed is True
@@ -37,9 +35,7 @@ def test_score_at_or_above_threshold_passes():
 
 
 def test_score_below_threshold_fails():
-    ev = metric_to_eval(
-        StubMetric(0.5), threshold=0.7, sample_factory=_sample_factory
-    )
+    ev = metric_to_eval(StubMetric(0.5), threshold=0.7, sample_factory=_sample_factory)
     assert ev("ans", {"input": "q"}).passed is False
 
 

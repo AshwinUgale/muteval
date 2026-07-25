@@ -49,11 +49,33 @@ OPERATOR_SEVERITY = {
 
 # If a mutation's changed text matches any of these, bump severity one level.
 CRITICAL_PATTERNS = [
-    r"never", r"always", r"must", r"do\s*n.?t", r"cannot", r"refus",
-    r"refund", r"privac", r"\bpii\b", r"secur", r"safe", r"polic",
-    r"confidential", r"password", r"credential", r"medical", r"legal",
-    r"hallucin", r"\bcite\b", r"\bsource", r"don.?t know", r"author",
-    r"\bdelete\b", r"customer", r"\bdata\b", r"comply", r"complian",
+    r"never",
+    r"always",
+    r"must",
+    r"do\s*n.?t",
+    r"cannot",
+    r"refus",
+    r"refund",
+    r"privac",
+    r"\bpii\b",
+    r"secur",
+    r"safe",
+    r"polic",
+    r"confidential",
+    r"password",
+    r"credential",
+    r"medical",
+    r"legal",
+    r"hallucin",
+    r"\bcite\b",
+    r"\bsource",
+    r"don.?t know",
+    r"author",
+    r"\bdelete\b",
+    r"customer",
+    r"\bdata\b",
+    r"comply",
+    r"complian",
 ]
 _CRITICAL_RE = re.compile("|".join(CRITICAL_PATTERNS), re.IGNORECASE)
 

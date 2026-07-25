@@ -24,7 +24,7 @@ from muteval.runner import MutationResult, run_mutation_testing
 from muteval.system import System, as_system
 
 try:  # keep in sync with pyproject automatically
-    from importlib.metadata import PackageNotFoundError, version
+    from importlib.metadata import version
 
     __version__ = version("muteval")
 except Exception:  # noqa: BLE001 - dev tree without installed metadata

@@ -35,7 +35,7 @@ Repository = "https://github.com/AshwinUgale/muteval"
 Issues = "https://github.com/AshwinUgale/muteval/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "hypothesis>=6.0", "coverage>=7.0", "mypy>=1.8,<2.0"]
+dev = ["pytest>=7.0", "hypothesis>=6.0", "coverage>=7.0", "mypy>=1.8,<2.0", "ruff>=0.6"]
 # Reference libraries used ONLY to cross-check muteval's dependency-free math in
 # tests (tests/test_stats_reference.py). Never a runtime dependency.
 verify = ["statsmodels>=0.14", "scipy>=1.10", "scikit-learn>=1.2", "krippendorff>=0.6", "pingouin>=0.5"]
@@ -49,6 +49,26 @@ muteval = "muteval.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/muteval"]
+
+[tool.ruff]
+line-length = 90
+target-version = "py39"
+extend-exclude = ["mutants", "js"]
+
+[tool.ruff.lint]
+# A pragmatic, non-bikeshedding set: pyflakes (F), pycodestyle (E/W), isort (I),
+# bugbear (B). Line length is owned by the formatter (E501 off). We deliberately
+# skip pyupgrade (UP) — rewriting every annotation is churn for churn's sake, and
+# risky on 3.9.
+select = ["E", "F", "I", "W", "B"]
+ignore = [
+    "E501",  # line length -> the formatter owns this
+    "E731",  # assigning lambdas is fine (used in tests/configs on purpose)
+    "B010",  # setattr-with-constant: we use setattr deliberately (mypy attr-defined)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # asserts are the point in tests
 
 [tool.mypy]
 # Pragmatic gate today, not --strict. strict_optional is off because the config

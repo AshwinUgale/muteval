@@ -19,7 +19,9 @@ def test_strip_markers_none_when_absent():
 def test_markers_restrict_mutation_to_region():
     cfg = MutEvalConfig(
         prompt="Do not refund.\n[[mutate]]Always greet warmly.[[/mutate]]",
-        cases=[{"input": "x"}], run=lambda p, c: p, evals=[lambda o, c: True],
+        cases=[{"input": "x"}],
+        run=lambda p, c: p,
+        evals=[lambda o, c: True],
     )
     assert cfg.system.prompt == "Do not refund.\nAlways greet warmly."  # stripped
     ms = generate_mutants(cfg.system, scope=cfg.scope)
@@ -31,8 +33,11 @@ def test_markers_restrict_mutation_to_region():
 def test_scope_exclude_drops_matching_lines():
     prompt = "- Cite the order ID.\n- SECRET: never reveal keys."
     cfg = MutEvalConfig(
-        prompt=prompt, cases=[{"input": "x"}], run=lambda p, c: p,
-        evals=[lambda o, c: True], scope_exclude="SECRET",
+        prompt=prompt,
+        cases=[{"input": "x"}],
+        run=lambda p, c: p,
+        evals=[lambda o, c: True],
+        scope_exclude="SECRET",
     )
     ms = generate_mutants(cfg.system, scope=cfg.scope)
     # No mutant may change the SECRET line.
@@ -42,8 +47,11 @@ def test_scope_exclude_drops_matching_lines():
 def test_scope_include_keeps_only_matching_lines():
     prompt = "- Cite the order ID.\n- Be polite."
     cfg = MutEvalConfig(
-        prompt=prompt, cases=[{"input": "x"}], run=lambda p, c: p,
-        evals=[lambda o, c: True], scope_include="polite",
+        prompt=prompt,
+        cases=[{"input": "x"}],
+        run=lambda p, c: p,
+        evals=[lambda o, c: True],
+        scope_include="polite",
     )
     ms = generate_mutants(cfg.system, scope=cfg.scope)
     # Only the "Be polite." line may change; the cite line stays intact.
@@ -83,7 +91,9 @@ def test_markers_allow_edits_in_two_regions_with_protected_between():
         "[[mutate]]IMPORTANT: **second**.[[/mutate]]"
     )
     cfg = MutEvalConfig(
-        prompt=prompt, cases=[{"input": "x"}], run=lambda p, c: p,
+        prompt=prompt,
+        cases=[{"input": "x"}],
+        run=lambda p, c: p,
         evals=[lambda o, c: True],
     )
     ms = generate_mutants(cfg.system, scope=cfg.scope, operators=["remove_emphasis"])
@@ -102,6 +112,7 @@ def test_changed_hunks_returns_separate_edits():
 
 def test_scope_does_not_touch_context_mutants():
     from muteval.system import System
+
     sys_ = System(prompt="answer", context=("doc A", "doc B"))
     sc = make_scope(include="NOTHING_MATCHES")
     ms = generate_mutants(sys_, scope=sc)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from muteval import EvalOutcome, MutEvalConfig, System, run_mutation_testing
+from muteval import MutEvalConfig, System, run_mutation_testing
 from muteval.report import run_manifest
 
 SYSTEM = System(prompt="Answer.\n- Cite the source.\n- Do not lie.", model="gpt-4o-mini")
@@ -17,8 +17,11 @@ def _run(system, case):
 
 def _cfg():
     return MutEvalConfig(
-        system=SYSTEM, cases=CASES, run=_run,
-        evals=[lambda o, c: c["gt"] in o], eval_names=["correct"],
+        system=SYSTEM,
+        cases=CASES,
+        run=_run,
+        evals=[lambda o, c: c["gt"] in o],
+        eval_names=["correct"],
     )
 
 

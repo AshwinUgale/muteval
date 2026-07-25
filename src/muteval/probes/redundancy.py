@@ -103,7 +103,8 @@ def _redundant_families(names, active, corr, threshold):
 
 def _na(reason):
     return ProbeResult(
-        name="redundancy", ok=True,
+        name="redundancy",
+        ok=True,
         summary=f"not assessed ({reason})",
         detail="needs >= 2 evals and >= 3 cases whose scores vary.",
         metrics={"assessed": False},
@@ -154,9 +155,15 @@ def redundancy(config, max_corr: float = 0.9, method: str = "spearman") -> Probe
         )
 
     return ProbeResult(
-        name="redundancy", ok=ok, summary=summary, detail=detail,
+        name="redundancy",
+        ok=ok,
+        summary=summary,
+        detail=detail,
         metrics={
-            "assessed": True, "method": method, "max_corr": max_abs,
-            "worst_pair": list(worst), "families": families,
+            "assessed": True,
+            "method": method,
+            "max_corr": max_abs,
+            "worst_pair": list(worst),
+            "families": families,
         },
     )

@@ -1,7 +1,7 @@
 """A3: bring-your-own operators (register_operator + callables)."""
 
 from muteval import MutEvalConfig, register_operator, run_mutation_testing
-from muteval.mutators import Mutant, OPERATORS, generate_mutants
+from muteval.mutators import OPERATORS, Mutant, generate_mutants
 from muteval.system import as_system
 
 
@@ -29,10 +29,10 @@ def test_config_operators_field_used_by_runner():
     cfg = MutEvalConfig(
         prompt="be nice",
         cases=[{"input": "x"}],
-        run=lambda p, c: p,                      # echo the (mutated) prompt
-        evals=[lambda o, c: o == o.lower()],     # passes only if output is lowercase
-        operators=[_shout],                      # config-level custom operator
+        run=lambda p, c: p,  # echo the (mutated) prompt
+        evals=[lambda o, c: o == o.lower()],  # passes only if output is lowercase
+        operators=[_shout],  # config-level custom operator
     )
-    result = run_mutation_testing(cfg)            # no explicit operators -> uses config.operators
-    assert result.total == 1                      # only the shout mutant
-    assert result.killed == 1                     # uppercased output fails the lowercase eval
+    result = run_mutation_testing(cfg)  # no explicit operators -> uses config.operators
+    assert result.total == 1  # only the shout mutant
+    assert result.killed == 1  # uppercased output fails the lowercase eval

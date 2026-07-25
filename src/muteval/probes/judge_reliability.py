@@ -63,12 +63,14 @@ def _krippendorff_alpha_nominal(items):
     return 1.0 - d_o / d_e
 
 
-def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> ProbeResult:
+def judge_reliability(
+    config, runs: int = 3, target_flip_rate: float = 0.05
+) -> ProbeResult:
     from muteval.stats import icc
 
     total = flipped = 0
-    worst: dict = {}           # eval name -> flips
-    matrices: dict = {}        # eval name -> [per-case list of `runs` verdicts]
+    worst: dict = {}  # eval name -> flips
+    matrices: dict = {}  # eval name -> [per-case list of `runs` verdicts]
     score_matrices: dict = {}  # eval name -> [per-case list of `runs` numeric scores]
     for case in config.cases:
         try:
@@ -85,7 +87,9 @@ def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> 
             total += 1
             matrices.setdefault(name, []).append(verdicts)
             if all(o.score is not None for o in outcomes):  # scored judge -> ICC
-                score_matrices.setdefault(name, []).append([float(o.score) for o in outcomes])
+                score_matrices.setdefault(name, []).append(
+                    [float(o.score) for o in outcomes]
+                )
             if len(set(verdicts)) > 1:
                 flipped += 1
                 worst[name] = worst.get(name, 0) + 1
@@ -107,7 +111,9 @@ def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> 
             f"= {rate * 100:.0f}% flaky (Krippendorff alpha {min_alpha:.2f})"
         )
         if ok:
-            detail = f"stable (<= {target_flip_rate * 100:.0f}% flip target; alpha near 1)."
+            detail = (
+                f"stable (<= {target_flip_rate * 100:.0f}% flip target; alpha near 1)."
+            )
         else:
             top = max(worst, key=worst.get)
             detail = (
@@ -122,8 +128,13 @@ def judge_reliability(config, runs: int = 3, target_flip_rate: float = 0.05) -> 
         summary=summary,
         detail=detail,
         metrics={
-            "pairs": total, "flipped": flipped, "flip_rate": rate, "runs": runs,
-            "by_eval": worst, "alpha_by_eval": alpha_by_eval, "min_alpha": min_alpha,
+            "pairs": total,
+            "flipped": flipped,
+            "flip_rate": rate,
+            "runs": runs,
+            "by_eval": worst,
+            "alpha_by_eval": alpha_by_eval,
+            "min_alpha": min_alpha,
             "icc_by_eval": icc_by_eval,  # ICC(2,1) per scored judge (empty if none)
         },
     )

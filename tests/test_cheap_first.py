@@ -29,8 +29,11 @@ def test_ordered_evals_puts_cheap_before_llm():
 
     judge.is_llm = True
     cfg = MutEvalConfig(
-        prompt="answer.", cases=[{"q": 1}], run=lambda p, c: "x",
-        evals=[judge, cheap], eval_names=["judge", "cheap"],  # judge listed FIRST
+        prompt="answer.",
+        cases=[{"q": 1}],
+        run=lambda p, c: "x",
+        evals=[judge, cheap],
+        eval_names=["judge", "cheap"],  # judge listed FIRST
     )
     labels = [label for _, _, label in _ordered_evals(cfg)]
     assert labels.index("cheap") < labels.index("judge")
@@ -49,8 +52,11 @@ def test_short_circuit_skips_judge_when_cheap_check_fails():
         return EvalOutcome(passed=False, name="cheap")  # always fails
 
     cfg = MutEvalConfig(
-        prompt="answer the question.", cases=[{"q": 1}], run=lambda p, c: "out",
-        evals=[judge, cheap], eval_names=["judge", "cheap"],  # judge first, but cheaper wins
+        prompt="answer the question.",
+        cases=[{"q": 1}],
+        run=lambda p, c: "out",
+        evals=[judge, cheap],
+        eval_names=["judge", "cheap"],  # judge first, but cheaper wins
     )
     r = _run_suite(cfg.system, cfg)
     assert r.failing_eval == "cheap"
