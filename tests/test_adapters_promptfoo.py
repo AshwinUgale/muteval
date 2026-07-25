@@ -27,6 +27,8 @@ def test_assertion_translation():
     assert _assertion_check({"type": "contains", "value": "a"})("cat", {}) is True
     assert _assertion_check({"type": "not-contains", "value": "z"})("cat", {}) is True
     assert _assertion_check({"type": "regex", "value": "c.t"})("cat", {}) is True
+    assert bool(_assertion_check({"type": "is-json"})('{"ok": true}', {})) is True
+    assert bool(_assertion_check({"type": "is-json"})("not json", {})) is False
     assert _assertion_check({"type": "javascript", "value": "..."}) is None  # unsupported
 
 
@@ -56,17 +58,29 @@ def test_skipped_types_warn_and_build(capsys):
         "prompts": ["p {{x}}"],
         "tests": [{"vars": {"x": "1"}, "assert": [
             {"type": "contains", "value": "a"},
-            {"type": "is-json"},  # unsupported -> skipped, not graded
+            {"type": "javascript"},  # unsupported -> skipped, not graded
         ]}],
     }
     cfg = config_from_promptfoo_dict(data, run=lambda p, c: "a")
     err = capsys.readouterr().err
-    assert "skipped" in err and "is-json" in err
+    assert "skipped" in err and "javascript" in err
     assert cfg.eval_names == ["promptfoo:contains"]
+
+
+def test_is_json_assertion_is_graded():
+    data = {
+        "prompts": ["Return JSON about {{x}}"],
+        "tests": [{"vars": {"x": "ports"}, "assert": [{"type": "is-json"}]}],
+    }
+    cfg = config_from_promptfoo_dict(data, run=lambda p, c: '{"ok": true}')
+
+    assert cfg.eval_names == ["promptfoo:is-json"]
+    assert cfg.evals[0]('{"ok": true}', cfg.cases[0]) is True
+    assert cfg.evals[0]("not json", cfg.cases[0]) is False
 
 
 def test_all_unsupported_case_raises():
     # A case whose assertions are ALL unsupported must FAIL, not pass vacuously.
-    bad = {"prompts": ["p"], "tests": [{"assert": [{"type": "is-json"}]}]}
+    bad = {"prompts": ["p"], "tests": [{"assert": [{"type": "javascript"}]}]}
     with pytest.raises(ValueError, match="unsupported"):
         config_from_promptfoo_dict(bad, run=lambda p, c: "x")
