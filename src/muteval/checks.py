@@ -108,6 +108,22 @@ def is_json() -> EvalFn:
     return _eval
 
 
+def max_words(limit: int) -> EvalFn:
+    """Pass iff the output has at most ``limit`` whitespace-delimited words."""
+    if limit < 0:
+        raise ValueError("max_words limit must be non-negative")
+
+    def _eval(output: str, case: Any) -> EvalOutcome:
+        count = len(output.split())
+        return EvalOutcome(
+            passed=count <= limit,
+            name=f"max_words({limit})",
+            detail=f"{count} word(s)",
+        )
+
+    return _eval
+
+
 def equals(expected_key: str = "expected", *, strip: bool = True) -> EvalFn:
     """Pass iff the output equals ``case[expected_key]`` (exact match)."""
 
