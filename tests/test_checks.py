@@ -38,6 +38,15 @@ def test_is_json():
     assert ev("not json", {}).passed is False
 
 
+def test_max_words():
+    ev = checks.max_words(3)
+    assert ev("one two three", {}).passed is True
+    out = ev("one two three four", {})
+    assert out.passed is False
+    assert out.name == "max_words(3)"
+    assert out.detail == "4 word(s)"
+
+
 def test_equals_strips_by_default():
     ev = checks.equals("expected")
     assert ev("  hello \n", {"expected": "hello"}).passed is True
