@@ -35,7 +35,7 @@ Repository = "https://github.com/AshwinUgale/muteval"
 Issues = "https://github.com/AshwinUgale/muteval/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "hypothesis>=6.0", "coverage>=7.0", "mypy>=1.8,<2.0", "ruff>=0.6"]
+dev = ["pytest>=7.0", "hypothesis>=6.0", "coverage>=7.0", "mypy>=1.8,<3.0", "ruff>=0.6"]
 # Reference libraries used ONLY to cross-check muteval's dependency-free math in
 # tests (tests/test_stats_reference.py). Never a runtime dependency.
 verify = ["statsmodels>=0.14", "scipy>=1.10", "scikit-learn>=1.2", "krippendorff>=0.6", "pingouin>=0.5"]
