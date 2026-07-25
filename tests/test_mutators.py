@@ -6,6 +6,7 @@ from muteval.mutators import (
     flip_negation,
     generate_mutants,
     remove_emphasis,
+    swap_adjacent_instructions,
     truncate_prompt,
     weaken_modals,
 )
@@ -55,6 +56,29 @@ def test_flip_negation_inverts_rules():
     assert any("must share data" in m.prompt for m in mutants)
     assert any("always" in m.prompt.lower() for m in mutants)
     assert all(m.operator == "flip_negation" for m in mutants)
+
+
+def test_swap_adjacent_instructions_swaps_each_pair():
+    prompt = "- First collect evidence.\n- Then cite sources.\n- Finally answer."
+    mutants = swap_adjacent_instructions(prompt)
+    assert len(mutants) == 2
+    assert mutants[0].operator == "swap_adjacent_instructions"
+    assert mutants[0].prompt.splitlines() == [
+        "- Then cite sources.",
+        "- First collect evidence.",
+        "- Finally answer.",
+    ]
+    assert mutants[1].prompt.splitlines() == [
+        "- First collect evidence.",
+        "- Finally answer.",
+        "- Then cite sources.",
+    ]
+    assert all("swapped adjacent instruction lines" in m.description for m in mutants)
+
+
+def test_swap_adjacent_instructions_skips_non_instruction_lines():
+    prompt = "A short note\nwith plain prose\nand no instructions"
+    assert swap_adjacent_instructions(prompt) == []
 
 
 def test_truncate_prompt_drops_tail():
