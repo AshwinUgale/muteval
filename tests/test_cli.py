@@ -26,6 +26,10 @@ def test_check_from_spec_builds_known_checks():
     isj = _check_from_spec("is_json", 0.7, "gpt-4o-mini")
     assert isj('{"a":1}', {}).passed is True
 
+    maxw = _check_from_spec("max_words:2", 0.7, "gpt-4o-mini")
+    assert maxw("one two", {}).passed is True
+    assert maxw("one two three", {}).passed is False
+
 
 def test_results_format_pads_severity_tags_outside_brackets():
     out = _format_results(
@@ -82,6 +86,11 @@ def test_check_from_spec_judge_is_lazy_no_api():
 def test_check_from_spec_unknown_raises():
     with pytest.raises(ValueError):
         _check_from_spec("bogus:x", 0.7, "gpt-4o-mini")
+
+
+def test_check_from_spec_max_words_requires_integer():
+    with pytest.raises(ValueError, match="integer"):
+        _check_from_spec("max_words:lots", 0.7, "gpt-4o-mini")
 
 
 def test_load_cases_jsonl(tmp_path):

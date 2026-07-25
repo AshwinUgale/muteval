@@ -104,6 +104,31 @@ def drop_instruction_lines(target: Target) -> List[Mutant]:
     return mutants
 
 
+def swap_adjacent_instructions(target: Target) -> List[Mutant]:
+    """Swap adjacent instruction lines to expose order-sensitive prompts."""
+    system = as_system(target)
+    lines = system.prompt.splitlines()
+    mutants: List[Mutant] = []
+    for i in range(len(lines) - 1):
+        first = lines[i].strip()
+        second = lines[i + 1].strip()
+        if not (_is_instruction_line(first) and _is_instruction_line(second)):
+            continue
+        swapped = lines[:]
+        swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
+        mutants.append(
+            Mutant(
+                operator="swap_adjacent_instructions",
+                description=(
+                    "swapped adjacent instruction lines: "
+                    f'"{_truncate(first)}" before "{_truncate(second)}"'
+                ),
+                system=system.with_prompt("\n".join(swapped)),
+            )
+        )
+    return mutants
+
+
 def delete_sentences(target: Target) -> List[Mutant]:
     """Delete a single sentence at a time (for prose-style prompts)."""
     system = as_system(target)
@@ -624,6 +649,7 @@ OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "weaken_modals": weaken_modals,
     "flip_negation": flip_negation,
     "drop_instruction_lines": drop_instruction_lines,
+    "swap_adjacent_instructions": swap_adjacent_instructions,
     "delete_sentences": delete_sentences,
     "truncate_prompt": truncate_prompt,
     "drop_few_shot_example": drop_few_shot_example,
