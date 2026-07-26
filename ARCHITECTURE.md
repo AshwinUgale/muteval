@@ -63,7 +63,7 @@ one-way: **probes → core, never core → probes.**
 - **Custom pipeline:** just pass your own `run(system, case)` and `evals` in a
   Python config — muteval never constrains what they call.
 
-See [docs/PLUGINS.md](docs/PLUGINS.md) for the full API and
+See [docs/PLUGINS.md](https://github.com/AshwinUgale/muteval/blob/main/docs/PLUGINS.md) for the full API and
 `tests/test_plugin_contract.py` for a worked third-party example.
 
 ## Tests & CI gates (`tests/`)

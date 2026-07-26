@@ -4,7 +4,7 @@ Thanks for your interest! muteval is a focused, honest tool — mutation testing
 for LLM eval suites — and contributions that keep it *trustworthy and simple* are
 very welcome. This guide gets you productive fast.
 
-New to the codebase? Read [ARCHITECTURE.md](ARCHITECTURE.md) first — it's a
+New to the codebase? Read [ARCHITECTURE.md](https://github.com/AshwinUgale/muteval/blob/main/ARCHITECTURE.md) first — it's a
 one-page map of how a run flows through the code.
 
 ## Development setup
@@ -62,7 +62,7 @@ larger than a single operator/probe, open an issue first so we agree on the shap
 4. `muteval list operators` should now show it.
 
 The same pattern applies to probes (`register_probe`) — the full extension API is
-in [docs/PLUGINS.md](docs/PLUGINS.md), with a contract test in
+in [docs/PLUGINS.md](https://github.com/AshwinUgale/muteval/blob/main/docs/PLUGINS.md), with a contract test in
 `tests/test_plugin_contract.py`.
 
 ## Guidelines
@@ -85,5 +85,5 @@ in [docs/PLUGINS.md](docs/PLUGINS.md), with a contract test in
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By
+This project follows the [Contributor Covenant](https://github.com/AshwinUgale/muteval/blob/main/CODE_OF_CONDUCT.md). By
 participating you agree to uphold it — be kind, be constructive.

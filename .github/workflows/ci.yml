@@ -21,10 +21,7 @@ jobs:
       - name: Format check (ruff)
         run: ruff format --check src tests
       - name: Docs build (catches config/build breakage on PRs)
-        # Non-strict for now: a few root-file includes (CONTRIBUTING/ARCHITECTURE)
-        # carry GitHub-relative links that don't resolve inside the site. Switch to
-        # --strict once those are absolute URLs. See docs cleanup note.
-        run: mkdocs build
+        run: mkdocs build --strict
 
   # Correctness across the full support matrix (fast tests only).
   test:
