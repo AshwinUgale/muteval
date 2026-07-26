@@ -222,6 +222,7 @@ with `register_operator`, and scope which parts of the prompt mutate with
 
 ```bash
 muteval run --config muteval_config.py --fail-under 75 --badge badge.json
+muteval run --config muteval_config.py --junit junit.xml
 ```
 
 Exits non-zero if coverage drops below 75%, so a PR that weakens your evals fails

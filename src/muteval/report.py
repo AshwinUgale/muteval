@@ -371,6 +371,55 @@ def result_to_dict(result) -> dict:
     )
 
 
+def format_report_junit(result: MutationResult) -> str:
+    """Serialize mutation outcomes as a JUnit XML document.
+
+    Each generated mutant is one testcase. A killed mutant passes; a survivor
+    is a failure because the eval suite missed the injected regression. Runtime
+    errors are represented as testcase errors. Invalid baselines still produce
+    a valid, empty suite with a suite-level error message.
+    """
+    from xml.etree.ElementTree import Element, SubElement, tostring
+
+    suite = Element(
+        "testsuite",
+        {
+            "name": "muteval",
+            "tests": str(result.total),
+            "failures": str(
+                sum(1 for o in result.outcomes if not o.errored and not o.killed)
+            ),
+            "errors": str(result.errored),
+            "skipped": "0",
+        },
+    )
+    if result.total == 0 and (result.baseline_error or not result.baseline_passed):
+        suite.set("tests", "1")
+        suite.set("errors", "1")
+        case = SubElement(suite, "testcase", {"classname": "muteval", "name": "baseline"})
+        error = SubElement(
+            case, "error", {"message": result.baseline_error or "baseline failed"}
+        )
+        error.text = result.baseline_error or "baseline failed"
+    else:
+        for outcome in result.outcomes:
+            name = f"{outcome.mutant.operator}: {outcome.mutant.description}"
+            case = SubElement(suite, "testcase", {"classname": "muteval", "name": name})
+            if outcome.errored:
+                error = SubElement(
+                    case, "error", {"message": outcome.error or "mutant errored"}
+                )
+                error.text = outcome.error or "mutant errored"
+            elif not outcome.killed:
+                failure = SubElement(case, "failure", {"message": "mutation survived"})
+                failure.text = outcome.mutant.description
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        + tostring(suite, encoding="unicode")
+        + "\n"
+    )
+
+
 def run_manifest(result, config, operators=None, seed=None) -> dict:
     """A reproducible-run manifest: provenance (version, model, seed, operator
     set, config fingerprint, timestamp) + the machine-readable result. Committing

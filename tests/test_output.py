@@ -11,6 +11,7 @@ from muteval.report import (
     _redact,
     badge_dict,
     format_report,
+    format_report_junit,
     result_to_dict,
 )
 from muteval.runner import MutantOutcome, MutationResult
@@ -145,3 +146,61 @@ def test_terminal_report_pads_severity_tags_outside_brackets():
     assert "[LOW ]" not in out
     assert "[MED]  SURVIVED" in out
     assert "[LOW]  SURVIVED" in out
+
+
+def test_junit_report_maps_mutants_and_escapes_xml():
+    result = MutationResult(
+        baseline_passed=True,
+        outcomes=[
+            MutantOutcome(
+                mutant=Mutant(
+                    operator="killed",
+                    description="kept & <safe>",
+                    system=System(prompt="x"),
+                ),
+                killed=True,
+            ),
+            MutantOutcome(
+                mutant=Mutant(
+                    operator="survived",
+                    description="missed regression",
+                    system=System(prompt="x"),
+                ),
+                killed=False,
+            ),
+            MutantOutcome(
+                mutant=Mutant(
+                    operator="errored",
+                    description="provider down",
+                    system=System(prompt="x"),
+                ),
+                killed=False,
+                errored=True,
+                error="timeout & retry",
+            ),
+        ],
+    )
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(format_report_junit(result))
+    assert root.attrib == {
+        "name": "muteval",
+        "tests": "3",
+        "failures": "1",
+        "errors": "1",
+        "skipped": "0",
+    }
+    cases = root.findall("testcase")
+    assert len(cases) == 3
+    assert cases[0].find("failure") is None
+    assert cases[1].find("failure") is not None
+    assert cases[2].find("error") is not None
+    assert "&" in cases[0].attrib["name"]
+
+
+def test_junit_report_invalid_baseline_is_parseable():
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(format_report_junit(MutationResult(baseline_passed=False)))
+    assert root.attrib["tests"] == "1"
+    assert root.find("testcase/error") is not None

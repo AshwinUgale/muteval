@@ -483,6 +483,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Write machine-readable results (score, CI, survivors) to a JSON file.",
     )
     out.add_argument(
+        "--junit",
+        metavar="PATH",
+        default=None,
+        help="Write JUnit XML (one testcase per mutant; survivors are failures).",
+    )
+    out.add_argument(
         "--badge",
         metavar="PATH",
         default=None,
@@ -947,6 +953,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(f"muteval: wrote manifest {args.manifest}")
             except OSError as exc:
                 print(f"muteval: could not write manifest: {exc}", file=sys.stderr)
+
+        if args.junit:
+            from muteval.report import format_report_junit
+
+            try:
+                Path(args.junit).write_text(format_report_junit(result), encoding="utf-8")
+                print(f"muteval: wrote JUnit report {args.junit}")
+            except OSError as exc:
+                print(f"muteval: could not write {args.junit}: {exc}", file=sys.stderr)
+                return 2
 
         # JSON is always safe to write — it carries "status" and None-aware
         # scores, so it is useful precisely when the run is invalid.
