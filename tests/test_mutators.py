@@ -5,6 +5,7 @@ from muteval.mutators import (
     drop_few_shot_example,
     flip_negation,
     generate_mutants,
+    paraphrase_instruction,
     remove_emphasis,
     swap_adjacent_instructions,
     truncate_prompt,
@@ -79,6 +80,23 @@ def test_swap_adjacent_instructions_swaps_each_pair():
 def test_swap_adjacent_instructions_skips_non_instruction_lines():
     prompt = "A short note\nwith plain prose\nand no instructions"
     assert swap_adjacent_instructions(prompt) == []
+
+
+def test_paraphrase_instruction_rewords_lines():
+    prompt = (
+        "- Make sure to always verify the output.\n- Do not skip the validation step."
+    )
+    mutants = paraphrase_instruction(prompt)
+    assert len(mutants) >= 2
+    assert all(m.operator == "paraphrase_instruction" for m in mutants)
+    assert any("verify that" in m.description for m in mutants)
+    assert any("avoid" in m.description for m in mutants)
+
+
+def test_paraphrase_instruction_skips_non_instruction_lines():
+    prompt = "A short note\nwith plain prose\nand no instructions"
+    mutants = paraphrase_instruction(prompt)
+    assert len(mutants) == 0
 
 
 def test_truncate_prompt_drops_tail():
