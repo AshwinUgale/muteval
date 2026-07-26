@@ -212,6 +212,16 @@ def _check_from_spec(spec: str, threshold: float, model: str):
         return checks.not_contains(arg)
     if name in ("contains_case", "contains_key"):
         return checks.contains_case(arg)
+    if name in ("contains_all", "containsall"):
+        parts = [a.strip() for a in arg.split(",") if a.strip()]
+        if not parts:
+            raise ValueError("contains_all needs substrings, e.g. contains_all:a,b,c")
+        return checks.contains_all(*parts)
+    if name in ("contains_any", "containsany"):
+        parts = [a.strip() for a in arg.split(",") if a.strip()]
+        if not parts:
+            raise ValueError("contains_any needs substrings, e.g. contains_any:a,b,c")
+        return checks.contains_any(*parts)
     if name == "regex":
         return checks.regex_matches(arg)
     if name == "is_json":
@@ -232,7 +242,8 @@ def _check_from_spec(spec: str, threshold: float, model: str):
         return checks.llm_judge(arg, threshold=threshold, model=model)
     raise ValueError(
         f"unknown check '{name}'. Use one of: contains, not_contains, "
-        "contains_case, regex, is_json, max_words, equals, judge"
+        "contains_case, contains_all, contains_any, regex, is_json, "
+        "max_words, equals, judge"
     )
 
 

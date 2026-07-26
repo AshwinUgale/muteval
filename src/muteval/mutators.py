@@ -129,6 +129,46 @@ def swap_adjacent_instructions(target: Target) -> List[Mutant]:
     return mutants
 
 
+def paraphrase_instruction(target: Target) -> List[Mutant]:
+    """Reword a single instruction line while preserving meaning.
+
+    Uses simple synonym swaps and phrasing changes to expose evals that
+    depend on exact wording rather than semantic content.
+    """
+    _PARAPHRASES = [
+        (r"\b(?:you should|please|kindly)\b", ""),
+        (r"\b(?:make sure|ensure)\b", "verify that"),
+        (r"\b(?:do not|don't)\b", "avoid"),
+        (r"\b(?:in order to)\b", "for"),
+        (r"\b(?:at this point|now|currently)\b", ""),
+        (r"\b(?:it is important to)\b", ""),
+        (r"\b(?:a number of|several)\b", "some"),
+        (r"\b(?:the fact that)\b", "that"),
+        (r"\b(?:in the event that)\b", "if"),
+        (r"\b(?:has the ability to)\b", "can"),
+    ]
+    system = as_system(target)
+    lines = system.prompt.splitlines()
+    mutants: List[Mutant] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not _is_instruction_line(stripped):
+            continue
+        for pattern, replacement in _PARAPHRASES:
+            new_line = re.sub(pattern, replacement, stripped, flags=re.IGNORECASE)
+            if new_line != stripped:
+                new_lines = lines.copy()
+                new_lines[i] = new_line
+                mutants.append(
+                    Mutant(
+                        operator="paraphrase_instruction",
+                        description=f'paraphrased line: "{_truncate(stripped)}" -> "{_truncate(new_line)}"',
+                        system=system.with_prompt("\n".join(new_lines)),
+                    )
+                )
+    return mutants
+
+
 def delete_sentences(target: Target) -> List[Mutant]:
     """Delete a single sentence at a time (for prose-style prompts)."""
     system = as_system(target)
@@ -648,6 +688,7 @@ OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "flip_negation": flip_negation,
     "drop_instruction_lines": drop_instruction_lines,
     "swap_adjacent_instructions": swap_adjacent_instructions,
+    "paraphrase_instruction": paraphrase_instruction,
     "delete_sentences": delete_sentences,
     "truncate_prompt": truncate_prompt,
     "drop_few_shot_example": drop_few_shot_example,

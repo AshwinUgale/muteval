@@ -120,3 +120,36 @@ def test_grounded_preset_uses_context_and_judge_without_network():
     # a strict judge fails it
     ev2 = checks.grounded("context", judge=lambda prompt: 0.1, threshold=0.5)
     assert ev2("made up claim", {"context": "unrelated"}).passed is False
+
+def test_contains_all():
+    ev = checks.contains_all("hello", "world")
+    assert ev("hello world", {}).passed is True
+    assert ev("hello there", {}).passed is False
+
+def test_contains_all_case_insensitive():
+    ev = checks.contains_all("hello", "world", case_sensitive=True)
+    assert ev("Hello World", {}).passed is False
+    assert ev("hello world", {}).passed is True
+
+def test_contains_all_missing_detail():
+    ev = checks.contains_all("hello", "world", "missing")
+    out = ev("hello world", {})
+    assert out.passed is False
+    assert "missing" in out.detail
+
+def test_contains_any():
+    ev = checks.contains_any("hello", "world")
+    assert ev("hello there", {}).passed is True
+    assert ev("goodbye world", {}).passed is True
+    assert ev("goodbye there", {}).passed is False
+
+def test_contains_any_case_insensitive():
+    ev = checks.contains_any("hello", "world", case_sensitive=True)
+    assert ev("Hello there", {}).passed is False
+    assert ev("hello there", {}).passed is True
+
+def test_contains_any_all_missing_detail():
+    ev = checks.contains_any("hello", "world")
+    out = ev("goodbye", {})
+    assert out.passed is False
+    assert "none found" in out.detail

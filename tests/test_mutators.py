@@ -81,6 +81,21 @@ def test_swap_adjacent_instructions_skips_non_instruction_lines():
     assert swap_adjacent_instructions(prompt) == []
 
 
+def test_paraphrase_instruction_rewords_lines():
+    prompt = "- You should always verify the output.\n- Never skip the validation step."
+    mutants = paraphrase_instruction(prompt)
+    assert len(mutants) >= 2
+    assert all(m.operator == "paraphrase_instruction" for m in mutants)
+    assert any("verify that" in m.description for m in mutants)
+    assert any("avoid" in m.description for m in mutants)
+
+
+def test_paraphrase_instruction_skips_non_instruction_lines():
+    prompt = "A short note\nwith plain prose\nand no instructions"
+    mutants = paraphrase_instruction(prompt)
+    assert len(mutants) == 0
+
+
 def test_truncate_prompt_drops_tail():
     prompt = "line one\nline two\nline three\nline four\nline five\nline six"
     mutants = truncate_prompt(prompt)
