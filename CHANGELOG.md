@@ -4,6 +4,15 @@ All notable changes to muteval are documented here. This project adheres to
 [Semantic Versioning](https://semver.org) (pre-1.0: minor versions may introduce
 additive features; the public API is not yet frozen — that lands at 1.0).
 
+## [Unreleased]
+
+- **Keyless promptfoo demo** (`examples/promptfoo_offline/`) — `muteval run
+  --config examples/promptfoo_offline/muteval_config.py` degrades a support-bot
+  prompt and finds the rule its promptfoo suite forgot to assert, with **no API
+  key** (a deterministic mock model). Plus a recipe README and a walkthrough
+  (`blog/mutation-test-your-promptfoo-suite.md`) for adopting muteval on an
+  existing promptfoo config.
+
 ## [0.7.0] — 2026-07-24
 
 - Add optional JUnit XML output via `muteval run --junit PATH`.

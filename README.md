@@ -84,6 +84,14 @@ config file, it reuses your prompt + tests + assertions:
 muteval run --promptfoo promptfooconfig.yaml            # add --dry-run to preview
 ```
 
+Want to see it find a coverage gap first, with **no API key**? Run the offline
+demo — it degrades a support-bot prompt and finds the rule the promptfoo suite
+forgot to assert (~1s, mock model):
+
+```bash
+muteval run --config examples/promptfoo_offline/muteval_config.py --no-color
+```
+
 Already have your own pipeline? Use it as the system under test — a function or a
 deployed endpoint — no `run()` wrapper:
 
