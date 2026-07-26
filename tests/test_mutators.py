@@ -1,3 +1,4 @@
+from muteval.mutators import paraphrase_instruction
 from muteval.mutators import (
     OPERATORS,
     clear_context,
@@ -82,7 +83,9 @@ def test_swap_adjacent_instructions_skips_non_instruction_lines():
 
 
 def test_paraphrase_instruction_rewords_lines():
-    prompt = "- You should always verify the output.\n- Never skip the validation step."
+    prompt = (
+        "- Make sure to always verify the output.\n- Do not skip the validation step."
+    )
     mutants = paraphrase_instruction(prompt)
     assert len(mutants) >= 2
     assert all(m.operator == "paraphrase_instruction" for m in mutants)
