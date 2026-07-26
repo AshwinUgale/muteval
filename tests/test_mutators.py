@@ -1,4 +1,3 @@
-from muteval.mutators import paraphrase_instruction
 from muteval.mutators import (
     OPERATORS,
     clear_context,
@@ -6,6 +5,7 @@ from muteval.mutators import (
     drop_few_shot_example,
     flip_negation,
     generate_mutants,
+    paraphrase_instruction,
     remove_emphasis,
     swap_adjacent_instructions,
     truncate_prompt,
