@@ -1,0 +1,41 @@
+# A small, REAL-shaped promptfoo suite for a customer-support assistant.
+#
+# It is deliberately incomplete in one way — that's the point. muteval will
+# degrade the prompt 20-odd ways and check whether THESE assertions would catch
+# each regression. Two of the prompt's rules are covered by an assertion; one is
+# not. muteval finds the uncovered one (a "survivor") without you knowing which
+# it is in advance.
+#
+# Everything here runs with NO API key: the companion muteval_config.py injects a
+# deterministic mock model, so `is-json`/`contains`/`not-contains` assertions are
+# graded offline. Point `muteval run --promptfoo` at your OWN config to run it for
+# real against gpt-4o-mini.
+description: "Support assistant — keyless muteval demo"
+
+providers:
+  - id: openai:gpt-4o-mini # only used when you run this against a real model
+
+prompts:
+  - |
+    You are a customer-support assistant.
+    - Always cite the source document in square brackets, like [kb-123].
+    - Never promise a refund; only a manager can approve one.
+    - Always reply in English.
+
+    Question: {{question}}
+
+tests:
+  - vars:
+      question: "Can I get a refund for my order?"
+    assert:
+      - type: contains
+        value: "[kb-"
+      - type: not-icontains
+        value: "i'll refund"
+  - vars:
+      question: "Where do I reset my password?"
+    assert:
+      - type: contains
+        value: "[kb-"
+      - type: not-icontains
+        value: "i'll refund"
