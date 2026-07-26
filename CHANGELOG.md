@@ -6,6 +6,8 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [0.7.0] — 2026-07-24
 
+- Add optional JUnit XML output via `muteval run --junit PATH`.
+
 Adoption pass, driven by a three-way audit of onboarding, integration, and UX.
 All additive — no behavior a 0.6 user relied on was removed.
 
