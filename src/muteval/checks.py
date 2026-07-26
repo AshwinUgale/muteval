@@ -53,6 +53,42 @@ def contains(substring: str, *, case_sensitive: bool = False) -> EvalFn:
     return _eval
 
 
+def contains_all(*substrings: str, case_sensitive: bool = False) -> EvalFn:
+    """Pass iff ALL ``substrings`` appear in the output."""
+
+    def _eval(output: str, case: Any) -> EvalOutcome:
+        hay = output if case_sensitive else output.lower()
+        needles = [s if case_sensitive else s.lower() for s in substrings]
+        missing = [s for s in needles if s not in hay]
+        passed = len(missing) == 0
+        detail = f"missing: {missing}" if not passed else None
+        return EvalOutcome(
+            passed=passed,
+            name=f"contains_all({', '.join(repr(s) for s in substrings)})",
+            detail=detail,
+        )
+
+    return _eval
+
+
+def contains_any(*substrings: str, case_sensitive: bool = False) -> EvalFn:
+    """Pass iff ANY of ``substrings`` appears in the output."""
+
+    def _eval(output: str, case: Any) -> EvalOutcome:
+        hay = output if case_sensitive else output.lower()
+        needles = [s if case_sensitive else s.lower() for s in substrings]
+        matched = [s for s in needles if s in hay]
+        passed = len(matched) > 0
+        detail = f"matched: {matched}" if passed else f"none found: {needles}"
+        return EvalOutcome(
+            passed=passed,
+            name=f"contains_any({', '.join(repr(s) for s in substrings)})",
+            detail=detail,
+        )
+
+    return _eval
+
+
 def not_contains(substring: str, *, case_sensitive: bool = False) -> EvalFn:
     """Pass iff ``substring`` does NOT appear in the output (a guardrail check)."""
     needle = substring if case_sensitive else substring.lower()
