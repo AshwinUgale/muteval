@@ -4,7 +4,7 @@ Thanks for your interest! muteval is a focused, honest tool — mutation testing
 for LLM eval suites — and contributions that keep it *trustworthy and simple* are
 very welcome. This guide gets you productive fast.
 
-New to the codebase? Read [ARCHITECTURE.md](ARCHITECTURE.md) first — it's a
+New to the codebase? Read [ARCHITECTURE.md](https://github.com/AshwinUgale/muteval/blob/main/ARCHITECTURE.md) first — it's a
 one-page map of how a run flows through the code.
 
 ## Development setup
