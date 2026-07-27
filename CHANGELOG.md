@@ -6,6 +6,22 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+- **promptfoo: run the model your suite actually uses.** The adapter now reads the
+  model under test from the promptfoo `providers:` block instead of always defaulting
+  to `gpt-4o-mini`; an explicit `--model` still wins, and a provider muteval can't call
+  directly falls back with a warning. (`from_promptfoo` now defaults `model=None` = auto.)
+- **promptfoo: graceful degrade on unsupported asserts.** A case whose assertions are all
+  untranslatable types (javascript/python/…) is now *dropped with a warning* instead of
+  aborting the whole run; muteval fails closed only if nothing in the suite is gradeable.
+- **promptfoo: external test files + more assert types.** `tests: file://cases.csv` (also
+  `.jsonl`/`.json`/`.yaml`) and an external `defaultTest: file://…` are now loaded instead
+  of crashing; code-function / remote sources (`.py:fn`, `https://`, `huggingface://`) get a
+  clear error, not a traceback. Added `contains-any`/`-all`, `icontains-any`/`-all`,
+  `not-equals`, `starts-with` assertion translations. Verified against promptfoo's own 194
+  example configs: clean build rate **88 → 100**, cryptic errors **19 → 0**.
+- **GitHub Action** (`action.yml`) — mutation-test your promptfoo suite in CI in a few
+  lines; see `docs/ci.md` and `examples/github_action/mutation-test.yml`.
+
 - **Keyless promptfoo demo** (`examples/promptfoo_offline/`) — `muteval run
   --config examples/promptfoo_offline/muteval_config.py` degrades a support-bot
   prompt and finds the rule its promptfoo suite forgot to assert, with **no API
