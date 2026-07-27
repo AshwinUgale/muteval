@@ -252,9 +252,7 @@ def _load_external_tests(ref: str, base_dir: Path) -> list:
         import json
 
         return [
-            _obj_to_test(json.loads(line))
-            for line in text.splitlines()
-            if line.strip()
+            _obj_to_test(json.loads(line)) for line in text.splitlines() if line.strip()
         ]
     if low.endswith(".json"):
         import json

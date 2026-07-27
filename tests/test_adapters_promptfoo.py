@@ -118,7 +118,9 @@ def test_resolve_model_reads_provider(capsys):
     # The model under test is read from the promptfoo `providers:` block.
     assert _resolve_model({"providers": ["openai:gpt-4o"]}, None, None) == "gpt-4o"
     assert _resolve_model({"providers": ["openai:chat:gpt-4o"]}, None, None) == "gpt-4o"
-    assert _resolve_model({"providers": [{"id": "openai:gpt-4.1"}]}, None, None) == "gpt-4.1"
+    assert (
+        _resolve_model({"providers": [{"id": "openai:gpt-4.1"}]}, None, None) == "gpt-4.1"
+    )
     capsys.readouterr()  # drain the "model under test ..." notes
 
 
@@ -132,10 +134,17 @@ def test_resolve_model_no_providers_keeps_default():
 
 
 def test_new_deterministic_assert_types():
-    assert _assertion_check({"type": "contains-any", "value": ["a", "z"]})("cat", {}) is True
+    assert (
+        _assertion_check({"type": "contains-any", "value": ["a", "z"]})("cat", {}) is True
+    )
     assert _assertion_check({"type": "contains-any", "value": "x, z"})("cat", {}) is False
-    assert _assertion_check({"type": "contains-all", "value": ["c", "t"]})("cat", {}) is True
-    assert _assertion_check({"type": "contains-all", "value": ["c", "z"]})("cat", {}) is False
+    assert (
+        _assertion_check({"type": "contains-all", "value": ["c", "t"]})("cat", {}) is True
+    )
+    assert (
+        _assertion_check({"type": "contains-all", "value": ["c", "z"]})("cat", {})
+        is False
+    )
     assert _assertion_check({"type": "icontains-any", "value": ["A"]})("cat", {}) is True
     assert _assertion_check({"type": "not-equals", "value": "dog"})("cat", {}) is True
     assert _assertion_check({"type": "starts-with", "value": "ca"})("cat", {}) is True
@@ -188,6 +197,7 @@ def test_external_tests_from_code_or_url_error_clearly(tmp_path):
 
 
 def test_external_defaulttest_is_loaded(tmp_path):
+    pytest.importorskip("yaml")
     (tmp_path / "dt.yaml").write_text(
         "assert:\n  - type: contains\n    value: source\n", encoding="utf-8"
     )
@@ -201,16 +211,155 @@ def test_external_defaulttest_is_loaded(tmp_path):
     assert cfg.eval_names == ["promptfoo:contains"]
 
 
+def test_more_assertion_types():
+    assert _assertion_check({"type": "icontains", "value": "CA"})("cat", {}) is True
+    assert _assertion_check({"type": "not-icontains", "value": "dog"})("cat", {}) is True
+    assert _assertion_check({"type": "equals", "value": "cat"})(" cat ", {}) is True
+    assert _assertion_check({"type": "regex", "value": "c.t"})("cat", {}) is True
+    assert _assertion_check({"type": "cost", "value": 1}) is None  # unsupported
+
+
+def test_file_prompt_loads_relative_to_base_dir(tmp_path):
+    (tmp_path / "p.txt").write_text(
+        "Prompt about {{topic}}. cite source.", encoding="utf-8"
+    )
+    data = {
+        "prompts": ["file://p.txt"],
+        "tests": [
+            {"vars": {"topic": "x"}, "assert": [{"type": "contains", "value": "source"}]}
+        ],
+    }
+    cfg = config_from_promptfoo_dict(data, run=lambda p, c: "source", base_dir=tmp_path)
+    assert "cite source" in cfg.prompt
+
+
+def test_csv_bare_expected_defaults_to_equals(tmp_path):
+    (tmp_path / "c.csv").write_text("topic,__expected\nports,8080\n", encoding="utf-8")
+    cfg = config_from_promptfoo_dict(
+        {"prompts": ["p {{topic}}"], "tests": "file://c.csv"},
+        run=lambda p, c: "8080",
+        base_dir=tmp_path,
+    )
+    assert any(
+        a["type"] == "equals" and a["value"] == "8080" for a in cfg.cases[0]["_asserts"]
+    )
+
+
+def test_json_test_file(tmp_path):
+    (tmp_path / "t.json").write_text(
+        '[{"vars": {"x": "1"}, "assert": [{"type": "contains", "value": "a"}]},'
+        ' {"vars": {"x": "2"}, "assert": [{"type": "contains", "value": "b"}]}]',
+        encoding="utf-8",
+    )
+    cfg = config_from_promptfoo_dict(
+        {"prompts": ["p {{x}}"], "tests": ["file://t.json"]},
+        run=lambda p, c: "ab",
+        base_dir=tmp_path,
+    )
+    assert len(cfg.cases) == 2
+
+
+def test_jsonl_bare_vars_object(tmp_path):
+    (tmp_path / "b.jsonl").write_text('{"x": "1"}\n', encoding="utf-8")
+    data = {
+        "prompts": ["p {{x}}"],
+        "defaultTest": {"assert": [{"type": "contains", "value": "a"}]},
+        "tests": ["file://b.jsonl"],
+    }
+    cfg = config_from_promptfoo_dict(data, run=lambda p, c: "a", base_dir=tmp_path)
+    assert cfg.cases[0]["x"] == "1"
+
+
+def test_yaml_test_file(tmp_path):
+    pytest.importorskip("yaml")
+    (tmp_path / "t.yaml").write_text(
+        "- vars: {x: '1'}\n  assert:\n    - type: contains\n      value: a\n",
+        encoding="utf-8",
+    )
+    cfg = config_from_promptfoo_dict(
+        {"prompts": ["p {{x}}"], "tests": ["file://t.yaml"]},
+        run=lambda p, c: "a",
+        base_dir=tmp_path,
+    )
+    assert len(cfg.cases) == 1
+
+
+def test_external_tests_errors(tmp_path):
+    with pytest.raises(ValueError, match="not found"):
+        config_from_promptfoo_dict(
+            {"prompts": ["p"], "tests": "file://missing.csv"},
+            run=lambda p, c: "x",
+            base_dir=tmp_path,
+        )
+    (tmp_path / "t.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError, match="not supported"):
+        config_from_promptfoo_dict(
+            {"prompts": ["p"], "tests": "file://t.txt"},
+            run=lambda p, c: "x",
+            base_dir=tmp_path,
+        )
+    with pytest.raises(ValueError, match="huggingface"):
+        config_from_promptfoo_dict(
+            {"prompts": ["p"], "tests": "huggingface://datasets/foo"},
+            run=lambda p, c: "x",
+            base_dir=tmp_path,
+        )
+
+
+def test_external_defaulttest_json_and_errors(tmp_path):
+    (tmp_path / "dt.json").write_text(
+        '{"assert": [{"type": "contains", "value": "a"}]}', encoding="utf-8"
+    )
+    cfg = config_from_promptfoo_dict(
+        {"prompts": ["p"], "defaultTest": "file://dt.json", "tests": [{"vars": {}}]},
+        run=lambda p, c: "a",
+        base_dir=tmp_path,
+    )
+    assert cfg.eval_names == ["promptfoo:contains"]
+    with pytest.raises(ValueError, match="not found"):
+        config_from_promptfoo_dict(
+            {
+                "prompts": ["p"],
+                "defaultTest": "file://missing.yaml",
+                "tests": [{"assert": [{"type": "contains", "value": "a"}]}],
+            },
+            run=lambda p, c: "a",
+            base_dir=tmp_path,
+        )
+
+
+def test_from_promptfoo_end_to_end(tmp_path):
+    pytest.importorskip("yaml")
+    from muteval.adapters.promptfoo import from_promptfoo
+
+    (tmp_path / "cfg.yaml").write_text(
+        "prompts:\n  - 'Answer about {{topic}}. cite source.'\n"
+        "providers:\n  - openai:gpt-4o\n"
+        "tests:\n  - vars: {topic: ports}\n    assert:\n"
+        "      - type: contains\n        value: source\n",
+        encoding="utf-8",
+    )
+    cfg = from_promptfoo(str(tmp_path / "cfg.yaml"))
+    assert "cite source" in cfg.prompt
+    assert cfg.eval_names == ["promptfoo:contains"]
+
+
 def test_glob_and_code_prompt_error_clearly(tmp_path):
     with pytest.raises(ValueError, match="glob"):
         config_from_promptfoo_dict(
-            {"prompts": ["file://prompt*.txt"], "tests": [{"assert": [{"type": "contains", "value": "a"}]}]},
+            {
+                "prompts": ["file://prompt*.txt"],
+                "tests": [{"assert": [{"type": "contains", "value": "a"}]}],
+            },
             run=lambda p, c: "a",
             base_dir=tmp_path,
         )
     with pytest.raises(ValueError, match="code function"):
         config_from_promptfoo_dict(
-            {"prompts": ["file://prompt.py:build"], "tests": [{"assert": [{"type": "contains", "value": "a"}]}]},
+            {
+                "prompts": ["file://prompt.py:build"],
+                "tests": [{"assert": [{"type": "contains", "value": "a"}]}],
+            },
             run=lambda p, c: "a",
             base_dir=tmp_path,
         )
@@ -222,7 +371,4 @@ def test_resolve_model_non_openai_provider_warns_and_falls_back(capsys):
     err = capsys.readouterr().err
     assert "isn't an OpenAI-compatible endpoint" in err
     # …but with a compatible base_url, trust the provider's model name.
-    assert (
-        _resolve_model(data, None, "https://api.example.com/v1")
-        == "claude-3-5-sonnet"
-    )
+    assert _resolve_model(data, None, "https://api.example.com/v1") == "claude-3-5-sonnet"
