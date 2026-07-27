@@ -84,6 +84,10 @@ config file, it reuses your prompt + tests + assertions:
 muteval run --promptfoo promptfooconfig.yaml            # add --dry-run to preview
 ```
 
+It reads the model from your `providers:` block, so it mutates your prompt against
+the model your suite actually uses. Want it in CI? There's a GitHub Action —
+see **[Run in CI](docs/ci.md)**.
+
 Want to see it find a coverage gap first, with **no API key**? Run the offline
 demo — it degrades a support-bot prompt and finds the rule the promptfoo suite
 forgot to assert (~1s, mock model):

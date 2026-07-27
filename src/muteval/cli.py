@@ -655,8 +655,16 @@ def _load_run_config(args: argparse.Namespace) -> MutEvalConfig:
     if getattr(args, "promptfoo", None):
         from muteval.adapters.promptfoo import from_promptfoo
 
+        # Only override the model when the user explicitly passed --model; otherwise
+        # let the adapter read it from the promptfoo `providers:` block, so muteval
+        # runs the model the suite actually uses (not the gpt-4o-mini default).
+        explicit_model = any(
+            a == "--model" or a.startswith("--model=") for a in sys.argv[1:]
+        )
         return from_promptfoo(
-            args.promptfoo, model=args.model, base_url=getattr(args, "base_url", None)
+            args.promptfoo,
+            model=args.model if explicit_model else None,
+            base_url=getattr(args, "base_url", None),
         )
     if args.prompt or args.prompt_file:
         if not args.cases:

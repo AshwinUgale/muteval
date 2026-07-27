@@ -50,6 +50,7 @@ nav:
   - "Example — a promptfoo suite ↗": real-report.html
   - Limitations: LIMITATIONS.md
   - Adopting muteval: ADOPTION.md
+  - Run in CI: ci.md
   - Findings: findings.md
   - Plugins: PLUGINS.md
   - Contributing: contributing.md

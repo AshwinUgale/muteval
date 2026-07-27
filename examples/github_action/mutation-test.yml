@@ -1,0 +1,44 @@
+# Copy this into YOUR repo at: .github/workflows/mutation-test.yml
+#
+# It mutation-tests your promptfoo suite — i.e. it deliberately degrades your
+# prompt and reruns YOUR promptfoo assertions to find the ones that would NOT
+# catch a regression. muteval reads the model from your `providers:` block, so
+# it tests the model your suite actually uses.
+
+name: mutation-test evals
+
+on:
+  # Run when the prompt or the suite changes…
+  pull_request:
+    paths:
+      - "promptfooconfig.yaml"
+      - "prompts/**"
+  # …and on a schedule (mutation testing is heavier/pricier than one eval pass).
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  muteval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: AshwinUgale/muteval@v0.7.0 # pin to a release tag
+        with:
+          config: promptfooconfig.yaml
+          fail-on-severity: high # fail the job on any HIGH-severity blind spot
+          sample: 30 # keep CI fast/cheap; remove for a full run
+          junit: muteval.xml
+        env:
+          # muteval calls the model to (re)generate outputs, so it needs a key.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      # Optional: keep the machine-readable results as an artifact.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muteval-results
+          path: |
+            muteval-results.json
+            muteval.xml

@@ -1,0 +1,97 @@
+name: "muteval — mutation-test your eval suite"
+description: >-
+  Find the assertions in your promptfoo suite that would NOT catch a prompt
+  regression. Runs `muteval run --promptfoo` in CI and fails the job on weak
+  coverage.
+author: "AshwinUgale"
+branding:
+  icon: "target"
+  color: "purple"
+
+inputs:
+  config:
+    description: "Path to your promptfooconfig.yaml."
+    required: true
+  fail-under:
+    description: "Fail the job if the mutation score is below this percent (0-100)."
+    required: false
+  fail-on-severity:
+    description: "Fail if any surviving mutant is at/above this severity: high | medium | low."
+    required: false
+  model:
+    description: "Override the model under test. Default: read from the promptfoo `providers:` block."
+    required: false
+  base-url:
+    description: "OpenAI-compatible base URL for the system under test (Groq / Gemini-compat / Ollama / local)."
+    required: false
+  operators:
+    description: "Space-separated subset of mutation operators (default: all)."
+    required: false
+  sample:
+    description: "Randomly sample N mutants to keep CI fast and cheap."
+    required: false
+  seed:
+    description: "Seed for --sample (reproducible sampling)."
+    required: false
+  cache:
+    description: "Path to a sqlite cache file so identical re-runs make zero model calls."
+    required: false
+  max-calls:
+    description: "Cap total model + judge calls; fails closed before overspending."
+    required: false
+  junit:
+    description: "Write JUnit XML to this path (one testcase per mutant; survivors are failures)."
+    required: false
+  badge:
+    description: "Write a shields.io endpoint JSON for an eval-coverage badge."
+    required: false
+  extra-args:
+    description: "Any extra flags passed through to `muteval run`."
+    required: false
+  muteval-version:
+    description: "pip install spec for muteval (e.g. 'muteval[promptfoo]==0.8.0')."
+    required: false
+    default: "muteval[promptfoo]"
+  python-version:
+    description: "Python version to set up."
+    required: false
+    default: "3.12"
+
+outputs:
+  json:
+    description: "Path to the machine-readable results JSON."
+    value: ${{ steps.run.outputs.json }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install muteval
+      shell: bash
+      run: python -m pip install --upgrade pip "${{ inputs.muteval-version }}"
+
+    - name: Run muteval
+      id: run
+      shell: bash
+      run: |
+        set -o pipefail
+        args=(run --promptfoo "${{ inputs.config }}" --json muteval-results.json --no-color)
+        [ -n "${{ inputs.model }}" ]            && args+=(--model "${{ inputs.model }}")
+        [ -n "${{ inputs.base-url }}" ]         && args+=(--base-url "${{ inputs.base-url }}")
+        [ -n "${{ inputs.fail-under }}" ]       && args+=(--fail-under "${{ inputs.fail-under }}")
+        [ -n "${{ inputs.fail-on-severity }}" ] && args+=(--fail-on-severity "${{ inputs.fail-on-severity }}")
+        [ -n "${{ inputs.sample }}" ]           && args+=(--sample "${{ inputs.sample }}")
+        [ -n "${{ inputs.seed }}" ]             && args+=(--seed "${{ inputs.seed }}")
+        [ -n "${{ inputs.cache }}" ]            && args+=(--cache "${{ inputs.cache }}")
+        [ -n "${{ inputs.max-calls }}" ]        && args+=(--max-calls "${{ inputs.max-calls }}")
+        [ -n "${{ inputs.junit }}" ]            && args+=(--junit "${{ inputs.junit }}")
+        [ -n "${{ inputs.badge }}" ]            && args+=(--badge "${{ inputs.badge }}")
+        # --operators takes space-separated names; leave it unquoted so they split.
+        [ -n "${{ inputs.operators }}" ]        && args+=(--operators ${{ inputs.operators }})
+        echo "+ muteval ${args[*]} ${{ inputs.extra-args }}"
+        muteval "${args[@]}" ${{ inputs.extra-args }}
+        echo "json=muteval-results.json" >> "$GITHUB_OUTPUT"
