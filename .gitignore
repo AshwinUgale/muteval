@@ -29,6 +29,7 @@ cases.jsonl
 
 # Internal/backstage docs kept local, not published
 # (candid competitive/business strategy — keep out of the public repo)
+docs/devto-post.md
 docs/OUTREACH-targets-and-plan.md
 docs/AUDIT-probe-prior-art.md
 docs/ROADMAP-master.md
@@ -36,6 +37,8 @@ docs/RELEASE-PLAN.md
 docs/ROADMAP-adaptability.md
 docs/PLAN-probe-validation.md
 docs/ROADMAP-next-level.md
+docs/ADOPTION-AUDIT.md
+docs/writeup-*.md
 
 # mutmut sandbox + cache
 mutants/
@@ -46,5 +49,13 @@ html/
 # muteval persisted last-run (triage)
 .muteval/
 
+<<<<<<< Updated upstream
 # stray scratch/worktree artifact
 _wt
+=======
+# Local build/run artifacts (mkdocs site, coverage/quality reports, sample run output)
+site/
+coverage.html
+quality.html
+run.json
+>>>>>>> Stashed changes
