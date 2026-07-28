@@ -45,3 +45,6 @@ html/
 
 # muteval persisted last-run (triage)
 .muteval/
+
+# stray scratch/worktree artifact
+_wt
