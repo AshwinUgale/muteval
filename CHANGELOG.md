@@ -6,6 +6,8 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-07-28
+
 - **promptfoo: run the model your suite actually uses.** The adapter now reads the
   model under test from the promptfoo `providers:` block instead of always defaulting
   to `gpt-4o-mini`; an explicit `--model` still wins, and a provider muteval can't call
