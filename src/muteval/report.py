@@ -365,7 +365,7 @@ def result_to_dict(result) -> dict:
                     "baseline_output": o.baseline_output,
                     "mutant_output": o.mutant_output,
                 }
-                for i, o in enumerate(_severity_sorted(result.real_survivors))
+                for i, o in enumerate(_severity_sorted(result.real_survivors), start=1)
             ],
         }
     )

@@ -67,9 +67,9 @@ def test_show_renders_output_diff(tmp_path, monkeypatch, capsys):
     main(["run", "--config", str(cfg), "--no-color"])
     capsys.readouterr()
 
-    assert main(["show", "0", "--no-color"]) == 0
+    assert main(["show", "1", "--no-color"]) == 0
     out = capsys.readouterr().out
-    assert "survivor #0" in out
+    assert "survivor #1" in out
     assert "output diff" in out
     # The refund regression shows up in the diff.
     assert "refund" in out.lower()

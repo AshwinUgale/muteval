@@ -44,6 +44,9 @@ def test_result_to_dict_shape():
         assert key in d
     if d["survivors"]:
         s = d["survivors"][0]
+        assert [survivor["id"] for survivor in d["survivors"]] == list(
+            range(1, len(d["survivors"]) + 1)
+        )
         assert set(s) == {
             "id",
             "operator",
