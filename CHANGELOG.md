@@ -8,6 +8,8 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 - Survivor IDs in `muteval results` and `muteval show` now start at 1 for more
   natural human-facing CLI output.
+- `muteval run` now numbers survivors (`#1`, `#2`, …), matching the IDs used by
+  `muteval results` / `muteval show`, so you can inspect one without re-running.
 
 ## [0.8.0] — 2026-07-28
 

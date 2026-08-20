@@ -26,10 +26,10 @@ Mutation score: 33%  [████████░░░░░░░░░░░�
 
 2 SURVIVED  (output changed but evals didn't notice — real coverage gaps; 1 HIGH-severity):
 
-  [HIGH] SURVIVED  [delete_sentences]
+  #1 [HIGH] SURVIVED  [delete_sentences]
             deleted sentence: "If the answer is not in the context, say you don't know."
             fix: add checks.grounded("context")   ← muteval suggests the eval that would catch it
-  [MED ] SURVIVED  [weaken_modals]
+  #2 [MED]  SURVIVED  [weaken_modals]
             weakened "ONLY" -> "preferably" (near: answer using ONLY the provided context)
 ```
 
