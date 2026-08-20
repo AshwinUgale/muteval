@@ -147,8 +147,8 @@ def test_terminal_report_pads_severity_tags_outside_brackets():
 
     assert "[MED ]" not in out
     assert "[LOW ]" not in out
-    assert "[MED]  SURVIVED" in out
-    assert "[LOW]  SURVIVED" in out
+    assert "#1 [MED]  SURVIVED" in out
+    assert "#2 [LOW]  SURVIVED" in out
 
 
 def test_junit_report_maps_mutants_and_escapes_xml():
