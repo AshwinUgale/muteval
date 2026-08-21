@@ -43,6 +43,7 @@ examples = ["openai>=1.0"]
 deepeval = ["deepeval>=1.0"]
 ragas = ["ragas>=0.2"]
 promptfoo = ["pyyaml>=6.0"]
+tracelint = ["tracelint>=0.5"]
 
 [project.scripts]
 muteval = "muteval.cli:main"
@@ -82,7 +83,7 @@ files = ["src/muteval"]
 
 [[tool.mypy.overrides]]
 # Optional third-party integrations (behind extras) have no stubs installed.
-module = ["ragas.*", "deepeval.*", "yaml", "certifi"]
+module = ["ragas.*", "deepeval.*", "tracelint.*", "yaml", "certifi"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

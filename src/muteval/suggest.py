@@ -27,6 +27,25 @@ _STRUCTURAL = {
 }
 
 
+# Tool-fault mutants (a tool that "succeeded" at transport but failed in its
+# body) are caught by a deterministic TRACE check, not an output judge — the
+# semantic evals grade the answer, which still reads clean. The class extends as
+# error/rate_limit/timeout/malformed operators land.
+_TOOL_FAULT = {"deny_tool_output"}
+
+# A STARTER, not turnkey: the failure_when pointer/values are the user's tool
+# ground-truth. muteval can't know them (system.tools holds opaque output
+# strings, not tool names/schemas), so the placeholder + "replace it" is honest.
+_TRACELINT_FIX = (
+    'add checks.tracelint(registry={"tools": {"<your_side_effecting_tool>":\n'
+    '       {"metadata": {"failure_when": {"pointer": "/status", '
+    '"in": ["declined", "failed"]}}}}})\n'
+    "     — a deterministic check that flags this domain failure your semantic "
+    "evals missed.\n"
+    "     Replace the pointer/values with the tool's real failure contract."
+)
+
+
 def _short(s: str, n: int = 52) -> str:
     s = " ".join(s.split())
     return s if len(s) <= n else s[: n - 1] + "…"
@@ -46,6 +65,9 @@ def suggest_eval(outcome) -> str:
     """A one-line starter eval that would catch this survivor."""
     op = getattr(outcome.mutant, "operator", "")
     desc = getattr(outcome.mutant, "description", "") or ""
+
+    if op in _TOOL_FAULT:
+        return _TRACELINT_FIX
 
     if op in _STRUCTURAL:
         return _STRUCTURAL[op]
