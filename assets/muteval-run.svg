@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 402" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+  <rect x="6" y="6" width="748" height="390" rx="10" fill="#0b0f14" stroke="#30363d"/>
+  <rect x="6" y="6" width="748" height="34" rx="10" fill="#161b22"/>
+  <rect x="6" y="30" width="748" height="10" fill="#161b22"/>
+  <circle cx="26" cy="23" r="6" fill="#ff5f56"/>
+  <circle cx="46" cy="23" r="6" fill="#ffbd2e"/>
+  <circle cx="66" cy="23" r="6" fill="#27c93f"/>
+  <text x="92" y="27" fill="#8b949e" font-size="12">muteval run — support-bot eval suite (offline, no API key)</text>
+
+  <text x="24" y="70" fill="#3fb950">$ muteval run --config muteval_config.py</text>
+
+  <text x="24" y="104" fill="#8b949e">Mutation score:</text>
+  <text x="150" y="104" fill="#d29922" font-weight="700">23%</text>
+  <rect x="196" y="94" width="230" height="13" rx="3" fill="#20262e"/>
+  <rect x="196" y="94" width="53" height="13" rx="3" fill="#d29922"/>
+  <text x="440" y="104" fill="#8b949e" font-size="13">5/22 killed · 95% CI 10–43%</text>
+
+  <text x="24" y="140" fill="#f85149" font-weight="700">6 SURVIVED</text>
+  <text x="120" y="140" fill="#8b949e">— output changed, the evals didn't notice (4 HIGH-severity)</text>
+
+  <g font-size="13.5">
+    <rect x="24" y="160" width="52" height="19" rx="4" fill="none" stroke="#5a2222"/>
+    <text x="33" y="174" fill="#f85149">HIGH</text>
+    <text x="86" y="174" fill="#8b949e">weaken_modals</text>
+    <text x="210" y="174" fill="#e6edf3">"Do not" → "try not to" promise refunds</text>
+    <text x="86" y="196" fill="#58a6ff">fix: add checks.llm_judge for the refund rule</text>
+
+    <rect x="24" y="212" width="52" height="19" rx="4" fill="none" stroke="#5a2222"/>
+    <text x="33" y="226" fill="#f85149">HIGH</text>
+    <text x="86" y="226" fill="#8b949e">flip_negation</text>
+    <text x="210" y="226" fill="#e6edf3">inverted the refund guardrail entirely</text>
+
+    <rect x="24" y="244" width="52" height="19" rx="4" fill="none" stroke="#5a4a1f"/>
+    <text x="35" y="258" fill="#d29922">MED</text>
+    <text x="86" y="258" fill="#8b949e">truncate_prompt</text>
+    <text x="210" y="258" fill="#e6edf3">dropped the last 3 of 5 prompt lines</text>
+
+    <text x="24" y="288" fill="#8b949e">… + 3 more · each names the eval that would catch it</text>
+  </g>
+
+  <line x1="24" y1="312" x2="736" y2="312" stroke="#30363d"/>
+  <text x="24" y="340" fill="#e6edf3" font-weight="700">muteval</text>
+  <text x="92" y="340" fill="#8b949e">— mutation testing for your LLM evals. Your suite is passing;</text>
+  <text x="24" y="362" fill="#8b949e">would it catch a regression? Point it at your config and find out.</text>
+</svg>
