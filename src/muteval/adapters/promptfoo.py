@@ -112,7 +112,19 @@ def _assertion_check(assertion: dict, base_url=None):
         from muteval import checks
 
         judge = checks.llm_judge(str(val), base_url=base_url)
-        return lambda o, c: bool(judge(o, c))
+
+        def _graded(o, c):
+            # promptfoo vars use arbitrary names (question / query / …), but
+            # llm_judge reads case["input"] — so an un-`input` suite showed the
+            # judge "User input: None" (#36). Keep an existing `input` var; else
+            # synthesize one from all the case's vars so the judge sees the real
+            # input instead of nothing.
+            if isinstance(c, dict) and c.get("input") is None:
+                vars_only = {k: v for k, v in c.items() if k != "_asserts"}
+                c = {**c, "input": "\n".join(f"{k}: {v}" for k, v in vars_only.items())}
+            return bool(judge(o, c))
+
+        return _graded
     if typ == "contains-any":
         items = _as_list(val)
         return lambda o, c: any(s in o for s in items)
