@@ -90,9 +90,11 @@ see **[Run in CI](docs/ci.md)**.
 
 Want to see it find a coverage gap first, with **no API key**? Run the offline
 demo — it degrades a support-bot prompt and finds the rule the promptfoo suite
-forgot to assert (~1s, mock model):
+forgot to assert (~1s, mock model). It runs from a checkout of the repo (the
+`examples/` aren't shipped in the wheel):
 
 ```bash
+git clone https://github.com/AshwinUgale/muteval && cd muteval
 muteval run --config examples/promptfoo_offline/muteval_config.py --no-color
 ```
 
@@ -176,7 +178,7 @@ Describe your system + evals in a small config, then muteval:
    doesn't, muteval **refuses to score** (a red baseline makes every number
    meaningless) rather than hand you a misleading 100%.
 2. **Mutate** — generates mutants by degrading the prompt / retrieved context /
-   tool outputs / model (18 operators).
+   tool outputs / model (21 operators).
 3. **Grade** — reruns your suite against each mutant. **Killed** = your evals
    caught it (good); **survived** = they missed it (a gap).
 4. **Score** — `killed / evaluated`, with a 95% confidence interval, severity
@@ -215,15 +217,16 @@ across four domains (support bot, code review, RAG, HR policy). See
 [FINDINGS.md](FINDINGS.md), and [docs/LIMITATIONS.md](docs/LIMITATIONS.md) for
 when to distrust the number.
 
-## What it can mutate (18 operators)
+## What it can mutate (21 operators)
 
 **Prompt:** `weaken_modals`, `flip_negation`, `drop_instruction_lines`,
-`delete_sentences`, `truncate_prompt`, `drop_few_shot_example`, `remove_emphasis`.
+`swap_adjacent_instructions`, `paraphrase_instruction`, `delete_sentences`,
+`truncate_prompt`, `drop_few_shot_example`, `remove_emphasis`.
 **Retrieved context (RAG):** `drop_context_doc`, `clear_context`,
 `corrupt_context_doc`, `swap_context_doc`, `shuffle_context`,
 `duplicate_context_doc`, `truncate_context_doc`.
 **Model:** `downgrade_model`. **Tools (agents):** `drop_tool_output`,
-`corrupt_tool_output`, `swap_tool_output`.
+`corrupt_tool_output`, `swap_tool_output`, `deny_tool_output`.
 
 Pass a `System(prompt=..., context=[...], tools=[...], model=...)` to make
 context / tools / model mutable for RAG and agent suites. Bring your own operator
