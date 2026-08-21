@@ -10,6 +10,9 @@ additive features; the public API is not yet frozen — that lands at 1.0).
   natural human-facing CLI output.
 - `muteval run` now numbers survivors (`#1`, `#2`, …), matching the IDs used by
   `muteval results` / `muteval show`, so you can inspect one without re-running.
+- **Fix (promptfoo adapter):** an `llm-rubric` / `model-graded` assertion on a
+  suite whose vars aren't named `input` now shows the judge the case's real vars
+  instead of `User input: None`. An existing `input` var is left untouched. (#36)
 - **tracelint integration (agent suites).** A new `deny_tool_output` operator
   mutates a tool output into a domain failure returned as transport success
   (HTTP 200 carrying `{"status": "declined"}`) — the fault structured-error
