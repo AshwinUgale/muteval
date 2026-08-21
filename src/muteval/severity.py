@@ -30,6 +30,7 @@ OPERATOR_SEVERITY = {
     "swap_context_doc": HIGH,
     "corrupt_tool_output": HIGH,
     "swap_tool_output": HIGH,
+    "deny_tool_output": HIGH,
     "clear_context": HIGH,
     "drop_tool_output": HIGH,
     "downgrade_model": HIGH,

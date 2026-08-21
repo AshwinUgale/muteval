@@ -346,3 +346,98 @@ def _default_openai_judge(
         return max(0.0, min(1.0, val))
 
     return _judge
+
+
+# --- Agent-trace checks (the {"final", "trace"} bridge) ----------------------
+# For agent suites, `run(system, case)` returns {"final": <answer>, "trace": <trace>}
+# (a dict, or that dict as a JSON string). `on_final` lets your ordinary output
+# checks grade `.final` and stay clean, while `tracelint()` lints `.trace` with a
+# deterministic, no-judge structural linter. A tool-fault mutant that leaves the
+# final answer looking clean is caught by the trace check even though the
+# semantic evals miss it. `tracelint()` needs the extra: pip install muteval[tracelint].
+
+
+def on_final(inner: EvalFn) -> EvalFn:
+    """Wrap an output check so it grades ``output["final"]`` from the
+    ``{"final", "trace"}`` bridge (dict or JSON string). No tracelint dependency —
+    this is a pure destructuring helper so normal checks keep working on agent
+    suites that return the bridge object."""
+
+    def _eval(output: Any, case: Any) -> Any:
+        obj = json.loads(output) if isinstance(output, str) else output
+        final = obj.get("final", "") if isinstance(obj, dict) else str(output)
+        return inner(final, case)
+
+    return _eval
+
+
+def tracelint(
+    *,
+    registry: Any = None,
+    fail_on: str = "hard",
+    rules: Any = None,
+    format: str = "canonical",
+    trace_key: str = "trace",
+) -> EvalFn:
+    """Deterministic, no-judge eval: lint the agent's execution trace with
+    ``tracelint``. Passes iff the linter flags NOTHING at the chosen severity, so
+    a mutant that turns a tool output into a fault shape (e.g. a 200 carrying
+    ``{"status": "declined"}``) is KILLED by the structural finding even when the
+    final answer still reads clean.
+
+    Args:
+        registry: tool ground truth — a ``tools.json``-shaped dict (carries
+            ``failure_when``) or a ``tracelint.ToolRegistry``. ``None`` lints with
+            no declared contract (so declared-failure faults survive — the gap the
+            registry closes).
+        fail_on: ``"hard"`` (default) fails on any ``hard_defect`` OR ``hard_event``
+            — a declared-failure/tool-error is R2a = ``hard_event``, so ``"defect"``
+            (``hard_defect`` only) would miss it; ``"any"`` also fails on candidates.
+        rules: a tracelint rule subset; ``None`` = all default rules.
+        format: ``canonical`` | ``openinference`` | ``otel`` | ``openai`` | ``langfuse``.
+        trace_key: key holding the trace in the bridge object (default ``"trace"``).
+
+    Reads the trace from ``output[trace_key]`` (the bridge). Needs the optional
+    extra: ``pip install muteval[tracelint]``.
+    """
+    if fail_on not in ("hard", "defect", "any"):
+        raise ValueError('tracelint: fail_on must be "hard", "defect", or "any"')
+
+    def _read(tl: Any, raw: Any) -> Any:
+        if format in ("openinference", "otel"):
+            return tl.from_otel_spans(raw)
+        if format == "openai":
+            return tl.from_openai_messages(raw)
+        if format == "langfuse":
+            return tl.from_langfuse_trace(raw)
+        if format == "canonical":
+            return tl.Trace.from_dict(raw)
+        raise ValueError(f"tracelint: unknown trace format {format!r}")
+
+    def _flagged(tl: Any, report: Any) -> bool:
+        if fail_on == "defect":
+            return bool(report.has_hard_defect)
+        if fail_on == "any":
+            return bool(report.active_findings)
+        hard = (tl.ConfidenceTier.HARD_DEFECT, tl.ConfidenceTier.HARD_EVENT)
+        return any(f.tier in hard for f in report.active_findings)
+
+    def _eval(output: Any, case: Any) -> EvalOutcome:
+        import tracelint as tl  # lazy: muteval core stays dependency-free
+
+        obj = json.loads(output) if isinstance(output, str) else output
+        raw = obj[trace_key] if isinstance(obj, dict) and trace_key in obj else obj
+        reg = (
+            tl.ToolRegistry.from_dict(registry)
+            if isinstance(registry, dict)
+            else registry
+        )
+        report = tl.lint_trace(_read(tl, raw), rules or tl.default_rules(), reg)
+        detail = (
+            "; ".join(f"{f.rule} {f.summary}" for f in report.active_findings) or "clean"
+        )
+        return EvalOutcome(
+            passed=not _flagged(tl, report), name="tracelint", detail=detail[:300]
+        )
+
+    return _eval

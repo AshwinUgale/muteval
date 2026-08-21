@@ -613,6 +613,45 @@ def swap_tool_output(target: Target) -> List[Mutant]:
     return mutants
 
 
+# A domain failure returned as transport SUCCESS: HTTP 200 whose body says it
+# failed. Structured-error detection (status/error fields) is blind to this — an
+# agent that trusts the transport status proceeds as if the call worked. Only a
+# declared failure contract (e.g. tracelint's failure_when) catches it.
+_DENIED_TOOL_OUTPUT = '{"status": "declined", "reason": "insufficient_funds"}'
+
+
+def deny_tool_output(target: Target) -> List[Mutant]:
+    """Turn one tool output into a domain FAILURE returned as transport success
+    (a 200 carrying ``{"status": "declined"}``).
+
+    Models the hardest tool fault to catch: the call "succeeded" at the transport
+    layer but failed in its body, so exception/status-based error handling never
+    fires and a naive agent proceeds as if it worked. If your eval suite still
+    passes, it can't see a declined charge that the agent reported as success.
+    """
+    system = as_system(target)
+    if not system.tools:
+        return []
+    tools = list(system.tools)
+    mutants: List[Mutant] = []
+    for i in range(len(tools)):
+        if tools[i] == _DENIED_TOOL_OUTPUT:
+            continue
+        new = tools[:i] + [_DENIED_TOOL_OUTPUT] + tools[i + 1 :]
+        mutants.append(
+            Mutant(
+                operator="deny_tool_output",
+                description=(
+                    f"tool output #{i + 1} returned a domain failure "
+                    "(HTTP 200 + status:declined)"
+                ),
+                system=system.replace(tools=tuple(new)),
+                target="tools",
+            )
+        )
+    return mutants
+
+
 # --- Operator factories (A4): parametrize built-in operators ----------------
 # Combine with register_operator to add a tuned variant, e.g.
 #   register_operator("weaken_modals_eu", make_weaken_modals([("shall","may")]))
@@ -704,6 +743,7 @@ OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "drop_tool_output": drop_tool_output,
     "corrupt_tool_output": corrupt_tool_output,
     "swap_tool_output": swap_tool_output,
+    "deny_tool_output": deny_tool_output,
 }
 
 

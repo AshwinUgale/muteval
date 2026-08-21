@@ -10,6 +10,15 @@ additive features; the public API is not yet frozen — that lands at 1.0).
   natural human-facing CLI output.
 - `muteval run` now numbers survivors (`#1`, `#2`, …), matching the IDs used by
   `muteval results` / `muteval show`, so you can inspect one without re-running.
+- **tracelint integration (agent suites).** A new `deny_tool_output` operator
+  mutates a tool output into a domain failure returned as transport success
+  (HTTP 200 carrying `{"status": "declined"}`) — the fault structured-error
+  detection is blind to. A new deterministic, no-judge eval `checks.tracelint()`
+  (behind the `muteval[tracelint]` extra) lints the agent's execution trace and
+  kills such a mutant even when the final answer still reads clean, and
+  `checks.on_final()` lets ordinary output checks grade the `{"final","trace"}`
+  bridge. When a tool-fault mutant survives, the report now names the exact
+  deterministic check that would catch it. See `examples/agent_tool_fault/`.
 
 ## [0.8.0] — 2026-07-28
 
