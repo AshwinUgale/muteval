@@ -85,6 +85,12 @@ def suggest_eval(outcome) -> str:
                 "(e.g. a checks.llm_judge for that behavior)"
             )
 
+    if op == "weaken_numeric_threshold":
+        return (
+            "add an eval that the output honors the numeric limit the prompt sets "
+            "(count items / length / a time window)"
+        )
+
     if op == "truncate_prompt":
         return "add checks for the instructions in the dropped tail of the prompt"
     if op == "drop_few_shot_example":

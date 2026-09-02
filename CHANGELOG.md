@@ -6,6 +6,12 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+- New `weaken_numeric_threshold` operator: loosens a numeric constraint in the
+  prompt (an upper bound goes up, a lower bound down — "at most 3" → "at most 6"),
+  firing only on a number near a bound word. Aimed at a behavior class that
+  faithfulness/relevancy suites say nothing about, so it discriminates suites
+  whose mutation score is otherwise inflated by prompt-tail operators.
+
 ## [0.9.0] — 2026-08-21
 
 - Survivor IDs in `muteval results` and `muteval show` now start at 1 for more

@@ -314,6 +314,63 @@ def remove_emphasis(target: Target) -> List[Mutant]:
     ]
 
 
+# Words that signal a numeric *bound* in an instruction, split by direction so a
+# threshold is loosened the right way (an upper bound goes up, a lower bound down).
+_UPPER_BOUND = re.compile(
+    r"\b(at most|no more than|up to|maximum|max|fewer than|less than|"
+    r"no longer than|within|under|below|limit(?:ed)? to)\b",
+    re.IGNORECASE,
+)
+_LOWER_BOUND = re.compile(
+    r"\b(at least|no fewer than|no less than|minimum|min|more than|"
+    r"greater than|over|above)\b",
+    re.IGNORECASE,
+)
+_THRESHOLD_WINDOW = 40  # chars around a number to look for a bound word
+
+
+def weaken_numeric_threshold(target: Target) -> List[Mutant]:
+    """Loosen a numeric threshold in the prompt (make a constraint more permissive).
+
+    An upper bound is increased ("at most 3" -> "at most 6"), a lower bound is
+    decreased ("at least 5" -> "at least 2"). Models a common silent regression —
+    a limit that got loosened — that output-grading and reference-free evals
+    usually say nothing about. Only fires on a number that sits near a bound word,
+    so it skips versions, years, and other incidental digits.
+    """
+    system = as_system(target)
+    prompt = system.prompt
+    mutants: List[Mutant] = []
+    for match in re.finditer(r"\b\d+\b", prompt):
+        start, end = match.span()
+        window = (
+            prompt[max(0, start - _THRESHOLD_WINDOW) : start]
+            + " "
+            + prompt[end : end + _THRESHOLD_WINDOW]
+        )
+        upper = _UPPER_BOUND.search(window)
+        lower = _LOWER_BOUND.search(window)
+        if not (upper or lower):
+            continue
+        n = int(match.group(0))
+        if lower and not upper:
+            new = n // 2 if n > 1 else 0  # loosen a lower bound -> decrease
+        else:
+            new = n * 2 if n > 0 else 1  # loosen an upper bound -> increase
+        if new == n:
+            continue
+        mutated = prompt[:start] + str(new) + prompt[end:]
+        snippet = _context_snippet(prompt, start, end)
+        mutants.append(
+            Mutant(
+                operator="weaken_numeric_threshold",
+                description=f"loosened threshold {n} -> {new} (near: {snippet})",
+                system=system.with_prompt(mutated),
+            )
+        )
+    return mutants
+
+
 # --- Context operators (RAG) -------------------------------------------------
 # These only fire when the target actually carries retrieved context, so they
 # are no-ops for plain prompt-only systems (and never affect legacy configs).
@@ -732,6 +789,7 @@ OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "truncate_prompt": truncate_prompt,
     "drop_few_shot_example": drop_few_shot_example,
     "remove_emphasis": remove_emphasis,
+    "weaken_numeric_threshold": weaken_numeric_threshold,
     "drop_context_doc": drop_context_doc,
     "clear_context": clear_context,
     "corrupt_context_doc": corrupt_context_doc,

@@ -42,6 +42,7 @@ OPERATOR_SEVERITY = {
     "truncate_context_doc": MEDIUM,
     "drop_few_shot_example": MEDIUM,
     "weaken_modals": MEDIUM,
+    "weaken_numeric_threshold": MEDIUM,
     # cosmetic / ordering — least likely to matter
     "remove_emphasis": LOW,
     "shuffle_context": LOW,
