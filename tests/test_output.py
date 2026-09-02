@@ -84,6 +84,7 @@ EXPECTED_KEYS = {
     "error_rate",
     "inert",
     "high_severity_survivors",
+    "canary_caught",
     "survivors",
 }
 
