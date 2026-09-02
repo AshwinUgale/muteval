@@ -117,6 +117,16 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
             )
         )
 
+    if result.canary_caught is False:
+        lines.append(
+            c(
+                "   ⚠  suite sanity: your evals passed a blank AND a nonsense "
+                "output — they may not be discriminating (expected only for a "
+                "guardrail-only suite). Read the score below with that in mind.",
+                "33",
+            )
+        )
+
     flaky = result.flaky
     if flaky:
         lines.append(
@@ -299,7 +309,7 @@ def format_probe_card_html(
 
 # The JSON schema version. Bump on any breaking change to result_to_dict's shape;
 # consumers can branch on it. Snapshotted in tests/test_output.py.
-RESULT_SCHEMA_VERSION = 1
+RESULT_SCHEMA_VERSION = 2
 
 # Patterns that must never appear in emitted JSON/logs (defense in depth: a
 # survivor description or error string could echo a prompt containing a key).
@@ -355,6 +365,7 @@ def result_to_dict(result) -> dict:
             "error_rate": round(result.error_rate, 4),
             "inert": len(result.inert_survivors),
             "high_severity_survivors": len(result.high_severity_survivors),
+            "canary_caught": result.canary_caught,
             "survivors": [
                 {
                     "id": i,

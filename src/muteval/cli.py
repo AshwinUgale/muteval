@@ -454,6 +454,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Cap model + judge calls (cache hits / skipped judges don't count). "
         "Fails closed (exit 2) before overspending.",
     )
+    run.add_argument(
+        "--canary",
+        action="store_true",
+        help="Positive control: warn if the suite passes a blank AND a nonsense "
+        "output (it may not be discriminating). Calls the rule-based checks an "
+        "extra time; skips LLM judges.",
+    )
     gate = run.add_argument_group("CI gates")
     gate.add_argument(
         "--fail-under",
@@ -950,6 +957,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             cache=cache,
             concurrency=args.concurrency,
             max_calls=args.max_calls,
+            canary=args.canary,
         )
         if cache is not None:
             cache.close()

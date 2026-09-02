@@ -11,6 +11,12 @@ additive features; the public API is not yet frozen — that lands at 1.0).
   firing only on a number near a bound word. Aimed at a behavior class that
   faithfulness/relevancy suites say nothing about, so it discriminates suites
   whose mutation score is otherwise inflated by prompt-tail operators.
+- New opt-in positive control: `muteval run --canary` (or `run_mutation_testing(..., canary=True)`)
+  feeds the rule-based checks a blank and a nonsense output and warns if the suite
+  passes both — i.e. it may not be discriminating (or it's a guardrail-only suite).
+  Separates a genuine 0% mutation score from a harness that isn't scoring. Off by
+  default (it calls the checks an extra time; skips LLM judges). `canary_caught`
+  is added to the JSON (`schema_version` → 2).
 
 ## [0.9.0] — 2026-08-21
 

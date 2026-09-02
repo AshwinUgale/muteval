@@ -113,6 +113,12 @@ class MutationResult:
     baseline_error: Optional[str] = None
     status: str = VALID
     outcomes: List[MutantOutcome] = field(default_factory=list)
+    # Positive control: did the suite REJECT an obviously-bad output (blank /
+    # nonsense)? True = the suite can distinguish something (harness is scoring).
+    # False = it passed the baseline AND garbage, so its verdicts may be vacuous
+    # (or it's a guardrail-only suite, where that's expected). None = not checked
+    # (only LLM judges, which we don't call for the control, or it errored).
+    canary_caught: Optional[bool] = None
 
     @property
     def total(self) -> int:
@@ -279,6 +285,40 @@ def _run_suite(
     return _SuiteRun(failing_eval=None, outcomes=collected, outputs=outputs)
 
 
+# Obviously-bad outputs a discriminating suite should reject: a blank and a short
+# nonsense string. Used as a positive control (see MutationResult.canary_caught).
+_CANARY_OUTPUTS = ("", "lorem ipsum dolor sit amet consectetur")
+
+
+def _canary_caught(config: MutEvalConfig) -> Optional[bool]:
+    """Positive control for the harness/suite: feed the RULE-BASED evals a blank
+    and a nonsense output (no model or judge call — free) and report whether the
+    suite rejects any of them.
+
+    Returns True if at least one eval fails on at least one canary — the suite
+    can tell *something* apart, so a 0% mutation score reflects the mutations, not
+    a harness that isn't scoring. False means it passed the baseline AND pure
+    garbage (a vacuous suite — or a guardrail-only one, where this is expected).
+    None when there are no rule-based evals to check cheaply, or it errored.
+    """
+    cheap = [
+        (ev, label)
+        for _idx, ev, label in _ordered_evals(config)
+        if not getattr(ev, "is_llm", False)
+    ]
+    if not cheap:
+        return None  # only LLM judges — don't spend API calls on the control
+    try:
+        for case in config.cases:
+            for output in _CANARY_OUTPUTS:
+                for ev, label in cheap:
+                    if not coerce_outcome(ev(output, case), name=label).passed:
+                        return True
+        return False
+    except Exception:  # noqa: BLE001 - the control must never break a real run
+        return None
+
+
 def _near_miss(outcomes: List[EvalOutcome]) -> tuple[Optional[str], Optional[float]]:
     """Of the passing outcomes that expose a margin, find the closest call."""
     margins = [(o.name, o.margin) for o in outcomes if o.margin is not None and o.passed]
@@ -400,6 +440,7 @@ def run_mutation_testing(
     cache=None,
     concurrency: int = 1,
     max_calls: Optional[int] = None,
+    canary: bool = False,
 ) -> MutationResult:
     """Run mutation testing for the given config and return a MutationResult.
 
@@ -453,6 +494,13 @@ def run_mutation_testing(
     if not baseline_passed:
         result.status = BASELINE_FAILED
         return result
+
+    # Positive control (opt-in): the baseline passed — but does the suite reject
+    # anything at all? A suite that passes pure garbage isn't scoring (see the
+    # report). Off by default because it calls the rule-based evals an extra time,
+    # which would perturb the cache's zero-calls-on-rerun guarantee.
+    if canary:
+        result.canary_caught = _canary_caught(config)
 
     mutants = select_mutants(
         config, operators=operators, sample=sample, seed=seed, max_mutants=max_mutants
