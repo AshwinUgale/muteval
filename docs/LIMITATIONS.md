@@ -75,6 +75,12 @@ only applies when both exist:
 - **A noisy LLM judge with `runs_per_mutant=1`.** A single flaky verdict can
   flip a mutant. Use `runs_per_mutant > 1` (majority vote) for real judges; watch
   the `flaky` count.
+- **Judge drift is silent — pin the judge version.** A majority vote stabilizes
+  run-to-run noise, but a model-version bump quietly replaces the judge, so a
+  killed-rate from last month and this month can be measuring different things.
+  muteval records the model under test and its own judge's model
+  (`model_under_test` / `judge_models`), but it can't introspect an opaque
+  user/deepeval/ragas judge — pin that version yourself when comparing over time.
 - **Tied verdicts are `unresolved`, not survivors.** With an even
   `runs_per_mutant`, a mutant the judge caught exactly half the time hasn't
   earned a killed/survived verdict — it's reported as `unresolved` and left out

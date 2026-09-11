@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, cast
+from typing import Callable, Dict, List, Optional, Tuple, cast
 
 from muteval.config import MutEvalConfig
 from muteval.evals import EvalOutcome, coerce_outcome
@@ -97,6 +97,10 @@ class MutantOutcome:
     severity: Optional[str] = None
     # Fraction of runs in which the suite caught this mutant (judge-noise signal).
     kill_rate: Optional[float] = None
+    # Distinct evals that caught this mutant across its runs. For a FLAKY mutant
+    # (0 < kill_rate < 1), these are the ambiguous rubric dimensions — the eval
+    # question is unstable, not just the judge.
+    caught_by: Tuple[str, ...] = ()
     # For survivors: a sample of the FIRST case whose output changed vs baseline,
     # so `muteval show` can render the baseline-vs-mutant diff.
     baseline_output: Optional[str] = None
@@ -124,10 +128,26 @@ class MutationResult:
     # (or it's a guardrail-only suite, where that's expected). None = not checked
     # (only LLM judges, which we don't call for the control, or it errored).
     canary_caught: Optional[bool] = None
+    # Provenance so scores are comparable across time: the model under test (when
+    # known) and the judge model(s) muteval could introspect (its own llm_judge /
+    # grounded). A model bump silently replaces the "coin" behind the score.
+    model_under_test: Optional[str] = None
+    judge_models: Tuple[str, ...] = ()
 
     @property
     def total(self) -> int:
         return len(self.outcomes)
+
+    @property
+    def flaky_by_eval(self) -> Dict[str, int]:
+        """For flaky mutants, how many flipped on each eval — the ambiguous rubric
+        dimensions. A dimension with many flips is a bug in the eval *question*;
+        rewrite it before adding runs."""
+        counts: Dict[str, int] = {}
+        for o in self.flaky:
+            for label in o.caught_by:
+                counts[label] = counts.get(label, 0) + 1
+        return counts
 
     @property
     def evaluated(self) -> int:
@@ -403,6 +423,9 @@ def _evaluate_mutant(
         ]
         fails = sum(1 for r in runs if r.failing_eval is not None)
         kill_rate = fails / len(runs)
+        caught_by = tuple(
+            sorted({r.failing_eval for r in runs if r.failing_eval is not None})
+        )
         unresolved = False
         if config.kill_threshold is None:
             killed = fails * 2 > len(runs)  # strict majority
@@ -448,6 +471,7 @@ def _evaluate_mutant(
             output_changed=output_changed,
             severity=severity_of(mutant),
             kill_rate=kill_rate,
+            caught_by=caught_by,
             baseline_output=sample_base,
             mutant_output=sample_mut,
         )
@@ -519,6 +543,12 @@ def run_mutation_testing(
 
     result = MutationResult(
         baseline_passed=baseline_passed, baseline_error=baseline_error
+    )
+    # Provenance (recorded regardless of outcome): the model under test, and any
+    # judge model muteval can introspect (its own llm_judge/grounded).
+    result.model_under_test = config.system.model if config.system else None
+    result.judge_models = tuple(
+        sorted({m for ev in config.evals if (m := getattr(ev, "judge_model", None))})
     )
     # BASELINE GATE: an invalid baseline makes every downstream number
     # meaningless (a failing eval fails on every mutant too, faking 100%).

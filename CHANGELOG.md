@@ -6,6 +6,15 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+- **Flaky verdicts are now attributed per eval.** The report and JSON
+  (`flaky_by_eval`) show which eval *dimension* the flips came from — a rubric a
+  judge can't answer consistently is a bug in the eval question, so rewrite that
+  dimension before adding runs.
+- **Judge/model provenance in the result.** Records the model under test and any
+  judge model muteval can introspect (its own `llm_judge` / `grounded`) as
+  `model_under_test` / `judge_models`, so scores are comparable across time — a
+  silent model bump replaces the coin a majority vote stabilizes. (`schema_version`
+  → 4.)
 - **Unresolved (tied) verdicts are now first-class.** Under strict majority, a
   dead-even split over `runs_per_mutant` (the judge straddled 50%) used to
   silently default to "survived". It's now marked `unresolved` and excluded from

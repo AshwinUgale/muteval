@@ -218,6 +218,10 @@ def llm_judge(
         )
 
     setattr(_eval, "is_llm", True)  # expensive: ordered AFTER cheap checks
+    # Record the judge model for provenance ONLY when muteval's built-in judge is
+    # used — a caller-supplied `judge` hides its own model, so we don't claim one.
+    if judge is None:
+        setattr(_eval, "judge_model", model)
     return _eval
 
 
@@ -277,6 +281,10 @@ def grounded(
         )
 
     setattr(_eval, "is_llm", True)  # expensive: ordered AFTER cheap checks
+    # Record the judge model for provenance ONLY when muteval's built-in judge is
+    # used — a caller-supplied `judge` hides its own model, so we don't claim one.
+    if judge is None:
+        setattr(_eval, "judge_model", model)
     return _eval
 
 
