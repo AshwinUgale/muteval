@@ -6,6 +6,14 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+- **Unresolved (tied) verdicts are now first-class.** Under strict majority, a
+  dead-even split over `runs_per_mutant` (the judge straddled 50%) used to
+  silently default to "survived". It's now marked `unresolved` and excluded from
+  the score's numerator AND denominator — the score, its Wilson CI, and the
+  survivor list are computed over the *resolved* set, with the unresolved count
+  reported separately (and an all-tied run reports no confident score rather than
+  a misleading one). `resolved` + `unresolved` added to the JSON
+  (`schema_version` → 3). Only affects even `runs_per_mutant`.
 - New `weaken_numeric_threshold` operator: loosens a numeric constraint in the
   prompt (an upper bound goes up, a lower bound down — "at most 3" → "at most 6"),
   firing only on a number near a bound word. Aimed at a behavior class that

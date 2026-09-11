@@ -61,15 +61,32 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         )
         return "\n".join(lines)
 
+    if result.score is None:  # every evaluated mutant tied — no confident score
+        lines.append(c("⚠  NO CONFIDENT SCORE — every mutant's verdict tied", "1;31"))
+        lines.append(
+            f"   All {result.unresolved} evaluated mutant(s) were unresolved "
+            "(the judge straddled 50%). Raise runs_per_mutant to break the ties."
+        )
+        return "\n".join(lines)
+
     pct = result.score * 100
     score_color = "32" if pct >= 80 else "33" if pct >= 50 else "31"
     lo, hi = result.score_ci
     lines.append(
         f"Mutation score: {c(f'{pct:.0f}%', score_color)}  "
         f"[{_bar(result.score)}]  "
-        f"({result.killed}/{result.evaluated} mutants killed, "
+        f"({result.killed}/{result.resolved} mutants killed, "
         f"95% CI {lo * 100:.0f}-{hi * 100:.0f}%)"
     )
+    if result.unresolved:
+        lines.append(
+            c(
+                f"   {result.unresolved} unresolved (verdict tied over "
+                "runs_per_mutant; excluded from the score — raise runs_per_mutant "
+                "to resolve).",
+                "33",
+            )
+        )
     if result.errored:
         from muteval.runner import PARTIAL_ERRORS
 
@@ -309,7 +326,7 @@ def format_probe_card_html(
 
 # The JSON schema version. Bump on any breaking change to result_to_dict's shape;
 # consumers can branch on it. Snapshotted in tests/test_output.py.
-RESULT_SCHEMA_VERSION = 2
+RESULT_SCHEMA_VERSION = 3
 
 # Patterns that must never appear in emitted JSON/logs (defense in depth: a
 # survivor description or error string could echo a prompt containing a key).
@@ -360,6 +377,8 @@ def result_to_dict(result) -> dict:
             "effective_score_ci": [round(x, 4) for x in result.effective_score_ci],
             "killed": result.killed,
             "evaluated": result.evaluated,
+            "resolved": result.resolved,
+            "unresolved": result.unresolved,
             "total": result.total,
             "errored": result.errored,
             "error_rate": round(result.error_rate, 4),

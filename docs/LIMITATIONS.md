@@ -75,6 +75,14 @@ only applies when both exist:
 - **A noisy LLM judge with `runs_per_mutant=1`.** A single flaky verdict can
   flip a mutant. Use `runs_per_mutant > 1` (majority vote) for real judges; watch
   the `flaky` count.
+- **Tied verdicts are `unresolved`, not survivors.** With an even
+  `runs_per_mutant`, a mutant the judge caught exactly half the time hasn't
+  earned a killed/survived verdict — it's reported as `unresolved` and left out
+  of the score (numerator and denominator) rather than counted as a coverage gap.
+  A high `unresolved` count means the judge is too noisy at this `runs_per_mutant`
+  to decide; raise it. Note the number of repeats you need grows fast with the
+  flip rate, so an unstable judge is expensive to resolve — the honest read is
+  often "this judge can't decide here," not "add more runs."
 
 ## Known constraints
 

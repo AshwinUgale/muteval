@@ -79,6 +79,8 @@ EXPECTED_KEYS = {
     "effective_score_ci",
     "killed",
     "evaluated",
+    "resolved",
+    "unresolved",
     "total",
     "errored",
     "error_rate",
