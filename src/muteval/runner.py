@@ -77,6 +77,11 @@ class _Budget:
 class MutantOutcome:
     mutant: Mutant
     killed: bool
+    # A tied verdict over runs_per_mutant (judge straddled 50%): neither killed
+    # nor a confident survivor. Excluded from the score's numerator AND
+    # denominator, and reported as its own rate. Only ever True under strict
+    # majority (kill_threshold is None) with an even runs_per_mutant.
+    unresolved: bool = False
     failing_eval: Optional[str] = None
     errored: bool = False
     error: Optional[str] = None
@@ -126,8 +131,21 @@ class MutationResult:
 
     @property
     def evaluated(self) -> int:
-        """Mutants that produced a clean verdict (excludes errored ones)."""
+        """Mutants that produced a clean (non-errored) verdict — includes
+        unresolved ties. The SCORE denominator is ``resolved``, not this."""
         return sum(1 for o in self.outcomes if not o.errored)
+
+    @property
+    def unresolved(self) -> int:
+        """Mutants whose verdict tied over ``runs_per_mutant`` (judge straddled
+        50%) — excluded from the score's numerator and denominator."""
+        return sum(1 for o in self.outcomes if o.unresolved and not o.errored)
+
+    @property
+    def resolved(self) -> int:
+        """Mutants with a confident killed/survived verdict — the score
+        denominator (evaluated minus unresolved ties)."""
+        return sum(1 for o in self.outcomes if not o.errored and not o.unresolved)
 
     @property
     def killed(self) -> int:
@@ -139,7 +157,13 @@ class MutationResult:
 
     @property
     def survivors(self) -> List[MutantOutcome]:
-        return [o for o in self.outcomes if not o.killed and not o.errored]
+        """Confident survivors — evals missed a mutant that got a resolved
+        verdict. Excludes unresolved ties (not a confident coverage gap)."""
+        return [
+            o
+            for o in self.outcomes
+            if not o.killed and not o.errored and not o.unresolved
+        ]
 
     @property
     def inert_survivors(self) -> List[MutantOutcome]:
@@ -164,18 +188,18 @@ class MutationResult:
 
     @property
     def score_ci(self):
-        """Wilson 95% CI on the raw mutation score (killed / evaluated)."""
+        """Wilson 95% CI on the raw mutation score (killed / resolved)."""
         from muteval.stats import wilson_interval
 
-        return wilson_interval(self.killed, self.evaluated)
+        return wilson_interval(self.killed, self.resolved)
 
     @property
     def effective_score_ci(self):
-        """Wilson 95% CI on the effective score (excludes inert mutants)."""
+        """Wilson 95% CI on the effective score (excludes inert + unresolved)."""
         from muteval.stats import wilson_interval
 
         return wilson_interval(
-            self.killed, max(self.evaluated - len(self.inert_survivors), 0)
+            self.killed, max(self.resolved - len(self.inert_survivors), 0)
         )
 
     @property
@@ -196,19 +220,20 @@ class MutationResult:
 
     @property
     def score(self) -> Optional[float]:
-        """Mutation score over evaluated mutants, or None when there is no
-        evidence (0 evaluated) — no evidence is NOT a perfect score."""
-        if self.evaluated == 0:
+        """Mutation score over RESOLVED mutants (killed / resolved), or None when
+        there is no evidence (0 resolved, e.g. every verdict tied) — no evidence
+        is NOT a perfect score."""
+        if self.resolved == 0:
             return None
-        return self.killed / self.evaluated
+        return self.killed / self.resolved
 
     @property
     def effective_score(self) -> Optional[float]:
         """Observed-degradation score: mutants whose OUTPUT changed but the
-        evals missed. Excludes single-sample "unchanged" survivors. None when
-        there is nothing to score. (Not provably exact for stochastic judges;
-        see LIMITATIONS.)"""
-        effective = self.evaluated - len(self.inert_survivors)
+        evals missed. Excludes single-sample "unchanged" survivors and
+        unresolved ties. None when there is nothing to score. (Not provably
+        exact for stochastic judges; see LIMITATIONS.)"""
+        effective = self.resolved - len(self.inert_survivors)
         if effective <= 0:
             return None
         return self.killed / effective
@@ -378,8 +403,16 @@ def _evaluate_mutant(
         ]
         fails = sum(1 for r in runs if r.failing_eval is not None)
         kill_rate = fails / len(runs)
+        unresolved = False
         if config.kill_threshold is None:
-            killed = fails * 2 > len(runs)  # strict majority; ties survive
+            killed = fails * 2 > len(runs)  # strict majority
+            # A dead-even split (only possible with even runs_per_mutant) hasn't
+            # earned a binary verdict — the judge straddled 50%. Rather than
+            # silently defaulting a tie to "survived", mark it UNRESOLVED and
+            # exclude it from the score entirely (numerator and denominator).
+            if fails * 2 == len(runs) and len(runs) > 1:
+                killed = False
+                unresolved = True
         else:
             killed = kill_rate >= config.kill_threshold
         rep = next((r for r in runs if (r.failing_eval is not None) == killed), runs[0])
@@ -408,6 +441,7 @@ def _evaluate_mutant(
         return MutantOutcome(
             mutant=mutant,
             killed=killed,
+            unresolved=unresolved,
             failing_eval=rep.failing_eval,
             closest_eval=closest_eval,
             min_margin=min_margin,
