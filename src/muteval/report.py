@@ -153,6 +153,27 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
                 "33",
             )
         )
+        fbe = result.flaky_by_eval
+        if fbe:
+            top = ", ".join(
+                f"{k} ({v})" for k, v in sorted(fbe.items(), key=lambda kv: -kv[1])
+            )
+            lines.append(
+                c(
+                    f"      flaky by eval — rewrite these rubric dimensions before "
+                    f"adding runs: {top}",
+                    "2",
+                )
+            )
+    prov = []
+    if result.model_under_test:
+        prov.append(f"model under test: {result.model_under_test}")
+    if result.judge_models:
+        prov.append(f"judge: {', '.join(result.judge_models)}")
+    if prov:
+        lines.append(
+            c("   " + " · ".join(prov) + " (pin these to compare over time)", "2")
+        )
     lines.append("")
 
     survivors = result.survivors
@@ -326,7 +347,7 @@ def format_probe_card_html(
 
 # The JSON schema version. Bump on any breaking change to result_to_dict's shape;
 # consumers can branch on it. Snapshotted in tests/test_output.py.
-RESULT_SCHEMA_VERSION = 3
+RESULT_SCHEMA_VERSION = 4
 
 # Patterns that must never appear in emitted JSON/logs (defense in depth: a
 # survivor description or error string could echo a prompt containing a key).
@@ -385,6 +406,9 @@ def result_to_dict(result) -> dict:
             "inert": len(result.inert_survivors),
             "high_severity_survivors": len(result.high_severity_survivors),
             "canary_caught": result.canary_caught,
+            "model_under_test": result.model_under_test,
+            "judge_models": list(result.judge_models),
+            "flaky_by_eval": result.flaky_by_eval,
             "survivors": [
                 {
                     "id": i,

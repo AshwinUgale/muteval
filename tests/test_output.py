@@ -87,6 +87,9 @@ EXPECTED_KEYS = {
     "inert",
     "high_severity_survivors",
     "canary_caught",
+    "model_under_test",
+    "judge_models",
+    "flaky_by_eval",
     "survivors",
 }
 
