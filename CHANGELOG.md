@@ -6,6 +6,8 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-11
+
 - **Flaky verdicts are now attributed per eval.** The report and JSON
   (`flaky_by_eval`) show which eval *dimension* the flips came from — a rubric a
   judge can't answer consistently is a bug in the eval question, so rewrite that
