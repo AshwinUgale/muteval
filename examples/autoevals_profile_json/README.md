@@ -20,7 +20,7 @@ python -m pip install -e '.[dev]' autoevals
 muteval run --config examples/autoevals_profile_json/muteval_config.py --no-color
 MUTEVAL_PROFILE_SUITE=strong muteval run \
   --config examples/autoevals_profile_json/muteval_config.py --no-color
-python -m pytest -q tests/test_example_autoevals_profile_json.py
+python -m pytest -q examples/autoevals_profile_json/test_example.py
 ```
 
 The environment-variable syntax above is for a POSIX shell. Set

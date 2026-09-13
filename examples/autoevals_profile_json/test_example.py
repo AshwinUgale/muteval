@@ -17,12 +17,7 @@ from muteval.adapters.base import scorer_to_eval
 from muteval.config import load_config
 from muteval.runner import select_mutants
 
-_CONFIG = (
-    Path(__file__).resolve().parents[1]
-    / "examples"
-    / "autoevals_profile_json"
-    / "muteval_config.py"
-)
+_CONFIG = Path(__file__).with_name("muteval_config.py")
 
 
 @pytest.fixture
