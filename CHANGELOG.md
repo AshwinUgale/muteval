@@ -6,6 +6,9 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+- Add a keyless Autoevals JSON-profile example using `scorer_to_eval`: compare
+  JSON-only checks with exact-profile checks on two controlled prompt mutations.
+
 ## [0.10.0] — 2026-09-11
 
 - **Flaky verdicts are now attributed per eval.** The report and JSON

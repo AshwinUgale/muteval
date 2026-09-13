@@ -264,6 +264,10 @@ Adapters for **deepeval**, **RAGAS**, and **promptfoo** (`pip install
 endpoint** (OpenAI, Groq, Gemini, GitHub Models, Ollama…) via `base_url=`, using
 only the standard library.
 
+For a keyless integration using `scorer_to_eval`, see the
+[Autoevals JSON-profile example](examples/autoevals_profile_json/README.md). It
+compares JSON-only checks with `ExactMatch` on two controlled prompt mutations.
+
 ## Adopting it on your own suite
 
 Pointing muteval at a real system is a ~1-hour integration, not plug-and-play —
