@@ -64,6 +64,9 @@ class MutEvalConfig:
     eval_names: List[str] = field(default_factory=list)
     system: Optional[System] = None
     operators: Optional[List[Any]] = None
+    # Survivor signatures the user has accepted as "untested by design" (also
+    # settable per-run via the CLI `--accept-file`). See MutationResult.accepted.
+    accepted_survivors: Optional[List[str]] = None
     scope_include: Optional[str] = None
     scope_exclude: Optional[str] = None
 

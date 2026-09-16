@@ -461,6 +461,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "output (it may not be discriminating). Calls the rule-based checks an "
         "extra time; skips LLM judges.",
     )
+    run.add_argument(
+        "--accept-file",
+        metavar="PATH",
+        default=None,
+        help="JSON file listing accepted survivor signatures (untested by design). "
+        "They're split out of the actionable list and don't trip --fail-on-severity; "
+        "copy the `accept: <sig>` shown next to each survivor.",
+    )
     gate = run.add_argument_group("CI gates")
     gate.add_argument(
         "--fail-under",
@@ -948,6 +956,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             from muteval.cache import Cache
 
             cache = Cache(args.cache)
+        accepted = None
+        if args.accept_file:
+            import json as _json
+
+            with open(args.accept_file, encoding="utf-8") as fh:
+                accepted = _json.load(fh)
         result = run_mutation_testing(
             config,
             operators=args.operators,
@@ -958,6 +972,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             concurrency=args.concurrency,
             max_calls=args.max_calls,
             canary=args.canary,
+            accepted=accepted,
         )
         if cache is not None:
             cache.close()
@@ -1044,9 +1059,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             from muteval.severity import MEDIUM, severity_rank
 
             threshold = severity_rank(args.fail_on_severity)
+            # Accepted survivors ("untested by design") don't fail the gate.
             offending = [
                 o
-                for o in result.real_survivors
+                for o in result.new_survivors
                 if severity_rank(o.severity or MEDIUM) <= threshold
             ]
             if offending:
