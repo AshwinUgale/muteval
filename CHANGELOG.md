@@ -6,6 +6,8 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-09-16
+
 - **Accept a survivor as "untested by design".** Each survivor now shows a stable
   `accept: <signature>` (operator + the exact edit); list those in a JSON file and
   pass `muteval run --accept-file PATH` (or `config.accepted_survivors=[...]`) and
