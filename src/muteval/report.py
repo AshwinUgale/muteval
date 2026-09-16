@@ -183,14 +183,30 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         )
         return "\n".join(lines)
 
-    real = result.real_survivors
+    accepted_n = len(result.accepted_survivors)
+    real = result.new_survivors
+    if not real and accepted_n:
+        lines.append(
+            c(
+                f"✓ No new survivors — {accepted_n} accepted (untested by design) and "
+                "no new coverage gaps.",
+                "32",
+            )
+        )
+        return "\n".join(lines)
     if real:
         from muteval.severity import HIGH, LOW, MEDIUM, severity_rank
 
         real = sorted(real, key=lambda o: severity_rank(o.severity or MEDIUM))
         n_high = sum(1 for o in real if o.severity == HIGH)
+        accepted_note = (
+            f" ({accepted_n} accepted — untested by design — hidden)"
+            if accepted_n
+            else ""
+        )
         header = c(f"{len(real)} SURVIVED", "31") + (
-            "  (output changed but evals didn't notice — real coverage gaps"
+            f"  (output changed but evals didn't notice — real coverage gaps"
+            f"{accepted_note}"
         )
         if n_high:
             header += "; " + c(f"{n_high} HIGH-severity", "1;31")
@@ -212,7 +228,10 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
             sev = o.severity or MEDIUM
             raw_tag = f"[{_sev_label[sev]}]"
             tag = c(raw_tag, _sev_color[sev]) + " " * (len("[HIGH]") - len(raw_tag))
-            lines.append(f"  #{i} {tag} {c('SURVIVED', '31')}  [{o.mutant.operator}]")
+            lines.append(
+                f"  #{i} {tag} {c('SURVIVED', '31')}  [{o.mutant.operator}]  "
+                + c(f"accept: {o.mutant.signature}", "2")
+            )
             lines.append(f"            {o.mutant.description}")
             lines.append(c(f"            fix: {suggest_eval(o)}", "36"))
             if o.min_margin is not None and o.closest_eval:
@@ -347,7 +366,7 @@ def format_probe_card_html(
 
 # The JSON schema version. Bump on any breaking change to result_to_dict's shape;
 # consumers can branch on it. Snapshotted in tests/test_output.py.
-RESULT_SCHEMA_VERSION = 4
+RESULT_SCHEMA_VERSION = 5
 
 # Patterns that must never appear in emitted JSON/logs (defense in depth: a
 # survivor description or error string could echo a prompt containing a key).
@@ -409,12 +428,15 @@ def result_to_dict(result) -> dict:
             "model_under_test": result.model_under_test,
             "judge_models": list(result.judge_models),
             "flaky_by_eval": result.flaky_by_eval,
+            "accepted": len(result.accepted_survivors),
             "survivors": [
                 {
                     "id": i,
                     "operator": o.mutant.operator,
                     "description": o.mutant.description,
                     "severity": o.severity,
+                    "signature": o.mutant.signature,
+                    "accepted": o.mutant.signature in result.accepted,
                     "fix": suggest_eval(o),
                     "baseline_output": o.baseline_output,
                     "mutant_output": o.mutant_output,

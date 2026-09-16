@@ -6,6 +6,15 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+- **Accept a survivor as "untested by design".** Each survivor now shows a stable
+  `accept: <signature>` (operator + the exact edit); list those in a JSON file and
+  pass `muteval run --accept-file PATH` (or `config.accepted_survivors=[...]`) and
+  they split out of the actionable list and stop tripping `--fail-on-severity` — so
+  a decided gap stops resurfacing as noise. Signatures are tied to the change text,
+  so editing that part of the prompt re-surfaces the accepted mutation (it's a new
+  decision). The mutation score is unchanged — the eval still doesn't cover it. JSON
+  gains a per-survivor `signature`/`accepted` and a top-level `accepted` count
+  (`schema_version` → 5).
 - Add a keyless Autoevals JSON-profile example using `scorer_to_eval`: compare
   JSON-only checks with exact-profile checks on two controlled prompt mutations.
 

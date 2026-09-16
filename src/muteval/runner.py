@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple, cast
+from typing import Callable, Dict, FrozenSet, Iterable, List, Optional, Tuple, cast
 
 from muteval.config import MutEvalConfig
 from muteval.evals import EvalOutcome, coerce_outcome
@@ -133,6 +133,11 @@ class MutationResult:
     # grounded). A model bump silently replaces the "coin" behind the score.
     model_under_test: Optional[str] = None
     judge_models: Tuple[str, ...] = ()
+    # Signatures the user has ACCEPTED (a survivor they've ruled "untested by
+    # design"). Accepted survivors are split out of the actionable set and don't
+    # trip --fail-on-severity, so a decided gap stops resurfacing as noise. The
+    # mutation score is unchanged — the eval still doesn't cover it.
+    accepted: FrozenSet[str] = frozenset()
 
     @property
     def total(self) -> int:
@@ -200,11 +205,21 @@ class MutationResult:
         return [o for o in self.survivors if o.output_changed is not False]
 
     @property
+    def accepted_survivors(self) -> List[MutantOutcome]:
+        """Real survivors the user marked accepted (untested by design)."""
+        return [o for o in self.real_survivors if o.mutant.signature in self.accepted]
+
+    @property
+    def new_survivors(self) -> List[MutantOutcome]:
+        """Actionable coverage gaps — real survivors NOT accepted by the user."""
+        return [o for o in self.real_survivors if o.mutant.signature not in self.accepted]
+
+    @property
     def high_severity_survivors(self) -> List[MutantOutcome]:
-        """Real coverage gaps ranked HIGH — the dangerous ones."""
+        """NEW (unaccepted) coverage gaps ranked HIGH — what a gate blocks on."""
         from muteval.severity import HIGH
 
-        return [o for o in self.real_survivors if o.severity == HIGH]
+        return [o for o in self.new_survivors if o.severity == HIGH]
 
     @property
     def score_ci(self):
@@ -499,6 +514,7 @@ def run_mutation_testing(
     concurrency: int = 1,
     max_calls: Optional[int] = None,
     canary: bool = False,
+    accepted: Optional[Iterable[str]] = None,
 ) -> MutationResult:
     """Run mutation testing for the given config and return a MutationResult.
 
@@ -549,6 +565,9 @@ def run_mutation_testing(
     result.model_under_test = config.system.model if config.system else None
     result.judge_models = tuple(
         sorted({m for ev in config.evals if (m := getattr(ev, "judge_model", None))})
+    )
+    result.accepted = frozenset(accepted or ()) | frozenset(
+        config.accepted_survivors or ()
     )
     # BASELINE GATE: an invalid baseline makes every downstream number
     # meaningless (a failing eval fails on every mutant too, faking 100%).

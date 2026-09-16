@@ -37,6 +37,19 @@ class Mutant:
         """The mutated prompt (back-compat shortcut for ``system.prompt``)."""
         return self.system.prompt
 
+    @property
+    def signature(self) -> str:
+        """A stable id for this specific mutation (operator + the exact edit),
+        used to ACCEPT a survivor so it doesn't resurface as actionable on later
+        runs. Tied to the change text, so editing that part of the prompt yields a
+        new signature (the accepted mutation correctly re-surfaces); a deterministic
+        operator produces the same signature every run."""
+        import hashlib
+
+        return hashlib.sha256(f"{self.operator}|{self.description}".encode()).hexdigest()[
+            :12
+        ]
+
 
 # --- Prompt operators --------------------------------------------------------
 

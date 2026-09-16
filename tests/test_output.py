@@ -52,6 +52,8 @@ def test_result_to_dict_shape():
             "operator",
             "description",
             "severity",
+            "signature",
+            "accepted",
             "fix",
             "baseline_output",
             "mutant_output",
@@ -90,6 +92,7 @@ EXPECTED_KEYS = {
     "model_under_test",
     "judge_models",
     "flaky_by_eval",
+    "accepted",
     "survivors",
 }
 
