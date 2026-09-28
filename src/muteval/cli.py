@@ -27,6 +27,7 @@ from typing import Any, List, Optional
 from muteval import __version__
 from muteval.config import MutEvalConfig, load_config
 from muteval.mutators import OPERATORS
+from muteval.redact import redact
 from muteval.report import format_report
 from muteval.runner import (
     BASELINE_ERRORED,
@@ -201,8 +202,16 @@ def _load_context(args: argparse.Namespace) -> List[str]:
     return docs
 
 
-def _check_from_spec(spec: str, threshold: float, model: str):
-    """Turn a --check string like 'contains:8080' into a muteval eval."""
+def _check_from_spec(
+    spec: str, threshold: float, model: str, base_url: Optional[str] = None
+):
+    """Turn a --check string like 'contains:8080' into a muteval eval.
+
+    ``model`` / ``base_url`` are the JUDGE's: a `judge:` check calls that
+    OpenAI-compatible endpoint with ``OPENAI_API_KEY``. They must match the
+    endpoint that key belongs to — defaulting the judge to api.openai.com while
+    the system runs on --base-url sent that key to the wrong provider.
+    """
     from muteval import checks
 
     name, _, arg = spec.partition(":")
@@ -242,7 +251,7 @@ def _check_from_spec(spec: str, threshold: float, model: str):
     if name == "judge":
         if not arg:
             raise ValueError("judge:<rubric> needs a rubric, e.g. judge:is it polite")
-        return checks.llm_judge(arg, threshold=threshold, model=model)
+        return checks.llm_judge(arg, threshold=threshold, model=model, base_url=base_url)
     raise ValueError(
         f"unknown check '{name}'. Use one of: contains, not_contains, "
         "contains_case, contains_all, contains_any, regex, is_json, "
@@ -268,10 +277,15 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
         raise ValueError(
             'provide at least one --check (e.g. --check contains:8080) or --judge "..."'
         )
-    evals = [_check_from_spec(s, args.threshold, args.model) for s in specs]
-    names = [s.split(":", 1)[0] for s in specs]
-
     base_url = getattr(args, "base_url", None)
+    # The judge uses the SAME endpoint as the system unless told otherwise, so
+    # OPENAI_API_KEY only ever goes where --base-url points.
+    judge_model = getattr(args, "judge_model", None) or args.model
+    judge_base_url = getattr(args, "judge_base_url", None) or base_url
+    evals = [
+        _check_from_spec(s, args.threshold, judge_model, judge_base_url) for s in specs
+    ]
+    names = [s.split(":", 1)[0] for s in specs]
     custom_target = bool(getattr(args, "target", None) or getattr(args, "endpoint", None))
     if getattr(args, "target", None):
         from muteval.runners import callable_run
@@ -379,7 +393,21 @@ def _add_input_args(p: argparse.ArgumentParser) -> None:
         default=None,
         metavar="URL",
         help="OpenAI-compatible base URL for the system under test (or OPENAI_BASE_URL): "
-        "Groq / Gemini-compat / GitHub Models / Ollama / a local server.",
+        "Groq / Gemini-compat / GitHub Models / Ollama / a local server. The "
+        "judge uses it too unless --judge-base-url is set.",
+    )
+    g.add_argument(
+        "--judge-model",
+        default=None,
+        metavar="MODEL",
+        help="Model for judge:<rubric> checks (default: --model).",
+    )
+    g.add_argument(
+        "--judge-base-url",
+        default=None,
+        metavar="URL",
+        help="OpenAI-compatible base URL for judge:<rubric> checks (default: "
+        "--base-url). OPENAI_API_KEY is sent here, so it must be the key's provider.",
     )
     g.add_argument(
         "--check",
@@ -674,7 +702,8 @@ def _format_checks(results, use_color: bool = True) -> str:
         )
     else:
         lines.append(c("✗ Not ready — fix the FAIL row(s) above, then re-check.", "1;31"))
-    return "\n".join(lines)
+    # Doctor rows carry raw exception text (a provider error can echo a key).
+    return redact("\n".join(lines))
 
 
 def _load_run_config(args: argparse.Namespace) -> MutEvalConfig:
@@ -717,13 +746,13 @@ def _load_or_die(args: argparse.Namespace) -> Optional[MutEvalConfig]:
     try:
         return _load_run_config(args)
     except (FileNotFoundError, ImportError, TypeError, ValueError) as exc:
-        print(f"muteval: {exc}", file=sys.stderr)
+        print(redact(f"muteval: {exc}"), file=sys.stderr)
         return None
     except Exception as exc:  # noqa: BLE001 - executing a user config can raise anything
         cfg = getattr(args, "config", None)
         where = f" {cfg}" if cfg else ""
         print(
-            f"muteval: your config{where} raised {type(exc).__name__}: {exc}",
+            redact(f"muteval: your config{where} raised {type(exc).__name__}: {exc}"),
             file=sys.stderr,
         )
         return None
@@ -1027,7 +1056,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
                 print(f"muteval: wrote manifest {args.manifest}")
             except OSError as exc:
-                print(f"muteval: could not write manifest: {exc}", file=sys.stderr)
+                print(
+                    redact(f"muteval: could not write manifest: {exc}"), file=sys.stderr
+                )
 
         if args.junit:
             from muteval.report import format_report_junit
@@ -1036,7 +1067,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 Path(args.junit).write_text(format_report_junit(result), encoding="utf-8")
                 print(f"muteval: wrote JUnit report {args.junit}")
             except OSError as exc:
-                print(f"muteval: could not write {args.junit}: {exc}", file=sys.stderr)
+                print(
+                    redact(f"muteval: could not write {args.junit}: {exc}"),
+                    file=sys.stderr,
+                )
                 return 2
 
         # JSON is always safe to write — it carries "status" and None-aware
@@ -1161,7 +1195,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
                 print(f"muteval: wrote {args.html}")
             except OSError as exc:
-                print(f"muteval: could not write {args.html}: {exc}", file=sys.stderr)
+                print(
+                    redact(f"muteval: could not write {args.html}: {exc}"),
+                    file=sys.stderr,
+                )
                 return 2
         return 0 if all(r.ok for r in results) else 1
 
@@ -1209,7 +1246,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             n = _write_label_worksheet(config, args.out)
         except Exception as exc:  # noqa: BLE001 - surface run/eval failures clearly
-            print(f"muteval: could not build worksheet: {exc}", file=sys.stderr)
+            print(redact(f"muteval: could not build worksheet: {exc}"), file=sys.stderr)
             return 2
         print(
             f"muteval: wrote {n} rows to {args.out}. Fill the 'human_label' column "
@@ -1222,7 +1259,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             try:
                 data = json.loads(Path(args.json).read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
-                print(f"muteval: could not read {args.json}: {exc}", file=sys.stderr)
+                print(
+                    redact(f"muteval: could not read {args.json}: {exc}"), file=sys.stderr
+                )
                 return 2
         else:
             data = _load_last_run()
@@ -1238,7 +1277,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             Path(args.html).write_text(format_report_html(data), encoding="utf-8")
         except OSError as exc:
-            print(f"muteval: could not write {args.html}: {exc}", file=sys.stderr)
+            print(redact(f"muteval: could not write {args.html}: {exc}"), file=sys.stderr)
             return 2
         print(f"muteval: wrote {args.html}")
         return 0
