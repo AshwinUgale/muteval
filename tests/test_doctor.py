@@ -94,11 +94,11 @@ def test_check_only_touches_one_case_by_default():
         run=run,
         evals=[lambda o, c: True],
     )
-    run_checks(cfg)  # default: first case only
-    assert calls["n"] == 1
+    run_checks(cfg)  # default: first case only (+1 repeat call: the noise check)
+    assert calls["n"] == 2
     calls["n"] = 0
-    run_checks(cfg, full=True)  # full: every case
-    assert calls["n"] == 3
+    run_checks(cfg, full=True)  # full: every case (+ the same one repeat)
+    assert calls["n"] == 4
 
 
 def test_cli_check_exit_codes(tmp_path):

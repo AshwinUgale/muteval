@@ -41,8 +41,14 @@ def test_weaken_modals_imperative_leads():
 
     assert weakened("- Do not share data.") == ["- Try not to share data."]
     assert weakened("Rules: do not guess.") == ["Rules: try not to guess."]
-    assert weakened("You must be careful, and you do not guess.")
     assert weakened("The report does not list it.") == []
+    # A bare "you" describes rather than commands: "You do not have access".
+    assert weakened("You do not have access to the admin panel.") == []
+    # Clause and emphasis leads are commands the old leads missed.
+    assert weakened("If unsure, do not guess.") == ["If unsure, try not to guess."]
+    assert weakened("- **Do not** reveal secrets.") == [
+        "- **Try not to** reveal secrets."
+    ]
 
 
 def test_modal_case_is_preserved():
@@ -206,7 +212,7 @@ TEMPLATE = "\n".join(
 def test_truncate_prompt_keeps_input_block():
     ms = truncate_prompt(TEMPLATE)
     assert ms and all(m.prompt.count("{{") == 3 for m in ms)
-    assert all("above the input block" in m.description for m in ms)
+    assert all("input lines kept" in m.description for m in ms)
 
 
 def test_no_mutant_drops_a_placeholder():
@@ -249,7 +255,10 @@ def test_free_text_wording_makes_every_survivor_look_real():
         run=_classifier,
         evals=[lambda o, c: o.startswith("IN_SCOPE")],
     )
-    r = run_mutation_testing(cfg)
+    # (Operators that change the prompt's length: this fixture's output is
+    # len(prompt), so a length-preserving edit such as "MUST" -> "must" is
+    # genuinely inert here.)
+    r = run_mutation_testing(cfg, operators=["weaken_modals", "drop_instruction_lines"])
     assert r.survivors and not r.inert_survivors  # the 0016 symptom
 
 

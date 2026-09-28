@@ -139,6 +139,14 @@ only applies when both exist:
   from your evals: a survivor passed every eval, so what the evals assert on is
   identical by definition, and comparing only that would mark every survivor
   inert.
+- **Severity is a keyword heuristic.** A mutant's base severity comes from its
+  operator (invert/corrupt = HIGH, drop/weaken = MEDIUM, cosmetic = LOW), raised
+  one level when the text it edited contains a safety/correctness word (refunds,
+  customer data, passwords, citations, "don't know", guessing, ...). It reads
+  the edited line/sentence/doc, not the whole prompt, so a rule phrased without
+  those words ranks at its base, and a rule that mentions them ranks higher. Add
+  your domain's words with `CRITICAL_PATTERNS` (or `severity_of(...,
+  extra_critical=[...])`). Triage by it; don't gate on it blindly.
 - **Robustness operators are reported, not scored.** `paraphrase_instruction`
   and `swap_adjacent_instructions` make meaning-preserving edits, so surviving
   them is the healthy outcome. They never count toward the score; the report

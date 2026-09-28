@@ -29,6 +29,11 @@ def strip_markers(text: str) -> Tuple[str, Optional[List[Tuple[int, int]]]]:
     and the mutable (start, end) char ranges in clean coordinates. If there are
     no markers, returns ``(text, None)`` meaning "everything is mutable"."""
     if _OPEN not in text:
+        if _CLOSE in text:
+            raise ValueError(
+                f"scope marker {_CLOSE} without a matching {_OPEN}: it would be "
+                "sent to the model verbatim"
+            )
         return text, None
     clean_parts: List[str] = []
     ranges: List[Tuple[int, int]] = []
@@ -49,11 +54,22 @@ def strip_markers(text: str) -> Tuple[str, Optional[List[Tuple[int, int]]]]:
             out_len += len(region)
             break
         region = text[o + len(_OPEN) : c]
+        if _OPEN in region:
+            raise ValueError(
+                f"nested {_OPEN} markers aren't supported: close the first region "
+                f"with {_CLOSE} before opening another"
+            )
         clean_parts.append(region)
         ranges.append((out_len, out_len + len(region)))
         out_len += len(region)
         pos = c + len(_CLOSE)
-    return "".join(clean_parts), (ranges or None)
+    clean = "".join(clean_parts)
+    if _CLOSE in clean:
+        raise ValueError(
+            f"scope marker {_CLOSE} without a matching {_OPEN}: it would be sent to "
+            "the model verbatim"
+        )
+    return clean, (ranges or None)
 
 
 def _changed_span(a: str, b: str) -> Optional[Tuple[int, int]]:
@@ -71,40 +87,81 @@ def _changed_span(a: str, b: str) -> Optional[Tuple[int, int]]:
     return (i, max(i, ja))
 
 
-def _changed_hunks(a: str, b: str) -> List[Tuple[int, int]]:
-    """Per-edit changed char ranges in ``a`` (SequenceMatcher opcodes). A pure
-    insertion yields a zero-width range (i1 == i2) at the insertion point.
+def _common_affixes(a, b) -> Tuple[int, int]:
+    """(prefix, suffix) lengths shared by sequences ``a`` and ``b``, with the
+    suffix never overlapping the prefix — so a single edit gets its canonical
+    LEFTMOST span (deleting "Never guess. " from "Be kind. Never guess. Be
+    brief." is exactly that sentence, not a shifted ". Never guess" alignment)."""
+    n = min(len(a), len(b))
+    i = 0
+    while i < n and a[i] == b[i]:
+        i += 1
+    j = 0
+    while j < n - i and a[len(a) - 1 - j] == b[len(b) - 1 - j]:
+        j += 1
+    return i, j
 
-    Unlike a single ``_changed_span`` envelope, this returns each edit
-    separately, so a mutant that edits two marker regions (with protected text
-    between them) can be judged region-by-region instead of as one span that
-    straddles the protected text."""
+
+def _changed_hunks(a: str, b: str) -> List[Tuple[int, int]]:
+    """Per-edit changed char ranges in ``a``. A pure insertion yields a
+    zero-width range (i1 == i2) at the insertion point.
+
+    The common prefix/suffix is trimmed first and only the changed MIDDLE is
+    diffed: mutants are local edits, so this is linear in practice (a
+    char-level SequenceMatcher over the whole prompt took minutes per run on a
+    5k-char prompt). Separate hunks are still reported per edit, so a mutant
+    that edits two marker regions (protected text between them) is judged
+    region-by-region, not as one span that straddles the protected text."""
+    if a == b:
+        return []
+    pre, suf = _common_affixes(a, b)
+    mid_a, mid_b = a[pre : len(a) - suf], b[pre : len(b) - suf]
+    if not mid_a or not mid_b:  # a pure deletion or insertion
+        return [(pre, pre + len(mid_a))]
     hunks: List[Tuple[int, int]] = []
     for tag, i1, i2, _j1, _j2 in SequenceMatcher(
-        None, a, b, autojunk=False
+        None, mid_a, mid_b, autojunk=False
     ).get_opcodes():
         if tag != "equal":
-            hunks.append((i1, i2))
+            hunks.append((pre + i1, pre + i2))
     return hunks
 
 
-def _affected_lines(original: str, mutant: str) -> List[str]:
-    """Lines added or removed between original and mutant (the lines a line-level
-    mutation actually touched).
+def _core(text: str, start: int, end: int) -> Tuple[int, int]:
+    """Shrink a changed span past the whitespace/newlines at its edges: deleting
+    a marked line also deletes its line break, which sits just OUTSIDE a
+    tightly-wrapped ``[[mutate]]line[[/mutate]]`` region."""
+    while start < end and text[start].isspace():
+        start += 1
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    return start, end
 
-    Uses ``difflib.SequenceMatcher`` opcodes so the diff is OCCURRENCE-aware: if
-    a line ("- Do not lie.") appears twice and a mutation removes ONE copy, we
-    detect it. A set-based diff would miss that (the line still exists elsewhere)
-    and would also falsely ignore a changed line whose text happens to collide
-    with an unrelated line. Only the lines inside changed hunks are returned."""
+
+def _affected_lines(original: str, mutant: str) -> List[str]:
+    """The ORIGINAL lines a mutation touched (removed or rewritten).
+
+    include/exclude select which of YOUR lines may be mutated, so they're
+    matched against the original text only — matching the mutated text let
+    ``--scope-include never`` keep an "Always -> never" flip, and
+    ``--scope-exclude should`` drop a "must -> should" weakening. A pure
+    insertion (no original line touched) is judged by the lines it adds.
+
+    Occurrence-aware (line-level SequenceMatcher on the trimmed middle): if a
+    line appears twice and one copy is removed, that's detected."""
     a, b = original.split("\n"), mutant.split("\n")
-    touched: List[str] = []
-    for tag, i1, i2, j1, j2 in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+    pre, suf = _common_affixes(a, b)
+    mid_a, mid_b = a[pre : len(a) - suf], b[pre : len(b) - suf]
+    removed: List[str] = []
+    added: List[str] = []
+    for tag, i1, i2, j1, j2 in SequenceMatcher(
+        None, mid_a, mid_b, autojunk=False
+    ).get_opcodes():
         if tag == "equal":
             continue
-        touched.extend(a[i1:i2])  # removed / replaced-from lines
-        touched.extend(b[j1:j2])  # added / replaced-to lines
-    return touched
+        removed.extend(mid_a[i1:i2])
+        added.extend(mid_b[j1:j2])
+    return removed or added
 
 
 @dataclass
@@ -117,10 +174,13 @@ class Scope:
         return bool(self.ranges or self.include or self.exclude)
 
     def keep(self, original_prompt: str, mutant_prompt: str) -> bool:
-        hunks = _changed_hunks(original_prompt, mutant_prompt)
-        if not hunks:
+        if original_prompt == mutant_prompt:
             return False
         if self.ranges is not None:
+            hunks = [
+                _core(original_prompt, s, e)
+                for s, e in _changed_hunks(original_prompt, mutant_prompt)
+            ]
             # EVERY changed hunk must be fully contained in a marked region.
             # (Checking one first-to-last envelope would wrongly reject a mutant
             # that makes separate valid edits in two regions with protected text

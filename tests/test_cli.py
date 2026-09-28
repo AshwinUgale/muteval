@@ -388,8 +388,12 @@ def test_dry_run_applies_scope_like_the_real_run(tmp_path):
     buf = io.StringIO()
     with redirect_stdout(buf):
         code = main(["run", "--config", cfg, "--no-color", "--dry-run"])
-    assert code == 0
+    # The dry-run mirrors the real run's validity gate: 0 mutants is exit 2
+    # (it used to exit 0, a green CI step for a run that would be invalid)...
+    assert code == 2
     assert "mutants that would run: 0" in buf.getvalue()
+    # ...unless --allow-empty says a zero-mutant run should pass.
+    assert main(["run", "--config", cfg, "--no-color", "--dry-run", "--allow-empty"]) == 0
 
 
 def test_init_rag_template_writes_and_runs(tmp_path):

@@ -19,19 +19,21 @@ muteval run --config examples/promptfoo_offline/muteval_config.py --no-color
 ## What you'll see
 
 ```
-Mutation score: 29%  (6/21 mutants killed, 95% CI 14-50%)
-Effective score: 67%  (6/9 — excludes 12 inert mutants whose output didn't change)
+Mutation score: 38%  (5/13 mutants killed, 95% CI 18-64%)
+Effective score: 71%  (5/7 — excludes 6 inert mutant(s) whose output didn't change; 95% CI 36-92%)
 
-3 SURVIVED  (output changed but evals didn't notice — real coverage gaps; 2 HIGH-severity):
+2 SURVIVED  (output changed but evals didn't notice — real coverage gaps):
 
-  [HIGH] SURVIVED  [drop_instruction_lines]
+  #1 [MED]  SURVIVED  [drop_instruction_lines]
             dropped line: "- Always reply in English."
             fix: add checks.llm_judge("the reply still follows: - Always reply in English.")
-  [HIGH] SURVIVED  [delete_sentences]
-            deleted sentence: "- Always reply in English."
-  [MED]  SURVIVED  [truncate_prompt]
-            truncated prompt — dropped the last 3 of 6 lines
+  #2 [MED]  SURVIVED  [truncate_prompt]
+            truncated prompt — dropped the last 2 of 5 instruction lines (input lines kept), from "- Always reply in English."
 ```
+
+(The language rule ranks MEDIUM, not HIGH: it's a real gap, but not a safety or
+correctness rule. Dropping the refund rule would rank HIGH, and the suite
+catches that one.)
 
 ## Why this is the point
 

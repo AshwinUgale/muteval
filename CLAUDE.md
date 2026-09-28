@@ -153,9 +153,13 @@ your system; muteval mutates your system to test your evals."
   - `suggest.py` — `suggest_eval(outcome)`: operator-aware starter check for
     each survivor (the `fix:` line in the report). Closes diagnostic -> fix.
   - `severity.py` — ranks each mutant: `OPERATOR_SEVERITY` base (invert/corrupt
-    = high, drop/weaken = medium, cosmetic = low) escalated one level when the
-    change touches safety/correctness text (`CRITICAL_PATTERNS`). `severity_of`,
-    `severity_rank`. Outcomes carry `.severity`; result has `high_severity_survivors`.
+    = high, drop/weaken = medium, cosmetic = low) escalated one level when
+    `Mutant.focus` (the ORIGINAL line/sentence/doc the edit acted on — never the
+    description) contains safety/correctness CONTENT words (`CRITICAL_PATTERNS`,
+    word-bounded; the modal words never/always/must/do not are deliberately NOT
+    there — every weakened rule contains them). `severity_of`, `severity_rank`.
+    On a dedupe collision `generate_mutants` keeps the more severe mutant.
+    Outcomes carry `.severity`; result has `high_severity_survivors`.
   - `config.py` — `MutEvalConfig` (accepts `prompt=` legacy OR `system=`) +
     `load_config`.
   - `cli.py` — `muteval run` (zero-config flags OR `--config`) with
