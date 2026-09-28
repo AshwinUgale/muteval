@@ -103,9 +103,35 @@ only applies when both exist:
   matched the baseline is dropped from the effective score. For a *deterministic*
   system that is a true equivalent mutant. For a *stochastic* one (an LLM at
   temperature > 0, a flaky judge), identical output on a few samples does not
-  prove the mutant is harmless — it may differ on an unseen sample. Raise
-  `runs_per_mutant` to shrink this risk; muteval labels these "observationally
-  unchanged," not "equivalent," on purpose.
+  prove the mutant is harmless — it may differ on an unseen sample. muteval
+  labels these "observationally unchanged," not "equivalent," on purpose.
+- **The reverse also holds: with free-text output, nothing looks unchanged.** By
+  default "changed" means *any* difference in the output text, so a mutant whose
+  behavior is identical but whose wording drifted (or that just sampled
+  differently) counts as a real survivor. On a classifier that emits a label plus
+  an explanation, equivalent mutants then show up as coverage gaps. Raising
+  `runs_per_mutant` makes this *worse* (more chances to see a wording change).
+  Fix it by declaring what the behavior is: `output_key=lambda o: o.split()[0]`
+  (compare only the label), and `baseline_runs=N` to sample the baseline's own
+  variance: an output matching any baseline sample isn't a change, and on cases
+  where the baseline itself varies, an unseen output is reported as
+  *undetermined* rather than a confirmed gap. muteval can't derive `output_key`
+  from your evals: a survivor passed every eval, so what the evals assert on is
+  identical by definition, and comparing only that would mark every survivor
+  inert.
+- **Robustness operators are reported, not scored.** `paraphrase_instruction`
+  and `swap_adjacent_instructions` make meaning-preserving edits, so surviving
+  them is the healthy outcome. They never count toward the score; the report
+  lists the ones that flipped a verdict ("an eval may key on wording/order").
+  muteval can't tell whether that flip is a brittle eval or a system that really
+  is sensitive to wording; read the listed mutant to decide. Swapping two steps
+  of an ordered procedure *can* be a real regression; the operator assumes an
+  unordered rule list.
+- **Mutants never delete the input.** A mutant whose prompt lost an input
+  placeholder (`{{var}}`, `{var}`, `${VAR}`) is dropped, since it's a guaranteed
+  kill that measures nothing. The detection is syntactic: an input spliced in
+  some other way (string concatenation in your `run`) isn't protected, and a
+  literal `{word}` in the prompt is treated as a placeholder.
 - **`downgrade_model` only knows a small model ladder.** It will not guess an
   ordering for models it doesn't recognize (it warns and emits nothing). Pass
   your own strong→weak ladder via `make_downgrade_model([...])`.

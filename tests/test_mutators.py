@@ -89,8 +89,11 @@ def test_paraphrase_instruction_rewords_lines():
     mutants = paraphrase_instruction(prompt)
     assert len(mutants) >= 2
     assert all(m.operator == "paraphrase_instruction" for m in mutants)
-    assert any("verify that" in m.description for m in mutants)
-    assert any("avoid" in m.description for m in mutants)
+    texts = [m.prompt for m in mutants]
+    # Grammatical for any following verb (the old "verify that to ..." /
+    # "avoid skip ..." rewrites were not).
+    assert any("- Be sure to always verify the output." in t for t in texts)
+    assert any("- Never skip the validation step." in t for t in texts)
 
 
 def test_paraphrase_instruction_skips_non_instruction_lines():

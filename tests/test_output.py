@@ -93,6 +93,10 @@ EXPECTED_KEYS = {
     "judge_models",
     "flaky_by_eval",
     "accepted",
+    "robustness",
+    "brittle",
+    "noisy_cases",
+    "undetermined",
     "survivors",
 }
 

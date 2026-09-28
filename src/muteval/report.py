@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+from typing import List
 
 from muteval.runner import MutationResult
 
@@ -11,6 +12,41 @@ from muteval.runner import MutationResult
 def _bar(score: float, width: int = 24) -> str:
     filled = int(round(score * width))
     return "█" * filled + "░" * (width - filled)
+
+
+def _robustness_lines(result: MutationResult, c) -> List[str]:
+    """The meaning-preserving (robustness) section: never scored. Surviving
+    these is healthy; one that flipped a verdict means an eval keys on wording
+    or order (or the system is sensitive to it) — worth a look, not a gap."""
+    robust = result.robustness
+    if not robust:
+        return []
+    brittle = result.brittle
+    if not brittle:
+        return [
+            c(
+                f"   robustness: {len(robust)} meaning-preserving edit(s) (paraphrase/"
+                "reorder), none flipped a verdict — not scored.",
+                "2",
+            )
+        ]
+    out = [
+        c(
+            f"   robustness: {len(brittle)}/{len(robust)} meaning-preserving edit(s) "
+            "flipped a verdict — an eval may key on exact wording/order (or the "
+            "system is sensitive to it). Not scored:",
+            "33",
+        )
+    ]
+    for o in brittle:
+        out.append(
+            c(
+                f"      [{o.mutant.operator}] {o.mutant.description}  "
+                f"(caught by {o.failing_eval})",
+                "2",
+            )
+        )
+    return out
 
 
 def format_report(result: MutationResult, use_color: bool = True) -> str:
@@ -54,6 +90,14 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         )
         return "\n".join(lines)
     if result.evaluated == 0:
+        if result.robustness:
+            lines.append(c("⚠  NO SCORE — only meaning-preserving operators ran", "33"))
+            lines.append(
+                "   Robustness operators (paraphrase, reorder) are reported, never "
+                "scored. Add regression operators for a mutation score."
+            )
+            lines.extend(_robustness_lines(result, c))
+            return "\n".join(lines)
         lines.append(c("⚠  INVALID RUN — no mutant produced a clean verdict", "1;31"))
         lines.append(
             f"   All {result.total} mutant(s) errored (e.g. API failures). No "
@@ -119,7 +163,7 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         elo, ehi = result.effective_score_ci
         lines.append(
             f"Effective score: {c(f'{eff:.0f}%', eff_color)}  "
-            f"({result.killed}/{result.evaluated - len(inert)} — excludes "
+            f"({result.killed}/{result.resolved - len(inert)} — excludes "
             f"{len(inert)} inert mutant(s) whose output didn't change; "
             f"95% CI {elo * 100:.0f}-{ehi * 100:.0f}%)"
         )
@@ -174,6 +218,19 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         lines.append(
             c("   " + " · ".join(prov) + " (pin these to compare over time)", "2")
         )
+    undetermined = result.undetermined_survivors
+    if result.noisy_cases and undetermined:
+        lines.append(
+            c(
+                f"   {len(undetermined)} survivor(s) undetermined: the baseline's own "
+                f"output varied on {result.noisy_cases} case(s), so a change there "
+                "can't be told apart from sampling noise. Counted as gaps "
+                "(conservative) — set output_key= to the part of the output that is "
+                "the behavior (e.g. the label).",
+                "33",
+            )
+        )
+    lines.extend(_robustness_lines(result, c))
     lines.append("")
 
     survivors = result.survivors
@@ -247,9 +304,9 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         lines.append("")
         lines.append(
             c(f"{len(inert)} observationally unchanged", "2")
-            + "  (output identical to baseline on this run — NOT eval blind "
-            "spots; excluded from the effective score. For a stochastic system "
-            "this is not proof of equivalence — raise runs_per_mutant):"
+            + "  (output matched the baseline on the samples we ran — NOT eval "
+            "blind spots; excluded from the effective score. For a stochastic "
+            "system this is not proof of equivalence — see docs/LIMITATIONS.md):"
         )
         for o in inert:
             lines.append(
@@ -366,7 +423,7 @@ def format_probe_card_html(
 
 # The JSON schema version. Bump on any breaking change to result_to_dict's shape;
 # consumers can branch on it. Snapshotted in tests/test_output.py.
-RESULT_SCHEMA_VERSION = 5
+RESULT_SCHEMA_VERSION = 6
 
 # Patterns that must never appear in emitted JSON/logs (defense in depth: a
 # survivor description or error string could echo a prompt containing a key).
@@ -429,6 +486,19 @@ def result_to_dict(result) -> dict:
             "judge_models": list(result.judge_models),
             "flaky_by_eval": result.flaky_by_eval,
             "accepted": len(result.accepted_survivors),
+            # Meaning-preserving mutants: evaluated but never scored. "brittle"
+            # are the ones that flipped an eval verdict anyway.
+            "robustness": len(result.robustness),
+            "brittle": [
+                {
+                    "operator": o.mutant.operator,
+                    "description": o.mutant.description,
+                    "failing_eval": o.failing_eval,
+                }
+                for o in result.brittle
+            ],
+            "noisy_cases": result.noisy_cases,
+            "undetermined": len(result.undetermined_survivors),
             "survivors": [
                 {
                     "id": i,
@@ -457,16 +527,27 @@ def format_report_junit(result: MutationResult) -> str:
     """
     from xml.etree.ElementTree import Element, SubElement, tostring
 
+    from muteval.mutators import ROBUSTNESS
+
+    def _robust(o) -> bool:
+        return o.mutant.intent == ROBUSTNESS
+
     suite = Element(
         "testsuite",
         {
             "name": "muteval",
             "tests": str(result.total),
             "failures": str(
-                sum(1 for o in result.outcomes if not o.errored and not o.killed)
+                sum(
+                    1
+                    for o in result.outcomes
+                    if not o.errored and not o.killed and not _robust(o)
+                )
             ),
             "errors": str(result.errored),
-            "skipped": "0",
+            "skipped": str(
+                sum(1 for o in result.outcomes if _robust(o) and not o.errored)
+            ),
         },
     )
     if result.total == 0 and (result.baseline_error or not result.baseline_passed):
@@ -486,6 +567,15 @@ def format_report_junit(result: MutationResult) -> str:
                     case, "error", {"message": outcome.error or "mutant errored"}
                 )
                 error.text = outcome.error or "mutant errored"
+            elif _robust(outcome):
+                # Meaning-preserving edit: never a CI failure either way.
+                note = (
+                    "robustness (not scored): a meaning-preserving edit flipped "
+                    f"{outcome.failing_eval}"
+                    if outcome.killed
+                    else "robustness (not scored): survived, as expected"
+                )
+                SubElement(case, "skipped", {"message": note})
             elif not outcome.killed:
                 failure = SubElement(case, "failure", {"message": "mutation survived"})
                 failure.text = outcome.mutant.description

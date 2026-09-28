@@ -47,6 +47,10 @@ OPERATOR_SEVERITY = {
     "remove_emphasis": LOW,
     "shuffle_context": LOW,
     "duplicate_context_doc": LOW,
+    # meaning-preserving ("robustness") operators — never scored as coverage
+    # gaps (see mutators.OPERATOR_INTENT); listed so they don't fall back to MEDIUM
+    "paraphrase_instruction": LOW,
+    "swap_adjacent_instructions": LOW,
 }
 
 # If a mutation's changed text matches any of these, bump severity one level.
