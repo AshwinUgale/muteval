@@ -98,6 +98,7 @@ EXPECTED_KEYS = {
     "noisy_cases",
     "undetermined",
     "noise_kills",
+    "cache",
     "baseline_pass_rate",
     "survivors",
 }

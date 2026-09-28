@@ -8,12 +8,25 @@ keyed by a hash of the inputs, so a second identical run makes ZERO model/judge
 calls.
 
 Determinism: caching assumes the system + evals are deterministic. The runner
-disables it when ``runs_per_mutant > 1`` (repeated runs exist precisely to
-observe non-determinism, which a cache would erase).
+disables it when ``runs_per_mutant > 1`` or ``baseline_runs > 1`` (repeated runs
+exist precisely to observe non-determinism, which a cache would erase). If
+``run()`` writes into the case (``case["used_context"] = ...`` for an eval to
+read), the post-run case is stored with the output and replayed on a hit.
 
-The value is also the trust boundary: a cache is keyed by ``System.key()`` (which
-includes the full prompt + context + model), the case, and the eval label — so a
-changed prompt/context/model/case/eval never collides with a stale entry.
+What the keys include (v2) — the trust boundary:
+
+* an OUTPUT is keyed by ``System.key()`` (prompt + context + tools + model +
+  extra), the case, and a fingerprint of your ``run`` function — so editing
+  ``run`` (e.g. the model it calls in prompt mode) doesn't serve stale outputs;
+* an OUTCOME is keyed by the output itself, the case, and a fingerprint of the
+  eval (its code, closure values, thresholds; see ``muteval.fingerprint``) — so
+  an edited eval, or two different evals sharing a label, never share a result.
+
+(v1 keyed outcomes on the eval's LABEL: an edited ``contains("X1")`` →
+``contains("ZZZ")`` kept serving the old verdicts. v1 entries are simply never
+read again.) The cache is still only as good as the fingerprint: an eval that
+depends on something muteval can't see (a file, a remote rubric) should set a
+``cache_version`` attribute — or skip ``--cache``.
 """
 
 from __future__ import annotations
@@ -22,10 +35,12 @@ import hashlib
 import json
 import sqlite3
 import threading
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from muteval.evals import EvalOutcome
 from muteval.system import System
+
+_NAMESPACE = "v2"
 
 
 def _case_repr(case: Any) -> str:
@@ -33,6 +48,15 @@ def _case_repr(case: Any) -> str:
         return json.dumps(case, sort_keys=True, default=str)
     except (TypeError, ValueError):
         return repr(case)
+
+
+def _output_repr(output: Any) -> Optional[str]:
+    """A stable text form of an output, or None if it can't be stored faithfully
+    (a dict holding objects): such outputs simply aren't cached."""
+    try:
+        return json.dumps(output, sort_keys=True)
+    except (TypeError, ValueError):
+        return None
 
 
 def _hash(*parts: Any) -> str:
@@ -74,41 +98,95 @@ class Cache:
             )
             self._conn.commit()
 
+    def _count(self, hit: bool) -> None:
+        with self._lock:
+            if hit:
+                self.hits += 1
+            else:
+                self.misses += 1
+
     # --- run outputs --------------------------------------------------------
-    def _output_key(self, system: System, case: Any) -> str:
-        return "out:" + _hash(system.key(), _case_repr(case))
+    def _output_key(self, system: System, case: Any, run_fp: str) -> str:
+        return _hash(_NAMESPACE, "out", system.key(), _case_repr(case), run_fp)
 
-    def get_output(self, system: System, case: Any) -> Optional[str]:
-        v = self._get(self._output_key(system, case))
-        self.hits += v is not None
-        self.misses += v is None
-        return v
+    def lookup_output(
+        self, system: System, case: Any, run_fp: str = ""
+    ) -> Optional[Tuple[Any, Any]]:
+        """``(output, post_run_case)`` or None. ``post_run_case`` is the case as
+        ``run()`` left it (None if run() didn't write into it): a cache hit skips
+        ``run()``, so its side effects on the case are REPLAYED from here —
+        otherwise an eval reading ``case["used_context"]`` would grade stale
+        state."""
+        v = self._get(self._output_key(system, case, run_fp))
+        self._count(v is not None)
+        if v is None:
+            return None
+        d = json.loads(v)
+        return d["o"], d.get("c")
 
-    def set_output(self, system: System, case: Any, output: str) -> None:
-        self._set(self._output_key(system, case), output)
+    def store_output(
+        self,
+        system: System,
+        case: Any,
+        output: Any,
+        run_fp: str = "",
+        post_run_case: Any = None,
+    ) -> None:
+        """Store an output — unless it (or the case state run() left behind)
+        can't be round-tripped exactly through JSON, in which case it's simply
+        not cached (a miss costs a call; a lossy replay could change a verdict)."""
+        entry = {"o": output}
+        if post_run_case is not None:
+            entry["c"] = post_run_case
+        try:
+            text = json.dumps(entry, sort_keys=True)
+            if json.loads(text) != entry:
+                return
+        except (TypeError, ValueError):
+            return
+        self._set(self._output_key(system, case, run_fp), text)
+
+    # Back-compat conveniences (no case-state replay).
+    def get_output(self, system: System, case: Any, run_fp: str = "") -> Optional[Any]:
+        hit = self.lookup_output(system, case, run_fp)
+        return None if hit is None else hit[0]
+
+    def set_output(
+        self, system: System, case: Any, output: Any, run_fp: str = ""
+    ) -> None:
+        self.store_output(system, case, output, run_fp)
 
     # --- eval outcomes ------------------------------------------------------
-    def _outcome_key(self, system: System, case: Any, label: str) -> str:
-        return "eval:" + _hash(system.key(), _case_repr(case), label or "")
-
-    def get_outcome(self, system: System, case: Any, label: str) -> Optional[EvalOutcome]:
-        v = self._get(self._outcome_key(system, case, label))
-        if v is None:
-            self.misses += 1
+    def _outcome_key(self, output: Any, case: Any, eval_fp: str) -> Optional[str]:
+        text = _output_repr(output)
+        if text is None:
             return None
-        self.hits += 1
+        return _hash(_NAMESPACE, "eval", text, _case_repr(case), eval_fp)
+
+    def get_outcome(
+        self, output: Any, case: Any, eval_fp: str, label: str = ""
+    ) -> Optional[EvalOutcome]:
+        key = self._outcome_key(output, case, eval_fp)
+        v = self._get(key) if key is not None else None
+        self._count(v is not None)
+        if v is None:
+            return None
         d = json.loads(v)
         return EvalOutcome(
             passed=d["passed"],
             score=d["score"],
             threshold=d["threshold"],
-            name=d["name"],
+            # Identical evals may share an entry; report under THIS eval's label.
+            name=label or d["name"],
             detail=d["detail"],
         )
 
     def set_outcome(
-        self, system: System, case: Any, label: str, outcome: EvalOutcome
+        self, output: Any, case: Any, eval_fp: str, outcome: EvalOutcome
     ) -> None:
+        key = self._outcome_key(output, case, eval_fp)
+        if key is None:
+            return
         d = {
             "passed": bool(outcome.passed),
             "score": outcome.score,
@@ -116,7 +194,7 @@ class Cache:
             "name": outcome.name,
             "detail": outcome.detail,
         }
-        self._set(self._outcome_key(system, case, label), json.dumps(d))
+        self._set(key, json.dumps(d))
 
     def close(self) -> None:
         self._conn.close()

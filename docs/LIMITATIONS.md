@@ -158,8 +158,21 @@ only applies when both exist:
 - **`downgrade_model` doesn't re-run inference by itself.** Like all System-mode
   operators, it only changes behavior if your `run(system, case)` actually reads
   `system.model` and calls that model.
-- **Cost & time.** Real-judge runs cost API money and run sequentially; total
-  work scales with mutants × cases × metrics × `runs_per_mutant`.
+- **Cost & time.** Real-judge runs cost API money; total work scales with
+  mutants × cases × metrics × `runs_per_mutant`. `--concurrency` cuts wall-clock
+  (not spend); `--cache` and `--max-calls` cut spend.
+- **The cache is only as good as its fingerprint.** Outputs are keyed on the
+  system, the case and a fingerprint of `run`; outcomes on the output, the case
+  and a fingerprint of the eval (its code, closure values, thresholds, the simple
+  globals it reads). An eval that depends on something muteval can't see — a
+  file it reads, a remote rubric, an env var — can still serve a stale verdict:
+  set a `cache_version` string on it, or don't use `--cache`. A `run()` that
+  closes over changing state (a call counter) gets a new fingerprint each time,
+  so it just misses. Outputs that can't round-trip through JSON aren't cached.
+- **`--concurrency` needs thread-safe evals.** Each (mutant, case, run) gets a
+  private copy of the case, and the deepeval adapter measures a private copy of
+  its metric, so the built-ins are safe. Your own eval that keeps state on an
+  object shared across calls must be thread-safe, or leave concurrency at 1.
 - **Non-prompt targets need System mode + a compatible `run()`.** Context/tool/
   model mutation only affects output if your `run(system, case)` actually consumes
   the mutated `System`.

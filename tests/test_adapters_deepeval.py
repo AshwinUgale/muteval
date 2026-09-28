@@ -56,11 +56,28 @@ def test_outcome_is_truthy_for_pass():
 
 
 def test_factory_receives_output_and_case():
+    seen = []
+
+    def factory(output, case):
+        tc = _factory(output, case)
+        seen.append(tc)
+        return tc
+
+    ev = metric_to_eval(StubMetric(score=1.0), test_case_factory=factory)
+    ev("the actual output", {"input": "the question"})
+    assert seen[0].actual_output == "the actual output"
+    assert seen[0].input == "the question"
+
+
+def test_each_call_measures_a_private_copy_of_the_metric():
+    # deepeval metrics store their result on the instance; a shared instance
+    # under --concurrency let one thread read another's score. The wrapped
+    # metric itself is never mutated.
     metric = StubMetric(score=1.0)
     ev = metric_to_eval(metric, test_case_factory=_factory)
-    ev("the actual output", {"input": "the question"})
-    assert metric.seen.actual_output == "the actual output"
-    assert metric.seen.input == "the question"
+    assert ev("out", {"input": "q"}).passed is True
+    assert metric.seen is None
+    assert getattr(ev, "is_llm", False) is True  # budgeted as a paid judge
 
 
 def test_metrics_to_evals_wraps_each():

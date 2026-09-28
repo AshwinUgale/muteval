@@ -43,6 +43,15 @@ class System:
     model: Optional[str] = None
     extra: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Accept the natural `context=[...]` / `tools=[...]` (the README's own
+        # form): a list inside key() made mutant de-duplication crash with
+        # "unhashable type: 'list'". Normalize to tuples.
+        for name in ("context", "tools"):
+            value = getattr(self, name)
+            if isinstance(value, list):
+                object.__setattr__(self, name, tuple(value))
+
     def with_prompt(self, prompt: str) -> "System":
         """Return a copy with a new prompt (leaves every other field intact)."""
         return dataclasses.replace(self, prompt=prompt)
@@ -65,7 +74,11 @@ class System:
             self.context,
             repr(self.tools),
             self.model,
-            repr(sorted(self.extra.items())) if self.extra else "",
+            # Sorted by repr: extra may mix key types ({1: .., "a": ..}), which
+            # a plain sort can't compare.
+            repr(sorted(self.extra.items(), key=lambda kv: repr(kv[0])))
+            if self.extra
+            else "",
         )
 
 
