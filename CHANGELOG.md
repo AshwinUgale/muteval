@@ -6,6 +6,46 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+Gates & validity: from a full audit of the trust core, every way a run could be
+scored or gated on evidence it doesn't have. Default single-run suites score
+exactly as before; runs with a noisy judge, ties, or odd eval return values now
+fail closed instead of passing.
+
+- **Unresolved ties are gated.** An all-tied run used to be `valid` with no
+  score: `--fail-on-severity` exited 0 and `--fail-under` crashed with a
+  `TypeError`. One resolved mutant of 17 read "100%" and passed. Now all-tied is
+  `no_confident_score`, and any tie above `max_unresolved_rate` (new; default
+  0.0 = fail closed, like `max_error_rate`; CLI `--max-unresolved-rate`) is
+  `partial_unresolved`. An odd `runs_per_mutant` can't tie.
+- **The built-in judge reads the score it asked for.** The parser took the LAST
+  number and only rescaled values > 1, so "0/10" and "3/10" parsed as 1.0 (a
+  perfect pass) and a bare "1" meant 1.0. It now reads "N/10" / "N out of 10",
+  else the first number, on the 0-10 scale; an empty reply, no number, or a
+  value outside 0-10 raises, so the mutant is *errored* (it used to be a 0.0
+  score — a kill).
+- **The baseline is judged by the mutants' rule.** It was graded once while
+  mutants needed a majority of `runs_per_mutant` runs; a flaky judge that would
+  "kill" the unmodified original half the time still yielded a valid run. Now
+  the baseline is graded `runs_per_mutant` times: if the original would itself
+  be killed (or ties), the run is `baseline_failed`, and the report shows the
+  original's pass rate as a noise floor. JSON: `baseline_pass_rate`.
+- **Noise kills leave the effective score.** A kill whose outputs match what the
+  original itself produced (any baseline sample, under `output_key`) didn't
+  change behavior, so it isn't detection. It is now excluded from the effective
+  score like an inert survivor; a prompt-independent system no longer scores an
+  effective 100%. `--fail-under` gates on the lower of the raw and effective
+  scores (identical to the raw score when there are no noise kills). JSON:
+  `noise_kills`.
+- **Non-verdicts fail closed.** A NaN metric score counted as a kill (`nan >=
+  threshold` is False): the ragas adapter and `scorer_to_eval` scored 1.0 on a
+  metric that returned NaN everywhere. An eval returning a number (`0.2`) or a
+  string (`"fail"`) was truthy, so it passed. Both now raise, so the mutant is
+  *errored*. A promptfoo-style `{"pass": bool, "score": ...}` dict is accepted.
+- `--fail-under` must be a percent in [0, 100]; a fraction such as `0.8` (the
+  style `--max-error-rate` takes) is rejected instead of passing almost any run.
+- A run where only robustness operators ran has its own status,
+  `no_scored_mutants`; the CLI no longer says "every mutant errored" for it.
+
 Mutant realism: fixes found by running muteval on a real external suite (a
 promptfoo PR-scope classifier), where malformed, meaning-preserving,
 input-deleting and wording-only mutants distorted the score. **Scores can move**

@@ -76,11 +76,20 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         return "\n".join(lines)
     if not result.baseline_passed:
         lines.append(c("⚠  INVALID RUN — baseline FAILED", "1;31"))
-        lines.append(
-            "   Your eval suite does not pass on the ORIGINAL system, so a "
-            "mutation score would be meaningless (every mutant 'fails' too). "
-            "Fix the baseline, then re-run."
-        )
+        rate = result.baseline_pass_rate
+        if rate is not None and 0.0 < rate < 1.0:
+            lines.append(
+                f"   The ORIGINAL system passed only {rate * 100:.0f}% of its graded "
+                "runs — by the same majority rule applied to mutants, it would "
+                "itself be 'killed', so every kill would be indistinguishable from "
+                "noise. Stabilize the judge/system (or its rubric), then re-run."
+            )
+        else:
+            lines.append(
+                "   Your eval suite does not pass on the ORIGINAL system, so a "
+                "mutation score would be meaningless (every mutant 'fails' too). "
+                "Fix the baseline, then re-run."
+            )
         return "\n".join(lines)
     if result.total == 0:
         lines.append(c("⚠  NO MUTANTS — nothing to test", "33"))
@@ -90,7 +99,7 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         )
         return "\n".join(lines)
     if result.evaluated == 0:
-        if result.robustness:
+        if not result.regression_total and result.robustness:
             lines.append(c("⚠  NO SCORE — only meaning-preserving operators ran", "33"))
             lines.append(
                 "   Robustness operators (paraphrase, reorder) are reported, never "
@@ -109,7 +118,8 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         lines.append(c("⚠  NO CONFIDENT SCORE — every mutant's verdict tied", "1;31"))
         lines.append(
             f"   All {result.unresolved} evaluated mutant(s) were unresolved "
-            "(the judge straddled 50%). Raise runs_per_mutant to break the ties."
+            "(the judge straddled 50%). Use an ODD runs_per_mutant — ties can't "
+            "happen then."
         )
         return "\n".join(lines)
 
@@ -123,11 +133,35 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
         f"95% CI {lo * 100:.0f}-{hi * 100:.0f}%)"
     )
     if result.unresolved:
+        from muteval.runner import PARTIAL_UNRESOLVED
+
+        if result.status == PARTIAL_UNRESOLVED:
+            lines.append(
+                c(
+                    f"   ⚠  INVALID for CI — {result.unresolved}/{result.evaluated} "
+                    f"mutant(s) unresolved ({result.unresolved_rate * 100:.0f}% > "
+                    "allowed budget; verdict tied over runs_per_mutant). The score "
+                    "above is over the few RESOLVED mutants and is shown for "
+                    "diagnosis only; the CLI exits non-zero and the badge is n/a. "
+                    "Use an odd runs_per_mutant, or raise --max-unresolved-rate.",
+                    "1;31",
+                )
+            )
+        else:
+            lines.append(
+                c(
+                    f"   {result.unresolved} unresolved (verdict tied over "
+                    "runs_per_mutant; excluded from the score — an odd "
+                    "runs_per_mutant can't tie).",
+                    "33",
+                )
+            )
+    rate = result.baseline_pass_rate
+    if rate is not None and rate < 1.0:
         lines.append(
             c(
-                f"   {result.unresolved} unresolved (verdict tied over "
-                "runs_per_mutant; excluded from the score — raise runs_per_mutant "
-                "to resolve).",
+                f"   noise floor: the ORIGINAL system failed {(1 - rate) * 100:.0f}% of "
+                "its graded runs — kills at that rate are noise, not detection.",
                 "33",
             )
         )
@@ -154,29 +188,40 @@ def format_report(result: MutationResult, use_color: bool = True) -> str:
                 )
             )
 
-    # Effective score: drop observationally-unchanged survivors from the
-    # denominator (their output didn't change on the samples we ran).
+    # Effective score: drop mutants that didn't change observed behavior —
+    # unchanged survivors (inert) AND unchanged kills (noise) — from the score.
     inert = result.inert_survivors
-    if inert and result.effective_score is not None:
-        eff = result.effective_score * 100
-        eff_color = "32" if eff >= 80 else "33" if eff >= 50 else "31"
-        elo, ehi = result.effective_score_ci
-        lines.append(
-            f"Effective score: {c(f'{eff:.0f}%', eff_color)}  "
-            f"({result.killed}/{result.resolved - len(inert)} — excludes "
-            f"{len(inert)} inert mutant(s) whose output didn't change; "
-            f"95% CI {elo * 100:.0f}-{ehi * 100:.0f}%)"
-        )
-    elif inert:
-        # Every evaluated mutant was observationally unchanged -> no observed
-        # degradation to score. Say so rather than crash on a None effective score.
-        lines.append(
-            c(
-                f"Effective score: n/a  (all {len(inert)} evaluated mutant(s) "
-                "left the output unchanged on this run — nothing to score)",
-                "33",
+    noise = result.noise_kills
+    if inert or noise:
+        parts = []
+        if inert:
+            parts.append(f"{len(inert)} inert mutant(s) whose output didn't change")
+        if noise:
+            parts.append(
+                f"{len(noise)} noise kill(s) — 'caught' on output the original "
+                "itself produces"
             )
-        )
+        excluded = " and ".join(parts)
+        if result.effective_score is not None:
+            eff = result.effective_score * 100
+            eff_color = "32" if eff >= 80 else "33" if eff >= 50 else "31"
+            elo, ehi = result.effective_score_ci
+            k, n = result.effective_counts
+            lines.append(
+                f"Effective score: {c(f'{eff:.0f}%', eff_color)}  "
+                f"({k}/{n} — excludes {excluded}; "
+                f"95% CI {elo * 100:.0f}-{ehi * 100:.0f}%)"
+            )
+        else:
+            # No mutant changed observed behavior -> nothing to score. Say so
+            # rather than crash on a None effective score.
+            lines.append(
+                c(
+                    f"Effective score: n/a  (no mutant changed the observed "
+                    f"behavior — excludes {excluded}; nothing to score)",
+                    "33",
+                )
+            )
 
     if result.canary_caught is False:
         lines.append(
@@ -499,6 +544,12 @@ def result_to_dict(result) -> dict:
             ],
             "noisy_cases": result.noisy_cases,
             "undetermined": len(result.undetermined_survivors),
+            "noise_kills": len(result.noise_kills),
+            "baseline_pass_rate": (
+                round(result.baseline_pass_rate, 4)
+                if result.baseline_pass_rate is not None
+                else None
+            ),
             "survivors": [
                 {
                     "id": i,

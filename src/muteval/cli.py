@@ -32,9 +32,12 @@ from muteval.runner import (
     BASELINE_ERRORED,
     BASELINE_FAILED,
     BUDGET_EXCEEDED,
+    NO_CONFIDENT_SCORE,
     NO_EVALUATED_MUTANTS,
     NO_MUTANTS,
+    NO_SCORED_MUTANTS,
     PARTIAL_ERRORS,
+    PARTIAL_UNRESOLVED,
     VALID,
     run_mutation_testing,
     select_mutants,
@@ -475,7 +478,8 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         metavar="PCT",
-        help="Exit non-zero if the mutation score is below this percent.",
+        help="Exit non-zero if the mutation score is below this percent (the "
+        "lower of the raw and effective scores, so noise kills can't pass it).",
     )
     gate.add_argument(
         "--fail-on-severity",
@@ -495,6 +499,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--allow-mutant-errors",
         action="store_true",
         help="Tolerate any number of errored mutants (== --max-error-rate 1.0).",
+    )
+    gate.add_argument(
+        "--max-unresolved-rate",
+        type=float,
+        default=None,
+        metavar="FRAC",
+        help="Fraction of mutants allowed to end UNRESOLVED (a tied verdict over an "
+        "even --runs-per-mutant) before the run is INVALID (default 0.0 = fail "
+        "closed). An odd runs_per_mutant can't tie. Overrides the config value.",
     )
     gate.add_argument(
         "--allow-empty",
@@ -930,6 +943,26 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print("muteval: --max-error-rate must be in [0, 1]", file=sys.stderr)
                 return 2
             config.max_error_rate = args.max_error_rate
+        if args.max_unresolved_rate is not None:
+            if not 0.0 <= args.max_unresolved_rate <= 1.0:
+                print("muteval: --max-unresolved-rate must be in [0, 1]", file=sys.stderr)
+                return 2
+            config.max_unresolved_rate = args.max_unresolved_rate
+        # --fail-under is a PERCENT. Reject nonsense, and a fraction like 0.8
+        # (the style --max-error-rate takes) that would pass almost any score.
+        if args.fail_under is not None:
+            if not 0.0 <= args.fail_under <= 100.0:
+                print(
+                    "muteval: --fail-under must be a percent in [0, 100]", file=sys.stderr
+                )
+                return 2
+            if 0.0 < args.fail_under < 1.0:
+                print(
+                    f"muteval: --fail-under is a percent; {args.fail_under:g} would pass "
+                    f"almost any score. Did you mean {args.fail_under * 100:g}?",
+                    file=sys.stderr,
+                )
+                return 2
 
         if args.dry_run:
             # Use the SAME selection path as a real run so the counts can't drift.
@@ -1023,10 +1056,26 @@ def main(argv: Optional[List[str]] = None) -> int:
                 return 0
             reason = {
                 BASELINE_ERRORED: "baseline suite ERRORED on the original system",
-                BASELINE_FAILED: "baseline suite did not pass on the original system",
+                BASELINE_FAILED: "baseline suite did not pass on the original system"
+                + (
+                    f" (passed {result.baseline_pass_rate * 100:.0f}% of "
+                    f"{config.runs_per_mutant} runs — the original itself would be "
+                    "'killed' by the same rule as a mutant)"
+                    if result.baseline_pass_rate is not None
+                    and config.runs_per_mutant > 1
+                    else ""
+                ),
                 NO_MUTANTS: "no mutants were generated "
                 "(use --allow-empty to treat as a pass)",
                 NO_EVALUATED_MUTANTS: "every mutant errored — no verdict produced",
+                NO_SCORED_MUTANTS: "only meaning-preserving (robustness) operators "
+                "ran — they are reported, never scored; add regression operators",
+                NO_CONFIDENT_SCORE: f"all {result.unresolved} evaluated mutant(s) "
+                "tied over runs_per_mutant — use an odd --runs-per-mutant",
+                PARTIAL_UNRESOLVED: f"{result.unresolved}/{result.evaluated} "
+                f"mutant(s) unresolved ({result.unresolved_rate * 100:.0f}% > allowed "
+                f"{config.max_unresolved_rate * 100:.0f}%); use an odd "
+                "--runs-per-mutant or raise --max-unresolved-rate",
                 BUDGET_EXCEEDED: "hit --max-calls before finishing "
                 "(raise --max-calls or narrow with --sample)",
                 PARTIAL_ERRORS: f"{result.errored}/{result.total} mutant(s) errored "
@@ -1047,9 +1096,27 @@ def main(argv: Optional[List[str]] = None) -> int:
             Path(args.badge).write_text(json.dumps(badge_dict(result)), encoding="utf-8")
 
         failed = False
-        if args.fail_under is not None and result.score * 100 < args.fail_under:
+        if result.score is None:  # belt and braces: a valid run always has one
+            print("muteval: INVALID — no score produced.", file=sys.stderr)
+            return 2
+        # Gate on the LOWER of the raw and effective scores, so neither inert
+        # survivors nor noise kills (kills on output the original itself
+        # produces) can carry a run over the line. With no noise kills the raw
+        # score is the lower one, so this is the long-standing raw-score gate.
+        gate_score = result.score
+        eff = result.effective_score
+        if eff is not None:
+            gate_score = min(gate_score, eff)
+        elif result.noise_kills:
+            gate_score = 0.0  # every kill was noise: no demonstrated detection
+        if args.fail_under is not None and gate_score * 100 < args.fail_under:
+            which = (
+                ""
+                if gate_score == result.score
+                else " (effective — noise kills don't count as detection)"
+            )
             print(
-                f"\nmuteval: FAIL — score {result.score * 100:.0f}% is below "
+                f"\nmuteval: FAIL — score {gate_score * 100:.0f}%{which} is below "
                 f"--fail-under {args.fail_under:.0f}%",
                 file=sys.stderr,
             )

@@ -71,6 +71,12 @@ class MutEvalConfig:
     # makes the run `partial_errors` (no trustworthy score, CLI exits non-zero,
     # badge = n/a). Raise it (e.g. 0.2) to tolerate a flaky judge interactively.
     max_error_rate: float = 0.0
+    # Fraction of mutants allowed to end UNRESOLVED (a tied verdict over an even
+    # runs_per_mutant) before the run is invalid. 0.0 (default) = FAIL CLOSED,
+    # like max_error_rate: a score over the few resolved mutants isn't a score
+    # (1 resolved of 17 would read "100%"). Use an ODD runs_per_mutant and ties
+    # can't happen at all.
+    max_unresolved_rate: float = 0.0
     eval_names: List[str] = field(default_factory=list)
     system: Optional[System] = None
     operators: Optional[List[Any]] = None
@@ -139,6 +145,8 @@ class MutEvalConfig:
             raise ValueError("config.kill_threshold must be None or in (0, 1]")
         if not 0.0 <= self.max_error_rate <= 1.0:
             raise ValueError("config.max_error_rate must be in [0, 1]")
+        if not 0.0 <= self.max_unresolved_rate <= 1.0:
+            raise ValueError("config.max_unresolved_rate must be in [0, 1]")
 
     def invoke(self, system: System, case: Any) -> str:
         """Call the user's ``run`` with the right calling convention."""

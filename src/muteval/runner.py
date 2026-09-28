@@ -53,6 +53,14 @@ NO_EVALUATED_MUTANTS = "no_evaluated_mutants"
 PARTIAL_ERRORS = "partial_errors"
 # The run hit --max-calls before finishing: incomplete, so no trustworthy score.
 BUDGET_EXCEEDED = "budget_exceeded"
+# Mutants produced verdicts, but every one TIED over runs_per_mutant: nothing
+# resolved, so there is no score (not a vacuous one).
+NO_CONFIDENT_SCORE = "no_confident_score"
+# More tied (unresolved) mutants than config.max_unresolved_rate allows: the
+# score is over a shrunken denominator (1 resolved of 17 is not "100%").
+PARTIAL_UNRESOLVED = "partial_unresolved"
+# Only meaning-preserving (robustness) operators ran: reported, never scored.
+NO_SCORED_MUTANTS = "no_scored_mutants"
 
 
 class BudgetExceeded(Exception):
@@ -94,10 +102,12 @@ class MutantOutcome:
     # Near-miss info for survivors: the eval that came closest to catching it.
     closest_eval: Optional[str] = None
     min_margin: Optional[float] = None
-    # Did this mutant actually change the system's output vs baseline?
-    #   True  -> output changed (a survivor here is a real coverage gap)
-    #   False -> output identical (inert / equivalent mutant)
-    #   None  -> unknown (e.g. killed before all cases ran, or baseline errored)
+    # Did this mutant actually change the system's output vs baseline (every
+    # baseline sample, under config.output_key)? Judged on the runs that agree
+    # with the verdict.
+    #   True  -> changed (a survivor here is a real coverage gap)
+    #   False -> matches a baseline sample: an inert survivor, or a NOISE kill
+    #   None  -> undetermined (noisy baseline case, unkeyable output, ...)
     output_changed: Optional[bool] = None
     # Ranked danger of this mutation: 'high' | 'medium' | 'low'.
     severity: Optional[str] = None
@@ -144,10 +154,15 @@ class MutationResult:
     # trip --fail-on-severity, so a decided gap stops resurfacing as noise. The
     # mutation score is unchanged — the eval still doesn't cover it.
     accepted: FrozenSet[str] = frozenset()
-    # With config.baseline_runs > 1: how many cases' baseline output (under
-    # config.output_key) varied between samples. On those cases an unseen mutant
-    # output can't be told apart from sampling noise. None = not measured.
+    # With more than one baseline sample (runs_per_mutant or baseline_runs > 1):
+    # how many cases' baseline output (under config.output_key) varied between
+    # samples. On those cases an unseen mutant output can't be told apart from
+    # sampling noise. None = not measured (a single sample).
     noisy_cases: Optional[int] = None
+    # Fraction of the graded baseline runs (runs_per_mutant of them) the ORIGINAL
+    # system passed. The original must survive the same kill rule as a mutant,
+    # or its own noise would be counted as kills.
+    baseline_pass_rate: Optional[float] = None
 
     @property
     def total(self) -> int:
@@ -160,6 +175,11 @@ class MutationResult:
         from muteval.mutators import REGRESSION
 
         return [o for o in self.outcomes if o.mutant.intent == REGRESSION]
+
+    @property
+    def regression_total(self) -> int:
+        """Regression (scored) mutants generated, errored or not."""
+        return len(self._scored)
 
     @property
     def robustness(self) -> List[MutantOutcome]:
@@ -209,6 +229,11 @@ class MutationResult:
         return sum(1 for o in self._scored if o.unresolved and not o.errored)
 
     @property
+    def unresolved_rate(self) -> float:
+        """Fraction of evaluated (regression) mutants whose verdict tied."""
+        return self.unresolved / self.evaluated if self.evaluated else 0.0
+
+    @property
     def resolved(self) -> int:
         """Mutants with a confident killed/survived verdict — the score
         denominator (evaluated minus unresolved ties)."""
@@ -242,6 +267,19 @@ class MutationResult:
         return [o for o in self.survivors if o.output_changed is False]
 
     @property
+    def noise_kills(self) -> List[MutantOutcome]:
+        """Kills whose outputs matched what the ORIGINAL system itself produced
+        (a baseline sample, under ``config.output_key``): the mutant didn't
+        change behavior, so the eval failing is noise (a flaky judge, or the
+        original's own failure mode), not a caught regression. The mirror image
+        of ``inert_survivors``; both leave the effective score."""
+        return [
+            o
+            for o in self._scored
+            if o.killed and not o.errored and o.output_changed is False
+        ]
+
+    @property
     def real_survivors(self) -> List[MutantOutcome]:
         """Survivors that actually changed the output but evals didn't catch —
         genuine coverage gaps. (Includes survivors with unknown diff status.)"""
@@ -272,13 +310,24 @@ class MutationResult:
         return wilson_interval(self.killed, self.resolved)
 
     @property
+    def effective_counts(self) -> Tuple[int, int]:
+        """(killed, denominator) for the effective score: drop inert survivors
+        AND noise kills — mutants that didn't change observed behavior, whether
+        the evals 'caught' them or not."""
+        noise = len(self.noise_kills)
+        return (
+            self.killed - noise,
+            self.resolved - len(self.inert_survivors) - noise,
+        )
+
+    @property
     def effective_score_ci(self):
-        """Wilson 95% CI on the effective score (excludes inert + unresolved)."""
+        """Wilson 95% CI on the effective score (excludes inert survivors, noise
+        kills and unresolved ties)."""
         from muteval.stats import wilson_interval
 
-        return wilson_interval(
-            self.killed, max(self.resolved - len(self.inert_survivors), 0)
-        )
+        k, n = self.effective_counts
+        return wilson_interval(k, max(n, 0))
 
     @property
     def flaky(self) -> List[MutantOutcome]:
@@ -307,14 +356,15 @@ class MutationResult:
 
     @property
     def effective_score(self) -> Optional[float]:
-        """Observed-degradation score: mutants whose OUTPUT changed but the
-        evals missed. Excludes single-sample "unchanged" survivors and
-        unresolved ties. None when there is nothing to score. (Not provably
-        exact for stochastic judges; see LIMITATIONS.)"""
-        effective = self.resolved - len(self.inert_survivors)
-        if effective <= 0:
+        """Observed-degradation score: of the mutants that CHANGED observed
+        behavior, the fraction the evals caught. Excludes unchanged survivors
+        (inert), unchanged kills (noise) and unresolved ties. None when there is
+        nothing to score. (Not provably exact for stochastic systems; see
+        LIMITATIONS.)"""
+        k, n = self.effective_counts
+        if n <= 0:
             return None
-        return self.killed / effective
+        return k / n
 
 
 def _eval_label(config: MutEvalConfig, idx: int) -> str:
@@ -468,8 +518,17 @@ def _diff_outputs(
     evidence of change); True if it's unseen and the baseline was stable on that
     case; None if it's unseen but the baseline itself varied there (can't tell a
     change from sampling noise) or the key raised. Across cases, any True wins,
-    then any None. None overall when we can't compare at all."""
-    if profile is None or not profile.samples or len(profile.samples) != len(mutant):
+    then any None. None overall when we can't compare at all.
+
+    ``mutant`` may be SHORTER than the case list: a killed run stops at its
+    first failing case, so only the outputs it actually produced are compared.
+    """
+    if (
+        profile is None
+        or not profile.samples
+        or not mutant
+        or len(mutant) > len(profile.samples)
+    ):
         return None
     verdicts: List[Optional[bool]] = []
     for base, noisy, out in zip(profile.samples, profile.noisy, mutant):
@@ -515,6 +574,34 @@ def select_mutants(
     return mutants
 
 
+def _verdict(fails: int, n: int, config: MutEvalConfig) -> Tuple[bool, bool]:
+    """(killed, unresolved) for ``fails`` failing runs out of ``n``. The SAME
+    rule judges every mutant and the baseline: the original system must survive
+    what a mutant would be killed by, or its own noise is counted as kills."""
+    if config.kill_threshold is not None:
+        return fails / n >= config.kill_threshold, False
+    # Strict majority. A dead-even split (only possible with an even n) hasn't
+    # earned a binary verdict — the judge straddled 50% — so it is UNRESOLVED:
+    # excluded from the score, never silently defaulted to "survived".
+    if n > 1 and fails * 2 == n:
+        return False, True
+    return fails * 2 > n, False
+
+
+def _aggregate_change(
+    config: MutEvalConfig, profile: _BaselineProfile, runs: List[_SuiteRun]
+) -> Optional[bool]:
+    """Did these runs' outputs change behavior vs the baseline? Any observed
+    change -> True; any undetermined comparison -> None; False only when every
+    run matched a baseline sample."""
+    diffs = [_diff_outputs(config, profile, r.outputs) for r in runs]
+    if any(d is True for d in diffs):
+        return True
+    if not diffs or any(d is None for d in diffs):
+        return None
+    return False
+
+
 def _evaluate_mutant(
     mutant, config, cache, baseline_arg, baseline_outputs, budget=None, profile=None
 ) -> MutantOutcome:
@@ -532,22 +619,19 @@ def _evaluate_mutant(
         caught_by = tuple(
             sorted({r.failing_eval for r in runs if r.failing_eval is not None})
         )
-        unresolved = False
-        if config.kill_threshold is None:
-            killed = fails * 2 > len(runs)  # strict majority
-            # A dead-even split (only possible with even runs_per_mutant) hasn't
-            # earned a binary verdict — the judge straddled 50%. Rather than
-            # silently defaulting a tie to "survived", mark it UNRESOLVED and
-            # exclude it from the score entirely (numerator and denominator).
-            if fails * 2 == len(runs) and len(runs) > 1:
-                killed = False
-                unresolved = True
-        else:
-            killed = kill_rate >= config.kill_threshold
+        killed, unresolved = _verdict(fails, len(runs), config)
         rep = next((r for r in runs if (r.failing_eval is not None) == killed), runs[0])
         closest_eval = min_margin = None
-        output_changed: Optional[bool] = None
         sample_base = sample_mut = None
+        if profile is None:
+            profile = _profile(config, [[o] for o in baseline_outputs])
+        # Output-change evidence from the runs that AGREE with the verdict (the
+        # failing runs for a kill, the passing runs for a survivor). NOTE: for
+        # free-text output, more runs mean more chances to see a wording change
+        # — set config.output_key (+ baseline_runs) so "change" means a change
+        # in behavior, not in phrasing.
+        agreeing = [r for r in runs if (r.failing_eval is not None) == killed]
+        output_changed = _aggregate_change(config, profile, agreeing)
         if not killed:
             closest_eval, min_margin = _near_miss(rep.outcomes)
             # Capture the first case whose output changed, for `muteval show`.
@@ -555,22 +639,6 @@ def _evaluate_mutant(
                 if i < len(baseline_outputs) and baseline_outputs[i] != mo:
                     sample_base, sample_mut = baseline_outputs[i], mo
                     break
-            # Aggregate output-change evidence across EVERY surviving run: any
-            # observed change -> changed; any undetermined comparison -> unknown
-            # (None); "unchanged" only when every comparable run matched. NOTE:
-            # for free-text output, more runs mean more chances to see a wording
-            # change — set config.output_key (+ baseline_runs) so "change" means
-            # a change in behavior, not in phrasing.
-            survivor_runs = [r for r in runs if r.failing_eval is None]
-            if profile is None:
-                profile = _profile(config, [[o] for o in baseline_outputs])
-            diffs = [_diff_outputs(config, profile, r.outputs) for r in survivor_runs]
-            if any(d is True for d in diffs):
-                output_changed = True
-            elif not diffs or any(d is None for d in diffs):
-                output_changed = None
-            else:
-                output_changed = False
         return MutantOutcome(
             mutant=mutant,
             killed=killed,
@@ -630,32 +698,53 @@ def run_mutation_testing(
     if cache is not None and (config.runs_per_mutant > 1 or config.baseline_runs > 1):
         cache = None
     budget = _Budget(max_calls)
-    # Baseline — resilient: an error here shouldn't lose the whole run.
-    baseline_passed = False
+    # Baseline — graded runs_per_mutant times and judged by the SAME rule as a
+    # mutant (see _verdict): if a flaky judge would "kill" the unmodified
+    # original, every kill it hands a mutant is noise, so the run is invalid.
+    # Each graded run is retried a few times on *exceptions* only (a transient
+    # judge/API blip must not poison the run); a clean pass/fail verdict is a
+    # real result and is NOT retried.
     baseline_error: Optional[str] = None
-    baseline_outputs: List[str] = []
-    # The baseline gets one shot per attempt; a flaky judge (timeout / API error)
-    # must not poison the whole run, so retry a few times on *exceptions* only.
-    # A clean pass/fail verdict is a real result and is NOT retried.
-    for _ in range(max(config.runs_per_mutant, 3)):
-        try:
-            baseline_run = _run_suite(config.system, config, cache=cache, budget=budget)
-            baseline_passed = baseline_run.failing_eval is None
-            baseline_outputs = baseline_run.outputs
-            baseline_error = None
+    graded: List[_SuiteRun] = []
+    for _ in range(config.runs_per_mutant):
+        attempt_error: Optional[str] = None
+        for _attempt in range(3):
+            try:
+                graded.append(
+                    _run_suite(config.system, config, cache=cache, budget=budget)
+                )
+                attempt_error = None
+                break
+            except BudgetExceeded as exc:
+                # Budget hit during the baseline: incomplete, fail closed.
+                result = MutationResult(baseline_passed=False, baseline_error=str(exc))
+                result.status = BUDGET_EXCEEDED
+                return result
+            except Exception as exc:  # noqa: BLE001 - transient judge/API errors
+                attempt_error = f"{type(exc).__name__}: {exc}"
+        if attempt_error is not None:
+            baseline_error = attempt_error
             break
-        except BudgetExceeded as exc:
-            # Budget hit during the baseline: incomplete, fail closed.
-            result = MutationResult(baseline_passed=False, baseline_error=str(exc))
-            result.status = BUDGET_EXCEEDED
-            return result
-        except Exception as exc:  # noqa: BLE001 - transient judge/API errors
-            baseline_error = f"{type(exc).__name__}: {exc}"
-            continue
+
+    baseline_passed = False
+    baseline_outputs: List[str] = []
+    baseline_run: Optional[_SuiteRun] = None
+    base_fails = 0
+    if baseline_error is None:
+        base_fails = sum(1 for r in graded if r.failing_eval is not None)
+        base_killed, base_tied = _verdict(base_fails, len(graded), config)
+        baseline_passed = not base_killed and not base_tied
+        # The reference outputs (skip-unchanged, `muteval show` diffs) come from
+        # a run that fully PASSED, so its per-case outcomes are all passing.
+        baseline_run = next((r for r in graded if r.failing_eval is None), None)
+        if baseline_run is not None:
+            baseline_outputs = baseline_run.outputs
 
     result = MutationResult(
         baseline_passed=baseline_passed, baseline_error=baseline_error
     )
+    if graded and baseline_error is None:
+        result.baseline_pass_rate = (len(graded) - base_fails) / len(graded)
     # Provenance (recorded regardless of outcome): the model under test, and any
     # judge model muteval can introspect (its own llm_judge/grounded).
     result.model_under_test = config.system.model if config.system else None
@@ -689,13 +778,17 @@ def run_mutation_testing(
         result.status = NO_MUTANTS
         return result
 
-    # Baseline variance (opt-in, config.baseline_runs > 1): re-sample the
-    # ORIGINAL system's outputs (no evals, so no judge calls) so "did the mutant
-    # change behavior?" is judged against the baseline's own spread, not one
-    # sample. A transient error only loses that sample; the budget still binds.
-    samples_by_case = [[o] for o in baseline_outputs]
+    # Baseline variance: every graded baseline run already sampled the
+    # ORIGINAL system's outputs, so they all count; config.baseline_runs tops the
+    # total up with output-only samples (no evals, so no judge calls). "Did the
+    # mutant change behavior?" is then judged against the baseline's own spread,
+    # not one sample. A transient error only loses that sample; the budget binds.
+    samples_by_case: List[List[str]] = [[] for _ in config.cases]
+    for r in graded:
+        for ci, out in enumerate(r.outputs):  # a failing run stops early
+            samples_by_case[ci].append(out)
     try:
-        for _ in range(config.baseline_runs - 1):
+        for _ in range(max(0, config.baseline_runs - len(graded))):
             for ci, case in enumerate(config.cases):
                 budget.charge()
                 try:
@@ -706,7 +799,7 @@ def run_mutation_testing(
         result.status = BUDGET_EXCEEDED
         return result
     profile = _profile(config, samples_by_case)
-    if config.baseline_runs > 1:
+    if max(len(graded), config.baseline_runs) > 1:
         result.noisy_cases = sum(profile.noisy)
 
     # Skip-unchanged optimization: give each mutant run the baseline's per-case
@@ -744,10 +837,19 @@ def run_mutation_testing(
         result.status = BUDGET_EXCEEDED
         return result
 
-    # Validity: no evidence at all is invalid; too many errors is invalid too
-    # (a score over a shrunken denominator is not trustworthy — fail closed).
+    # Validity: no evidence at all is invalid; too many errors or too many
+    # unresolved ties is invalid too (a score over a shrunken denominator is not
+    # trustworthy — fail closed).
     if result.evaluated == 0:
-        result.status = NO_EVALUATED_MUTANTS
+        # "Only robustness ran" means no REGRESSION mutant was generated at all —
+        # not merely that every regression mutant errored (that's no-evaluated).
+        result.status = (
+            NO_EVALUATED_MUTANTS if result.regression_total else NO_SCORED_MUTANTS
+        )
     elif result.error_rate > config.max_error_rate:
         result.status = PARTIAL_ERRORS
+    elif result.resolved == 0:
+        result.status = NO_CONFIDENT_SCORE
+    elif result.unresolved_rate > config.max_unresolved_rate:
+        result.status = PARTIAL_UNRESOLVED
     return result

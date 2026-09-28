@@ -67,13 +67,15 @@ class _FlakyEval:
 
 
 def test_tie_is_marked_unresolved_end_to_end():
-    # baseline passes (True); the one mutant fails 1 of 2 runs -> tied -> unresolved.
+    # The baseline is graded runs_per_mutant (=2) times and passes both; the one
+    # mutant then fails 1 of 2 runs -> tied -> unresolved.
     cfg = MutEvalConfig(
         prompt="You **must** cite the order ID.",
         cases=[{"x": 1}],
         run=lambda p, c: "ok",
-        evals=[_FlakyEval([True, False, True])],
+        evals=[_FlakyEval([True, True, True, False])],
         runs_per_mutant=2,
+        max_unresolved_rate=1.0,  # this test inspects the tie itself
     )
     r = run_mutation_testing(cfg, operators=["remove_emphasis"])
     assert r.baseline_passed

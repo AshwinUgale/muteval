@@ -169,7 +169,9 @@ def test_robustness_only_run_has_no_score():
     r = run_mutation_testing(
         _cfg([lambda o, c: True]), operators=["paraphrase_instruction"]
     )
-    assert r.score is None and r.status == "no_evaluated_mutants"
+    # Its own status — not "no_evaluated_mutants", which the CLI reports as
+    # "every mutant errored" (untrue here: nothing errored).
+    assert r.score is None and r.status == "no_scored_mutants"
     assert "only meaning-preserving operators" in format_report(r, use_color=False)
 
 

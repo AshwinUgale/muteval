@@ -97,6 +97,8 @@ EXPECTED_KEYS = {
     "brittle",
     "noisy_cases",
     "undetermined",
+    "noise_kills",
+    "baseline_pass_rate",
     "survivors",
 }
 

@@ -62,7 +62,9 @@ only applies when both exist:
   misleading 100%. Fix the baseline first.
 - **No mutants / no evaluated mutants.** If nothing could be mutated, or every
   mutant errored, there is no evidence — muteval reports `N/A` (not a perfect
-  score). Use `--allow-empty` only if a zero-mutant run should pass CI.
+  score). Use `--allow-empty` only if a zero-mutant run should pass CI. If only
+  meaning-preserving (robustness) operators ran, the status is
+  `no_scored_mutants`: they're reported, never scored.
 - **Partial mutant errors.** If *some* mutants error (timeouts/API blips), the
   score is computed over a shrunken denominator and is not trustworthy. By
   default muteval **fails closed**: any errored mutant makes the run
@@ -74,7 +76,21 @@ only applies when both exist:
   understates good suites.
 - **A noisy LLM judge with `runs_per_mutant=1`.** A single flaky verdict can
   flip a mutant. Use `runs_per_mutant > 1` (majority vote) for real judges; watch
-  the `flaky` count.
+  the `flaky` count. With one baseline sample muteval **cannot see** that noise:
+  a flaky kill looks like detection. With more samples it can — the baseline is
+  graded `runs_per_mutant` times by the **same** majority rule as a mutant (if
+  the original would itself be "killed", the run is `baseline_failed`, and the
+  report shows the original's pass rate as a noise floor), and a kill whose
+  output matches something the original produced is a **noise kill**, dropped
+  from the effective score like an inert survivor. `--fail-under` gates on the
+  lower of the raw and effective scores, so noise kills can't pass it.
+- **A bad judge reply is an error, not a verdict.** The built-in judge asks for
+  an integer 0-10 and reads the explicit "N/10" / "N out of 10", else the first
+  number. An empty reply, no number, or a value outside 0-10 makes that mutant
+  *errored* (counted against `max_error_rate`), never a silent kill. The same
+  goes for a non-finite metric score (NaN), and for an eval that returns a
+  number or a string instead of a bool/`EvalOutcome` (`0.2` and `"fail"` are
+  truthy — they used to count as passes).
 - **Judge drift is silent — pin the judge version.** A majority vote stabilizes
   run-to-run noise, but a model-version bump quietly replaces the judge, so a
   killed-rate from last month and this month can be measuring different things.
@@ -86,9 +102,13 @@ only applies when both exist:
   earned a killed/survived verdict — it's reported as `unresolved` and left out
   of the score (numerator and denominator) rather than counted as a coverage gap.
   A high `unresolved` count means the judge is too noisy at this `runs_per_mutant`
-  to decide; raise it. Note the number of repeats you need grows fast with the
-  flip rate, so an unstable judge is expensive to resolve — the honest read is
-  often "this judge can't decide here," not "add more runs."
+  to decide. Note the number of repeats you need grows fast with the flip rate,
+  so an unstable judge is expensive to resolve — the honest read is often "this
+  judge can't decide here," not "add more runs." Ties are **gated** like errors:
+  by default any tie makes the run `partial_unresolved` (a score over the few
+  resolved mutants isn't a score — 1 resolved of 17 would read "100%"), and all
+  ties is `no_confident_score`. Use an **odd** `runs_per_mutant` (ties can't
+  happen), or accept a budget with `--max-unresolved-rate`.
 
 ## Known constraints
 
