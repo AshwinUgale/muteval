@@ -6,103 +6,170 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
-CLI, reports, docs & packaging: every output tells the same story, invalid input
-exits 2 with a message, and the release artifacts are clean.
+## [0.12.0] — 2026-09-28
 
-- **JUnit tells the truth.** Accepted ("untested by design"), observationally
-  unchanged, tied, and robustness mutants were `<failure>`s — 8 failing tests on a
-  run that exited 0. They're `<skipped>` with the reason; failures are exactly the
-  new real survivors. Control characters in a prompt no longer produce
-  unparseable XML.
-- **`results` / `show` / HTML agree with the run.** `muteval results` after an
-  invalid run printed "✓ ... your evals caught everything" and exited 0; it now
-  says the run was invalid and exits 2. The terminal report numbered only new
-  survivors, so `#1` there and `muteval show 1` could be different survivors once
-  any were accepted; ids now match the JSON. `results` and the HTML report mark
-  accepted survivors. The HTML report restricts `severity` to known values and
-  escapes `id` (a crafted JSON file could inject markup).
-- **Invalid input exits 2, not with a traceback** (exit 1 reads as a failed
-  gate): `--accept-file` missing / bad JSON / a bare string (it became a set of
-  single characters) — and it now accepts a UTF-8 BOM (PowerShell `Out-File`) and
-  `{"signature": ..., "reason": ...}` entries; unwritable `--json` / `--badge`
-  paths; `--config` / `--promptfoo` combined with zero-config flags (`--prompt`,
-  `--check`, ... were silently ignored).
-- **The manifest identifies the run.** `model` was null in zero-config mode (new
-  provenance-only `config.model_under_test`, also set by the promptfoo adapter);
-  `--sample` / `--max-mutants` are recorded; a new `config_fingerprint` covers
-  the code of `run()` and every eval (the old `system_fingerprint` stayed the same
-  when an eval or threshold changed).
-- `--model` defaults to None, so `main([... "--model", X])` called
-  programmatically is honored (it checked `sys.argv`).
-- **checks:** `on_final` grades plain-text output (a mutant that broke the JSON
-  format "errored" instead of being judged) and handles `{"final": null}`;
-  `tracelint` FAILS when there is no trace to lint; `is_json` requires an object
-  or array by default (`"null"` / `"42"` passed; `allow_scalar=True` for the old
-  behavior); `cites_source`'s default pattern no longer counts "Python3" /
-  "iPhone15" as citations (it requires a `-`/`_` separator or `[n]`); the
-  missing-key error names the model and endpoint instead of blaming the evals.
-- `muteval list probes` shows plain descriptions.
-- **Packaging.** The sdist shipped 721 `.hypothesis/` files (hatch reads only the
-  root `.gitignore`): now excluded (911 -> 190 files). Per-version Python
-  classifiers added.
-- **Docs.** The README example output is now real output (it showed a `fix:` line
-  muteval never emits). Corrected: ADOPTION (skipped-metric guidance — design N/A
-  may pass, a failed scorer must raise; a stale version; a link to an unpublished
-  file), `docs/real-report.html` (three stale claims about promptfoo), CHANGELOG
-  history (`--budget-usd` never shipped; what "clean build" measured),
-  CLAUDE.md (operator/test counts).
+A trust release. A full audit of muteval — four parallel reviews of the trust
+core, the mutation operators, the CLI/reports, and the adapters/probes/docs, each
+finding reproduced before it was fixed — plus fixes from running muteval on a real
+external promptfoo suite. Seven PRs; 600+ tests.
 
-promptfoo fidelity & probe correctness.
+### Upgrade notes: what may change for you
 
-- **promptfoo assertions check what promptfoo checks.** `{{var}}` in an
-  assertion value was never rendered: `not-contains: "{{forbidden}}"` compared
-  against the literal text and always passed (it guarded nothing), and
-  `contains: "{{answer}}"` always failed. Values are now rendered per case. Also
-  handled like promptfoo: `file://` vars and assertion values (were literal
-  text), `defaultTest.vars` (were dropped, so `{{doc}}` stayed in the prompt),
-  array vars (now one case per combination; were sent as a Python repr), `equals`
-  on objects (JSON equality), `is-json` with a schema (type / required keys, or
-  full validation with `jsonschema`), CSV `__expected1..N` and prefixes like
-  `grade:` / `is-json` / `javascript:` (they fell through to `equals "<cell>"`,
-  failing the baseline), and `not-regex` / `not-starts-with`.
-- **`llm-rubric` uses its own threshold and grader.** It always called
-  gpt-4o-mini (breaking on a non-OpenAI `--base-url`), ignored its `threshold`
-  and `provider`, and returned a bare bool, losing the score for near-miss
-  reporting. The grader is the assertion's / `defaultTest.options` provider, else
-  the model under test.
-- **What muteval can't reproduce is reported, not silently changed:** output
-  `transform`s (those tests are dropped — their assertions grade transformed
-  output), test `threshold` / assertion `weight` scoring, extra prompts. A
-  chat-format prompt (JSON message list) is refused instead of being mutated as
-  JSON text (half the mutants were invalid JSON).
-- **The judge-bias panel is two-sided.** Verbosity and self-preference counted
-  only a preference for the longer / own answer against a 0.1 cap, so a judge
-  that ALWAYS prefers the shorter answer passed, a fair coin-flip failed, and an
-  always-tie judge was "not assessed". They're now two-sided biases in [0, 1]
-  (ties are fair), flagged only when the evidence also excludes neutral (a fair
-  coin is flagged ~5% of the time, the test's false-positive rate).
-- **Lower-is-better metrics are read correctly.** `EvalOutcome` gains
-  `higher_is_better` (set by `scorer_to_eval`, inferred for deepeval metrics such
-  as Bias / Toxicity). A perfect toxicity metric was called "too_lenient" and
-  "AUC 0.00", and every survivor printed "near miss: passed by +-0.300".
-- **Probes don't report numbers they can't back:** redundancy aligned score
-  vectors by position, so one timeout made two identical metrics look distinct;
-  discrimination reported "AUC 0.50" for an eval that errored on every bad
-  example; judge reliability with `runs=1` reported "0% flaky"; Cohen's kappa
-  reported "1.00 substantial" when every label was one class (undefined) and
-  swung wildly at extreme prevalence. Each is now "not assessed / not
-  assessable" with the reason.
-- **Probe card:** unassessed probes show `N/A` (they showed PASS), and
-  `muteval probe` fails only on a core/validity WARN — a hygiene WARN, which the
-  card calls a footnote, exited 1.
-- **`muteval label`** adds a few mutant outputs (`--mutants N`, default 3) so the
-  worksheet has failing verdicts too (baseline outputs pass by construction), and
-  refuses to overwrite an existing worksheet — it may hold your labels — without
-  `--force`.
-- `stats.wilson_interval` honors any confidence level (it silently returned the
-  95% interval for levels not in its table, e.g. 0.80).
+Default single-run suites without a cache score as before on the bundled
+examples. What can change:
 
-Operators, severity & scope: every mutant an edit a real person could make,
+- **More runs are invalid instead of passing on thin evidence.** Tied verdicts
+  (an even `runs_per_mutant`) are gated like errors (`max_unresolved_rate`,
+  default 0 — use an odd `runs_per_mutant`); with `runs_per_mutant > 1` the
+  baseline is graded that many times and must pass the same majority rule as a
+  mutant (more calls; a flaky judge now makes the run `baseline_failed`); a run
+  where only robustness operators ran is `no_scored_mutants`. New statuses:
+  `no_confident_score`, `partial_unresolved`, `no_scored_mutants`.
+- **Scores can move.** Robustness operators (paraphrase / reorder) are no longer
+  scored; mutants that drop an input placeholder aren't generated; several
+  operators no longer produce malformed or duplicate mutants; kills on output the
+  original itself produces ("noise kills") leave the effective score, and
+  `--fail-under` gates on the lower of the raw and effective scores.
+- **Severity rankings move, both ways.** Escalation now reads the text a mutation
+  edited, not its description: style rules drop to MEDIUM, truncations that cut a
+  safety rule rise to HIGH.
+- **Non-verdicts fail closed.** An eval returning a number or string, a NaN
+  score, or an empty / unparseable built-in-judge reply now makes the mutant
+  *errored* (counted against `max_error_rate`) instead of a silent pass or kill.
+- **Changed defaults:** `checks.is_json` requires an object/array
+  (`allow_scalar=True` for any JSON); `checks.cites_source`'s default pattern
+  needs a `-`/`_` separator or `[n]`; `--fail-under` must be a percent;
+  `--dry-run` exits 2 when a real run would be invalid; `muteval probe` fails only
+  on core/validity WARNs; `muteval label` won't overwrite an existing worksheet
+  without `--force`.
+- **Re-accept some survivors.** Signatures change for operators whose
+  descriptions now name their content (`delete_sentences`, `paraphrase_instruction`,
+  `truncate_prompt`, `remove_emphasis`, `swap_context_doc`, `clear_context`,
+  `shuffle_context`, `truncate_context_doc`, `corrupt_*`, tool operators).
+- **JSON `schema_version` 6** (new keys: `robustness`, `brittle`, `noisy_cases`,
+  `undetermined`, `noise_kills`, `baseline_pass_rate`, `cache`).
+- **The cache starts cold** (v2 keys: outputs keyed on a fingerprint of `run`,
+  outcomes on the output + a fingerprint of the eval). `Cache.get_outcome` /
+  `set_outcome` take `(output, case, eval_fingerprint)`.
+- **promptfoo:** assertion values render `{{var}}`; tests with output transforms
+  are dropped (with a warning); chat-format prompts are refused.
+- **Security:** every output is redacted through one function, and the
+  zero-config `judge:` check uses `--base-url` (it sent the key to
+  api.openai.com).
+
+### Gates & validity
+
+From a full audit of the trust core, every way a run could be
+scored or gated on evidence it doesn't have. Default single-run suites score
+exactly as before; runs with a noisy judge, ties, or odd eval return values now
+fail closed instead of passing.
+
+- **Unresolved ties are gated.** An all-tied run used to be `valid` with no
+  score: `--fail-on-severity` exited 0 and `--fail-under` crashed with a
+  `TypeError`. One resolved mutant of 17 read "100%" and passed. Now all-tied is
+  `no_confident_score`, and any tie above `max_unresolved_rate` (new; default
+  0.0 = fail closed, like `max_error_rate`; CLI `--max-unresolved-rate`) is
+  `partial_unresolved`. An odd `runs_per_mutant` can't tie.
+- **The built-in judge reads the score it asked for.** The parser took the LAST
+  number and only rescaled values > 1, so "0/10" and "3/10" parsed as 1.0 (a
+  perfect pass) and a bare "1" meant 1.0. It now reads "N/10" / "N out of 10",
+  else the first number, on the 0-10 scale; an empty reply, no number, or a
+  value outside 0-10 raises, so the mutant is *errored* (it used to be a 0.0
+  score — a kill).
+- **The baseline is judged by the mutants' rule.** It was graded once while
+  mutants needed a majority of `runs_per_mutant` runs; a flaky judge that would
+  "kill" the unmodified original half the time still yielded a valid run. Now
+  the baseline is graded `runs_per_mutant` times: if the original would itself
+  be killed (or ties), the run is `baseline_failed`, and the report shows the
+  original's pass rate as a noise floor. JSON: `baseline_pass_rate`.
+- **Noise kills leave the effective score.** A kill whose outputs match what the
+  original itself produced (any baseline sample, under `output_key`) didn't
+  change behavior, so it isn't detection. It is now excluded from the effective
+  score like an inert survivor; a prompt-independent system no longer scores an
+  effective 100%. `--fail-under` gates on the lower of the raw and effective
+  scores (identical to the raw score when there are no noise kills). JSON:
+  `noise_kills`.
+- **Non-verdicts fail closed.** A NaN metric score counted as a kill (`nan >=
+  threshold` is False): the ragas adapter and `scorer_to_eval` scored 1.0 on a
+  metric that returned NaN everywhere. An eval returning a number (`0.2`) or a
+  string (`"fail"`) was truthy, so it passed. Both now raise, so the mutant is
+  *errored*. A promptfoo-style `{"pass": bool, "score": ...}` dict is accepted.
+- `--fail-under` must be a percent in [0, 100]; a fraction such as `0.8` (the
+  style `--max-error-rate` takes) is rejected instead of passing almost any run.
+- A run where only robustness operators ran has its own status,
+  `no_scored_mutants`; the CLI no longer says "every mutant errored" for it.
+
+### Security
+
+- **One redaction point for every output.** Only the JSON and manifest were
+  redacted; a provider error that echoed a key (e.g.
+  `…generateContent?key=AIza…`, `401: Bearer …`) was printed verbatim in the
+  terminal report, JUnit, `muteval check`, and CLI error lines. All outputs now
+  go through `muteval.redact` (terminal, JSON, JUnit, HTML — including an old
+  unredacted JSON fed to `muteval report` — manifest, doctor, probe card, CLI
+  errors).
+- **The pattern covers what it missed.** `Bearer <token>` (the token survived
+  `Authorization: Bearer …`), `OPENAI_API_KEY=…` / `GITHUB_TOKEN: …` style
+  assignments, `"api_key": "…"`, GitHub (`ghp_`, `github_pat_`), Hugging Face,
+  xAI, Slack and AWS keys, and URL query credentials. Plus the exact values of
+  secret-named environment variables, for key formats no pattern knows. False
+  positives like `max_tokens: 256` are left alone.
+- **The zero-config judge no longer sends your key to OpenAI.** A `judge:<rubric>`
+  check ignored `--base-url`, so with a Groq/Gemini/GitHub Models setup the judge
+  called api.openai.com with that provider's key. It now uses `--base-url`; new
+  `--judge-base-url` / `--judge-model` pick a different judge endpoint explicitly.
+
+### Cache & concurrency
+
+An optimization must never change a verdict. Default runs
+without `--cache` / `--concurrency` score exactly as before.
+
+- **The cache keys on what an eval does, not its name.** Outcomes were keyed on
+  the eval's LABEL: editing `contains("X1")` to `contains("ZZZ")` kept serving
+  the old verdicts (a baseline that should fail came back valid), a changed
+  threshold kept the old score, and two evals sharing a label shared one result
+  (`--check contains:8080 --check contains:BANANA`). Outputs ignored the `run`
+  function, so editing `run` (e.g. the model it calls in prompt mode) served
+  stale outputs. v2 keys: an output on the system + case + a fingerprint of
+  `run`; an outcome on the output + case + a fingerprint of the eval (its code,
+  closure values, defaults, thresholds, the simple globals it reads; new
+  `muteval.fingerprint`). Old cache entries are never read. Set `cache_version`
+  on an eval that depends on a file or remote rubric. The result reports how
+  many lookups the cache served (JSON `cache`).
+- **The cache replays `run()`'s writes into the case.** A cache hit skipped
+  `run()`, so an eval reading `case["used_context"]` graded stale state. The
+  post-run case is now stored with the output and restored on a hit. Dict
+  outputs (the `{"final", "trace"}` agent bridge) are cached instead of
+  crashing sqlite; anything that can't round-trip through JSON just isn't cached.
+- **`--concurrency` no longer changes verdicts.** Cases and deepeval metric
+  objects were shared across threads: a stateful metric scored 0%–85% on one
+  suite, and a `run()` writing into the case leaked into other mutants. Each
+  (mutant, case, run) now gets a private copy of the case, and the deepeval
+  adapter measures a shallow copy of its metric per call (a lock if it can't be
+  copied). Queued mutants are cancelled once `--max-calls` is hit.
+- **Skip-unchanged no longer changes verdicts.** It reused the baseline's pass
+  whenever the output was identical, even when `run()` had written different
+  data into the case (the mutated context an eval grades against): 0/11 kills
+  vs 4/11 with it off. It now also requires the post-run case state to match.
+- **Adapter judges are budgeted.** The deepeval and ragas adapters never set
+  `is_llm`, so `--max-calls 20` made 80 paid calls, the judges ran before cheap
+  checks, and the "free" canary called them. They're now tagged.
+- **`System(context=[...], tools=[...])` works.** The README's own form crashed
+  mutant generation (`unhashable type: 'list'`); lists are normalized to tuples.
+- Eval labels are unique and aligned: duplicates get `#2`, `#3` (two deepeval
+  `GEval` metrics), a shorter `eval_names` list is filled in, and a longer one is
+  an error. Zero-config checks are labelled by their full spec (`contains:8080`).
+- Smaller: `--max-mutants -1` silently dropped the last mutant (now rejected,
+  as is a negative `--sample`); `System.key()` crashed on `extra` with mixed key
+  types; one unkeyable baseline sample marked its case undetermined; the ragas
+  adapter split a string context into characters.
+- `Cache.get_outcome`/`set_outcome` now take `(output, case, eval_fingerprint)`
+  instead of `(system, case, label)`; `Cache.lookup_output`/`store_output` carry
+  the post-run case. (Passing a `Cache` to `run_mutation_testing` is unchanged.)
+
+### Operators, severity & scope
+
+Every mutant an edit a real person could make,
 severity from WHAT changed, scoping fast and exact. Mutation scores on the
 bundled examples are unchanged or move by one mutant; survivor severities move
 (both ways) and some survivor signatures change (see below).
@@ -176,113 +243,9 @@ bundled examples are unchanged or move by one mutant; survivor severities move
   `truncate_prompt`, `remove_emphasis`, `corrupt_*`, tool operators) — so an
   accepted survivor no longer survives a completely different doc. Re-accept.
 
-Cache & concurrency: an optimization must never change a verdict. Default runs
-without `--cache` / `--concurrency` score exactly as before.
+### Mutant realism
 
-- **The cache keys on what an eval does, not its name.** Outcomes were keyed on
-  the eval's LABEL: editing `contains("X1")` to `contains("ZZZ")` kept serving
-  the old verdicts (a baseline that should fail came back valid), a changed
-  threshold kept the old score, and two evals sharing a label shared one result
-  (`--check contains:8080 --check contains:BANANA`). Outputs ignored the `run`
-  function, so editing `run` (e.g. the model it calls in prompt mode) served
-  stale outputs. v2 keys: an output on the system + case + a fingerprint of
-  `run`; an outcome on the output + case + a fingerprint of the eval (its code,
-  closure values, defaults, thresholds, the simple globals it reads; new
-  `muteval.fingerprint`). Old cache entries are never read. Set `cache_version`
-  on an eval that depends on a file or remote rubric. The result reports how
-  many lookups the cache served (JSON `cache`).
-- **The cache replays `run()`'s writes into the case.** A cache hit skipped
-  `run()`, so an eval reading `case["used_context"]` graded stale state. The
-  post-run case is now stored with the output and restored on a hit. Dict
-  outputs (the `{"final", "trace"}` agent bridge) are cached instead of
-  crashing sqlite; anything that can't round-trip through JSON just isn't cached.
-- **`--concurrency` no longer changes verdicts.** Cases and deepeval metric
-  objects were shared across threads: a stateful metric scored 0%–85% on one
-  suite, and a `run()` writing into the case leaked into other mutants. Each
-  (mutant, case, run) now gets a private copy of the case, and the deepeval
-  adapter measures a shallow copy of its metric per call (a lock if it can't be
-  copied). Queued mutants are cancelled once `--max-calls` is hit.
-- **Skip-unchanged no longer changes verdicts.** It reused the baseline's pass
-  whenever the output was identical, even when `run()` had written different
-  data into the case (the mutated context an eval grades against): 0/11 kills
-  vs 4/11 with it off. It now also requires the post-run case state to match.
-- **Adapter judges are budgeted.** The deepeval and ragas adapters never set
-  `is_llm`, so `--max-calls 20` made 80 paid calls, the judges ran before cheap
-  checks, and the "free" canary called them. They're now tagged.
-- **`System(context=[...], tools=[...])` works.** The README's own form crashed
-  mutant generation (`unhashable type: 'list'`); lists are normalized to tuples.
-- Eval labels are unique and aligned: duplicates get `#2`, `#3` (two deepeval
-  `GEval` metrics), a shorter `eval_names` list is filled in, and a longer one is
-  an error. Zero-config checks are labelled by their full spec (`contains:8080`).
-- Smaller: `--max-mutants -1` silently dropped the last mutant (now rejected,
-  as is a negative `--sample`); `System.key()` crashed on `extra` with mixed key
-  types; one unkeyable baseline sample marked its case undetermined; the ragas
-  adapter split a string context into characters.
-- `Cache.get_outcome`/`set_outcome` now take `(output, case, eval_fingerprint)`
-  instead of `(system, case, label)`; `Cache.lookup_output`/`store_output` carry
-  the post-run case. (Passing a `Cache` to `run_mutation_testing` is unchanged.)
-
-Security: secrets and the judge endpoint.
-
-- **One redaction point for every output.** Only the JSON and manifest were
-  redacted; a provider error that echoed a key (e.g.
-  `…generateContent?key=AIza…`, `401: Bearer …`) was printed verbatim in the
-  terminal report, JUnit, `muteval check`, and CLI error lines. All outputs now
-  go through `muteval.redact` (terminal, JSON, JUnit, HTML — including an old
-  unredacted JSON fed to `muteval report` — manifest, doctor, probe card, CLI
-  errors).
-- **The pattern covers what it missed.** `Bearer <token>` (the token survived
-  `Authorization: Bearer …`), `OPENAI_API_KEY=…` / `GITHUB_TOKEN: …` style
-  assignments, `"api_key": "…"`, GitHub (`ghp_`, `github_pat_`), Hugging Face,
-  xAI, Slack and AWS keys, and URL query credentials. Plus the exact values of
-  secret-named environment variables, for key formats no pattern knows. False
-  positives like `max_tokens: 256` are left alone.
-- **The zero-config judge no longer sends your key to OpenAI.** A `judge:<rubric>`
-  check ignored `--base-url`, so with a Groq/Gemini/GitHub Models setup the judge
-  called api.openai.com with that provider's key. It now uses `--base-url`; new
-  `--judge-base-url` / `--judge-model` pick a different judge endpoint explicitly.
-
-Gates & validity: from a full audit of the trust core, every way a run could be
-scored or gated on evidence it doesn't have. Default single-run suites score
-exactly as before; runs with a noisy judge, ties, or odd eval return values now
-fail closed instead of passing.
-
-- **Unresolved ties are gated.** An all-tied run used to be `valid` with no
-  score: `--fail-on-severity` exited 0 and `--fail-under` crashed with a
-  `TypeError`. One resolved mutant of 17 read "100%" and passed. Now all-tied is
-  `no_confident_score`, and any tie above `max_unresolved_rate` (new; default
-  0.0 = fail closed, like `max_error_rate`; CLI `--max-unresolved-rate`) is
-  `partial_unresolved`. An odd `runs_per_mutant` can't tie.
-- **The built-in judge reads the score it asked for.** The parser took the LAST
-  number and only rescaled values > 1, so "0/10" and "3/10" parsed as 1.0 (a
-  perfect pass) and a bare "1" meant 1.0. It now reads "N/10" / "N out of 10",
-  else the first number, on the 0-10 scale; an empty reply, no number, or a
-  value outside 0-10 raises, so the mutant is *errored* (it used to be a 0.0
-  score — a kill).
-- **The baseline is judged by the mutants' rule.** It was graded once while
-  mutants needed a majority of `runs_per_mutant` runs; a flaky judge that would
-  "kill" the unmodified original half the time still yielded a valid run. Now
-  the baseline is graded `runs_per_mutant` times: if the original would itself
-  be killed (or ties), the run is `baseline_failed`, and the report shows the
-  original's pass rate as a noise floor. JSON: `baseline_pass_rate`.
-- **Noise kills leave the effective score.** A kill whose outputs match what the
-  original itself produced (any baseline sample, under `output_key`) didn't
-  change behavior, so it isn't detection. It is now excluded from the effective
-  score like an inert survivor; a prompt-independent system no longer scores an
-  effective 100%. `--fail-under` gates on the lower of the raw and effective
-  scores (identical to the raw score when there are no noise kills). JSON:
-  `noise_kills`.
-- **Non-verdicts fail closed.** A NaN metric score counted as a kill (`nan >=
-  threshold` is False): the ragas adapter and `scorer_to_eval` scored 1.0 on a
-  metric that returned NaN everywhere. An eval returning a number (`0.2`) or a
-  string (`"fail"`) was truthy, so it passed. Both now raise, so the mutant is
-  *errored*. A promptfoo-style `{"pass": bool, "score": ...}` dict is accepted.
-- `--fail-under` must be a percent in [0, 100]; a fraction such as `0.8` (the
-  style `--max-error-rate` takes) is rejected instead of passing almost any run.
-- A run where only robustness operators ran has its own status,
-  `no_scored_mutants`; the CLI no longer says "every mutant errored" for it.
-
-Mutant realism: fixes found by running muteval on a real external suite (a
+Fixes found by running muteval on a real external suite (a
 promptfoo PR-scope classifier), where malformed, meaning-preserving,
 input-deleting and wording-only mutants distorted the score. **Scores can move**
 on existing suites: they get more honest, not uniformly higher or lower. Some
@@ -325,6 +288,104 @@ survivor signatures change (`delete_sentences`, `paraphrase_instruction`,
   `evaluated`, which disagreed with the number when there were unresolved ties).
 - JSON: `robustness`, `brittle`, `noisy_cases`, `undetermined`
   (`schema_version` → 6).
+
+### promptfoo fidelity & probes
+
+- **promptfoo assertions check what promptfoo checks.** `{{var}}` in an
+  assertion value was never rendered: `not-contains: "{{forbidden}}"` compared
+  against the literal text and always passed (it guarded nothing), and
+  `contains: "{{answer}}"` always failed. Values are now rendered per case. Also
+  handled like promptfoo: `file://` vars and assertion values (were literal
+  text), `defaultTest.vars` (were dropped, so `{{doc}}` stayed in the prompt),
+  array vars (now one case per combination; were sent as a Python repr), `equals`
+  on objects (JSON equality), `is-json` with a schema (type / required keys, or
+  full validation with `jsonschema`), CSV `__expected1..N` and prefixes like
+  `grade:` / `is-json` / `javascript:` (they fell through to `equals "<cell>"`,
+  failing the baseline), and `not-regex` / `not-starts-with`.
+- **`llm-rubric` uses its own threshold and grader.** It always called
+  gpt-4o-mini (breaking on a non-OpenAI `--base-url`), ignored its `threshold`
+  and `provider`, and returned a bare bool, losing the score for near-miss
+  reporting. The grader is the assertion's / `defaultTest.options` provider, else
+  the model under test.
+- **What muteval can't reproduce is reported, not silently changed:** output
+  `transform`s (those tests are dropped — their assertions grade transformed
+  output), test `threshold` / assertion `weight` scoring, extra prompts. A
+  chat-format prompt (JSON message list) is refused instead of being mutated as
+  JSON text (half the mutants were invalid JSON).
+- **The judge-bias panel is two-sided.** Verbosity and self-preference counted
+  only a preference for the longer / own answer against a 0.1 cap, so a judge
+  that ALWAYS prefers the shorter answer passed, a fair coin-flip failed, and an
+  always-tie judge was "not assessed". They're now two-sided biases in [0, 1]
+  (ties are fair), flagged only when the evidence also excludes neutral (a fair
+  coin is flagged ~5% of the time, the test's false-positive rate).
+- **Lower-is-better metrics are read correctly.** `EvalOutcome` gains
+  `higher_is_better` (set by `scorer_to_eval`, inferred for deepeval metrics such
+  as Bias / Toxicity). A perfect toxicity metric was called "too_lenient" and
+  "AUC 0.00", and every survivor printed "near miss: passed by +-0.300".
+- **Probes don't report numbers they can't back:** redundancy aligned score
+  vectors by position, so one timeout made two identical metrics look distinct;
+  discrimination reported "AUC 0.50" for an eval that errored on every bad
+  example; judge reliability with `runs=1` reported "0% flaky"; Cohen's kappa
+  reported "1.00 substantial" when every label was one class (undefined) and
+  swung wildly at extreme prevalence. Each is now "not assessed / not
+  assessable" with the reason.
+- **Probe card:** unassessed probes show `N/A` (they showed PASS), and
+  `muteval probe` fails only on a core/validity WARN — a hygiene WARN, which the
+  card calls a footnote, exited 1.
+- **`muteval label`** adds a few mutant outputs (`--mutants N`, default 3) so the
+  worksheet has failing verdicts too (baseline outputs pass by construction), and
+  refuses to overwrite an existing worksheet — it may hold your labels — without
+  `--force`.
+- `stats.wilson_interval` honors any confidence level (it silently returned the
+  95% interval for levels not in its table, e.g. 0.80).
+
+### CLI, reports, docs & packaging
+
+Every output tells the same story, invalid input
+exits 2 with a message, and the release artifacts are clean.
+
+- **JUnit tells the truth.** Accepted ("untested by design"), observationally
+  unchanged, tied, and robustness mutants were `<failure>`s — 8 failing tests on a
+  run that exited 0. They're `<skipped>` with the reason; failures are exactly the
+  new real survivors. Control characters in a prompt no longer produce
+  unparseable XML.
+- **`results` / `show` / HTML agree with the run.** `muteval results` after an
+  invalid run printed "✓ ... your evals caught everything" and exited 0; it now
+  says the run was invalid and exits 2. The terminal report numbered only new
+  survivors, so `#1` there and `muteval show 1` could be different survivors once
+  any were accepted; ids now match the JSON. `results` and the HTML report mark
+  accepted survivors. The HTML report restricts `severity` to known values and
+  escapes `id` (a crafted JSON file could inject markup).
+- **Invalid input exits 2, not with a traceback** (exit 1 reads as a failed
+  gate): `--accept-file` missing / bad JSON / a bare string (it became a set of
+  single characters) — and it now accepts a UTF-8 BOM (PowerShell `Out-File`) and
+  `{"signature": ..., "reason": ...}` entries; unwritable `--json` / `--badge`
+  paths; `--config` / `--promptfoo` combined with zero-config flags (`--prompt`,
+  `--check`, ... were silently ignored).
+- **The manifest identifies the run.** `model` was null in zero-config mode (new
+  provenance-only `config.model_under_test`, also set by the promptfoo adapter);
+  `--sample` / `--max-mutants` are recorded; a new `config_fingerprint` covers
+  the code of `run()` and every eval (the old `system_fingerprint` stayed the same
+  when an eval or threshold changed).
+- `--model` defaults to None, so `main([... "--model", X])` called
+  programmatically is honored (it checked `sys.argv`).
+- **checks:** `on_final` grades plain-text output (a mutant that broke the JSON
+  format "errored" instead of being judged) and handles `{"final": null}`;
+  `tracelint` FAILS when there is no trace to lint; `is_json` requires an object
+  or array by default (`"null"` / `"42"` passed; `allow_scalar=True` for the old
+  behavior); `cites_source`'s default pattern no longer counts "Python3" /
+  "iPhone15" as citations (it requires a `-`/`_` separator or `[n]`); the
+  missing-key error names the model and endpoint instead of blaming the evals.
+- `muteval list probes` shows plain descriptions.
+- **Packaging.** The sdist shipped 721 `.hypothesis/` files (hatch reads only the
+  root `.gitignore`): now excluded (911 -> 190 files). Per-version Python
+  classifiers added.
+- **Docs.** The README example output is now real output (it showed a `fix:` line
+  muteval never emits). Corrected: ADOPTION (skipped-metric guidance — design N/A
+  may pass, a failed scorer must raise; a stale version; a link to an unpublished
+  file), `docs/real-report.html` (three stale claims about promptfoo), CHANGELOG
+  history (`--budget-usd` never shipped; what "clean build" measured),
+  CLAUDE.md (operator/test counts).
 
 ## [0.11.0] — 2026-09-16
 
