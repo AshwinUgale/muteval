@@ -22,16 +22,23 @@ actually matter (see [docs/LIMITATIONS.md](docs/LIMITATIONS.md)).
 It's `mutmut` / Stryker, but for evals.
 
 ```text
-Mutation score: 33%  [████████░░░░░░░░░░░░░░░░]  (2/6 mutants killed, 95% CI 10-70%)
+Mutation score: 33%  [████████░░░░░░░░░░░░░░░░]  (7/21 mutants killed, 95% CI 17-55%)
+Effective score: 70%  (7/10 — excludes 11 inert mutant(s) whose output didn't change; 95% CI 40-89%)
 
-2 SURVIVED  (output changed but evals didn't notice — real coverage gaps; 1 HIGH-severity):
+3 SURVIVED  (output changed but evals didn't notice — real coverage gaps; 3 HIGH-severity):
 
-  #1 [HIGH] SURVIVED  [delete_sentences]
-            deleted sentence: "If the answer is not in the context, say you don't know."
-            fix: add checks.grounded("context")   ← muteval suggests the eval that would catch it
-  #2 [MED]  SURVIVED  [weaken_modals]
-            weakened "ONLY" -> "preferably" (near: answer using ONLY the provided context)
+  #1 [HIGH] SURVIVED  [flip_negation]  accept: 7870b8babd66
+            inverted "don't" -> "do" (near: in the context, say you don't know.)
+            fix: add an eval for the rule near "in the context, say you don't know." (e.g. a checks.llm_judge for that behavior)
+  #2 [HIGH] SURVIVED  [drop_instruction_lines]  accept: 2f4e149fd0ec
+            dropped line: "Answer using ONLY the provided context. If the answer is not in the c…"
+            fix: add checks.llm_judge("the reply still follows: Answer using ONLY the provided context. If the answ…")
+  …
 ```
+
+(Real output, trimmed, of the keyless RAG quickstart: `muteval init --template rag`
+then `muteval run` — see Quickstart. The suite checks the answers, but nothing
+checks the "say you don't know" rule, so deleting or inverting it goes unnoticed.)
 
 ---
 

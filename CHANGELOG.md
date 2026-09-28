@@ -6,6 +6,52 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+CLI, reports, docs & packaging: every output tells the same story, invalid input
+exits 2 with a message, and the release artifacts are clean.
+
+- **JUnit tells the truth.** Accepted ("untested by design"), observationally
+  unchanged, tied, and robustness mutants were `<failure>`s — 8 failing tests on a
+  run that exited 0. They're `<skipped>` with the reason; failures are exactly the
+  new real survivors. Control characters in a prompt no longer produce
+  unparseable XML.
+- **`results` / `show` / HTML agree with the run.** `muteval results` after an
+  invalid run printed "✓ ... your evals caught everything" and exited 0; it now
+  says the run was invalid and exits 2. The terminal report numbered only new
+  survivors, so `#1` there and `muteval show 1` could be different survivors once
+  any were accepted; ids now match the JSON. `results` and the HTML report mark
+  accepted survivors. The HTML report restricts `severity` to known values and
+  escapes `id` (a crafted JSON file could inject markup).
+- **Invalid input exits 2, not with a traceback** (exit 1 reads as a failed
+  gate): `--accept-file` missing / bad JSON / a bare string (it became a set of
+  single characters) — and it now accepts a UTF-8 BOM (PowerShell `Out-File`) and
+  `{"signature": ..., "reason": ...}` entries; unwritable `--json` / `--badge`
+  paths; `--config` / `--promptfoo` combined with zero-config flags (`--prompt`,
+  `--check`, ... were silently ignored).
+- **The manifest identifies the run.** `model` was null in zero-config mode (new
+  provenance-only `config.model_under_test`, also set by the promptfoo adapter);
+  `--sample` / `--max-mutants` are recorded; a new `config_fingerprint` covers
+  the code of `run()` and every eval (the old `system_fingerprint` stayed the same
+  when an eval or threshold changed).
+- `--model` defaults to None, so `main([... "--model", X])` called
+  programmatically is honored (it checked `sys.argv`).
+- **checks:** `on_final` grades plain-text output (a mutant that broke the JSON
+  format "errored" instead of being judged) and handles `{"final": null}`;
+  `tracelint` FAILS when there is no trace to lint; `is_json` requires an object
+  or array by default (`"null"` / `"42"` passed; `allow_scalar=True` for the old
+  behavior); `cites_source`'s default pattern no longer counts "Python3" /
+  "iPhone15" as citations (it requires a `-`/`_` separator or `[n]`); the
+  missing-key error names the model and endpoint instead of blaming the evals.
+- `muteval list probes` shows plain descriptions.
+- **Packaging.** The sdist shipped 721 `.hypothesis/` files (hatch reads only the
+  root `.gitignore`): now excluded (911 -> 190 files). Per-version Python
+  classifiers added.
+- **Docs.** The README example output is now real output (it showed a `fix:` line
+  muteval never emits). Corrected: ADOPTION (skipped-metric guidance — design N/A
+  may pass, a failed scorer must raise; a stale version; a link to an unpublished
+  file), `docs/real-report.html` (three stale claims about promptfoo), CHANGELOG
+  history (`--budget-usd` never shipped; what "clean build" measured),
+  CLAUDE.md (operator/test counts).
+
 promptfoo fidelity & probe correctness.
 
 - **promptfoo assertions check what promptfoo checks.** `{{var}}` in an
@@ -358,7 +404,9 @@ survivor signatures change (`delete_sentences`, `paraphrase_instruction`,
   of crashing; code-function / remote sources (`.py:fn`, `https://`, `huggingface://`) get a
   clear error, not a traceback. Added `contains-any`/`-all`, `icontains-any`/`-all`,
   `not-equals`, `starts-with` assertion translations. Verified against promptfoo's own 194
-  example configs: clean build rate **88 → 100**, cryptic errors **19 → 0**.
+  example configs: clean build rate **88 → 100**, cryptic errors **19 → 0**. (A "clean
+  build" means the config loads and translates without error — not that muteval's
+  grading matches promptfoo's; see LIMITATIONS for what is and isn't reproduced.)
 - **GitHub Action** (`action.yml`) — mutation-test your promptfoo suite in CI in a few
   lines; see `docs/ci.md` and `examples/github_action/mutation-test.yml`.
 
@@ -447,7 +495,8 @@ and now backed by reference cross-checks and Monte-Carlo coverage tests.
   identical re-run makes zero model/judge calls.
 - **Concurrency** — `--concurrency N` evaluates mutants in parallel with
   order-preserving, serial-identical results.
-- **Cost control** — `--max-calls` / `--budget-usd` fail closed before overspend;
+- **Cost control** — `--max-calls` fails closed before overspend (`--budget-usd` was
+  listed here but never shipped);
   cheap rule-based evals run before judges and short-circuit kills.
 - **Triage UX** — last run persisted to `.muteval/last_run.json`; `muteval
   results` (ranked survivors), `muteval show <id>` (baseline→mutant diff), and

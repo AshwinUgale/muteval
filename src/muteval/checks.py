@@ -130,13 +130,17 @@ def regex_matches(pattern: str, *, flags: int = 0) -> EvalFn:
     return _eval
 
 
-def is_json() -> EvalFn:
-    """Pass iff the output parses as JSON."""
+def is_json(*, allow_scalar: bool = False) -> EvalFn:
+    """Pass iff the output parses as a JSON object or array.
+
+    A bare scalar ("null", "42", '"ok"') is valid JSON but not what a "reply in
+    JSON" instruction means — a mutant replying "null" used to pass. Set
+    ``allow_scalar=True`` for the old any-JSON behavior."""
 
     def _eval(output: str, case: Any) -> EvalOutcome:
         try:
-            json.loads(output)
-            ok = True
+            data = json.loads(output)
+            ok = allow_scalar or isinstance(data, (dict, list))
         except (ValueError, TypeError):
             ok = False
         return EvalOutcome(passed=ok, name="is_json")
@@ -225,14 +229,19 @@ def llm_judge(
     return _eval
 
 
-def cites_source(pattern: str = r"[A-Za-z]+[-_]?\d+", *, min_count: int = 1) -> EvalFn:
+def cites_source(
+    pattern: str = r"\b[A-Za-z]+[-_]\d+\b|\[\d+\]", *, min_count: int = 1
+) -> EvalFn:
     """Pass iff the output cites >= ``min_count`` source ids matching ``pattern``,
     **regardless of bracket style** — it finds the bare id inside ``[id]``,
     ``(id)``, full-width ``【id】``, or none. Rule-based (no LLM).
 
     Bakes in a common gotcha: models cite with whatever brackets they like, so
     matching the id token itself is far more robust than matching ``\\[id\\]``.
-    Pass your own ``pattern`` (e.g. ``r"doc-\\d+"``) for your id scheme.
+    The default matches ``doc-1`` / ``kb_123`` / ``ORD-9`` style ids and ``[3]``;
+    it no longer counts product names like "Python3" or "iPhone15" as citations
+    (the old ``[-_]?`` made the separator optional). Pass your own ``pattern``
+    (e.g. ``r"doc\\d+"``) for an id scheme without a separator.
     """
     rx = re.compile(pattern)
 
@@ -309,8 +318,12 @@ def _openai_chat_stdlib(prompt: str, model: str, base_url: Optional[str] = None)
     """Call an OpenAI-compatible chat completions endpoint with only the stdlib."""
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
+        # Neutral: this helper serves the promptfoo SYSTEM call as well as the
+        # LLM judge, so "pass your own judge" misdirected a keyless system run.
         raise RuntimeError(
-            "OPENAI_API_KEY is not set. Set it, or pass your own judge=... callable."
+            f"OPENAI_API_KEY is not set (needed to call {model!r} at "
+            f"{_judge_endpoint(base_url)}). Set it — or, for an LLM-judge eval, pass "
+            "your own judge=... callable."
         )
     try:
         import certifi  # optional; fixes SSL verification on bare Pythons
@@ -395,9 +408,16 @@ def on_final(inner: EvalFn) -> EvalFn:
     suites that return the bridge object."""
 
     def _eval(output: Any, case: Any) -> Any:
-        obj = json.loads(output) if isinstance(output, str) else output
-        final = obj.get("final", "") if isinstance(obj, dict) else str(output)
-        return inner(final, case)
+        obj = output
+        if isinstance(output, str):
+            try:
+                obj = json.loads(output)
+            except ValueError:
+                # Not the bridge: grade the text itself. (json.loads raising made
+                # a mutant that broke the output format "errored", not judged.)
+                return inner(output, case)
+        final = obj.get("final") if isinstance(obj, dict) else output
+        return inner("" if final is None else str(final), case)
 
     return _eval
 
@@ -456,7 +476,19 @@ def tracelint(
     def _eval(output: Any, case: Any) -> EvalOutcome:
         import tracelint as tl  # lazy: muteval core stays dependency-free
 
-        obj = json.loads(output) if isinstance(output, str) else output
+        obj = output
+        if isinstance(output, str):
+            try:
+                obj = json.loads(output)
+            except ValueError:
+                # No trace to lint (e.g. a mutant broke the output format): that
+                # FAILS the contract — it used to raise, so the mutant "errored"
+                # instead of being killed.
+                return EvalOutcome(
+                    passed=False,
+                    name="tracelint",
+                    detail="output is not a trace / {final, trace} JSON object",
+                )
         raw = obj[trace_key] if isinstance(obj, dict) and trace_key in obj else obj
         reg = (
             tl.ToolRegistry.from_dict(registry)

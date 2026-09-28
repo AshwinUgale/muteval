@@ -24,6 +24,12 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
     "Topic :: Software Development :: Testing",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -50,6 +56,10 @@ muteval = "muteval.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/muteval"]
+
+[tool.hatch.build.targets.sdist]
+# Belt and braces with .gitignore: local test/tool state never ships.
+exclude = [".hypothesis", ".muteval", "mutants", "**/__pycache__", ".venv"]
 
 [tool.ruff]
 line-length = 90

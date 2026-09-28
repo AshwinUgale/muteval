@@ -81,12 +81,14 @@ your system; muteval mutates your system to test your evals."
     [bracket-agnostic], grounded [judge preset]). `llm_judge`/`grounded` take
     `base_url=` (or `OPENAI_BASE_URL`) for ANY OpenAI-compatible endpoint and
     ask for a plain 0-10 score (no json_schema). `_judge_endpoint` resolves it.
-  - `mutators.py` — 18 operators: 7 prompt (weaken_modals, flip_negation,
+  - `mutators.py` — 22 operators: 10 prompt (weaken_modals, flip_negation,
     drop_instruction_lines, delete_sentences, truncate_prompt,
-    drop_few_shot_example, remove_emphasis) + 7 context (drop_context_doc,
-    clear_context, corrupt_context_doc, swap_context_doc, shuffle_context,
-    duplicate_context_doc, truncate_context_doc) + 1 model (downgrade_model)
-    + 3 tool (drop/corrupt/swap_tool_output). Custom ops via register_operator;
+    drop_few_shot_example, remove_emphasis, weaken_numeric_threshold + the
+    robustness-intent swap_adjacent_instructions / paraphrase_instruction) +
+    7 context (drop_context_doc, clear_context, corrupt_context_doc,
+    swap_context_doc, shuffle_context, duplicate_context_doc,
+    truncate_context_doc) + 1 model (downgrade_model) + 4 tool
+    (drop/corrupt/swap/deny_tool_output). Custom ops via register_operator;
     operator factories make_weaken_modals/make_downgrade_model. All accept `str | System`. `Mutant` carries a `System`
     (with `.prompt` back-compat property). Registered in `OPERATORS`.
   - `adapters/base.py` — the adapter contract + helpers (case_get,
@@ -140,7 +142,8 @@ your system; muteval mutates your system to test your evals."
     `tests/test_probe_validation.py` (see docs/PLAN-probe-validation.md,
     AUDIT-probe-prior-art.md, PRIOR-ART.md): `statistical_adequacy` (Wilson CI +
     dependency-free `jeffreys` option in stats.py, small-n) · `judge_reliability`
-    (flip-rate + Krippendorff's alpha over re-runs; bias panel = future work) ·
+    (flip-rate + Krippendorff's alpha over re-runs; needs runs >= 2) — plus a
+    separate two-sided judge-bias panel (`probes/judge_bias.py`) ·
     `discrimination` (AUC via Mann-Whitney + Cohen's d + significance, replaces
     raw mean-gap) · `redundancy` (Spearman + connected-component families,
     replaces Pearson-only). CLI: `muteval probe --config ...` prints a report card
@@ -196,7 +199,10 @@ your system; muteval mutates your system to test your evals."
   mutation score tracks eval-suite quality, on TWO domains (support bot
   0→33→67→100%, code review 0→35→71→100%). Enforced in tests/test_eval_quality.py.
   See `FINDINGS.md`.
-- `tests/` — pytest; all green (190 tests).
+- `tests/` — pytest; all green. Run with OPENAI_API_KEY UNSET when comparing
+  examples (`env -u OPENAI_API_KEY ...`): `--promptfoo examples/promptfoo_offline/
+  promptfooconfig.yaml` calls the REAL model — the keyless path is the example's
+  `muteval_config.py`.
 - `js/` — npm placeholder package (`package.json`, `index.js`, README, LICENSE).
   Publish npm from this folder: `cd js && npm publish --access public`.
 
@@ -235,7 +241,7 @@ Also shipped beyond the original roadmap: scored evals + near-miss reporting
 ## Active plan
 
 The A (scope/custom/sampling) and B (context/tool/model mutation) plan in
-`docs/PLAN-A-scope-B-system-mutation.md` is COMPLETE. 18 operators; CLI has
+`docs/PLAN-A-scope-B-system-mutation.md` is COMPLETE. 22 operators; CLI has
 --operators/--sample/--seed/--scope-include/--scope-exclude/--context/--mutate-model.
 Next candidates: LLM-driven semantic mutations (behind an extra), confidence
 intervals for noisy suites, HTML report + score badge, promptfoo adapter.
