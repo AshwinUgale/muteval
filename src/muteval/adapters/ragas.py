@@ -59,7 +59,9 @@ def _default_sample_factory(
             ) from exc
 
         ctx = case_get(case, retrieval_context_key)
-        if ctx is not None:
+        if isinstance(ctx, str):
+            ctx = [ctx]  # list("a doc") would split it into characters
+        elif ctx is not None:
             ctx = list(ctx)
         return SingleTurnSample(
             user_input=case_get(case, input_key),
@@ -119,6 +121,9 @@ def metric_to_eval(
         )
 
     _eval.__name__ = label
+    # An LLM-judged metric: ordered after cheap checks, counted by --max-calls,
+    # and never called by the (free) canary.
+    setattr(_eval, "is_llm", True)
     return _eval
 
 

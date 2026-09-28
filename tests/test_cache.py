@@ -48,9 +48,7 @@ def test_second_identical_run_makes_zero_calls(tmp_path):
     cache.close()
 
     # And the cached result is identical to the fresh one.
-    assert json.dumps(result_to_dict(r1), sort_keys=True) == json.dumps(
-        result_to_dict(r2), sort_keys=True
-    )
+    assert _scored(r1) == _scored(r2)
 
 
 def test_cache_disabled_for_nondeterministic_suites(tmp_path):
@@ -78,13 +76,24 @@ def test_cache_roundtrips_output_and_outcome(tmp_path):
     assert cache.get_output(sys_a, case) == "hello"  # hit
     assert cache.get_output(sys_b, case) is None  # different system -> miss
 
+    # Outcomes are keyed on (output, case, eval FINGERPRINT) — not the label.
     oc = EvalOutcome(passed=True, score=0.71, threshold=0.70, name="judge")
-    assert cache.get_outcome(sys_a, case, "judge") is None
-    cache.set_outcome(sys_a, case, "judge", oc)
-    got = cache.get_outcome(sys_a, case, "judge")
+    assert cache.get_outcome("hello", case, "fp1", "judge") is None
+    cache.set_outcome("hello", case, "fp1", oc)
+    got = cache.get_outcome("hello", case, "fp1", "judge")
     assert (
         got.passed and got.score == 0.71 and got.threshold == 0.70 and got.name == "judge"
     )
     assert got.margin == 0.71 - 0.70  # scored fields survive the roundtrip
+    assert cache.get_outcome("hello", case, "fp2", "judge") is None  # edited eval
+    assert cache.get_outcome("other", case, "fp1", "judge") is None  # other output
     assert cache.hits > 0 and cache.misses > 0
     cache.close()
+
+
+def _scored(result):
+    """The result JSON minus cache provenance (hits legitimately differ between
+    the run that filled the cache and the run it served)."""
+    d = result_to_dict(result)
+    d.pop("cache", None)
+    return json.dumps(d, sort_keys=True)

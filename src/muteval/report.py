@@ -269,6 +269,17 @@ def _format_report(result: MutationResult, use_color: bool = True) -> str:
         lines.append(
             c("   " + " · ".join(prov) + " (pin these to compare over time)", "2")
         )
+    if result.cache_hits is not None:
+        lines.append(
+            c(
+                f"   cache: {result.cache_hits} lookup(s) served from --cache (keyed "
+                "on your run/eval code; set cache_version on an eval that reads "
+                "files or remote state)",
+                "2",
+            )
+        )
+    elif result.cache_note:
+        lines.append(c(f"   cache: {result.cache_note}", "2"))
     undetermined = result.undetermined_survivors
     if result.noisy_cases and undetermined:
         lines.append(
@@ -538,6 +549,11 @@ def result_to_dict(result) -> dict:
             "noisy_cases": result.noisy_cases,
             "undetermined": len(result.undetermined_survivors),
             "noise_kills": len(result.noise_kills),
+            "cache": (
+                {"hits": result.cache_hits, "note": result.cache_note}
+                if result.cache_hits is not None or result.cache_note
+                else None
+            ),
             "baseline_pass_rate": (
                 round(result.baseline_pass_rate, 4)
                 if result.baseline_pass_rate is not None

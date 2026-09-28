@@ -285,7 +285,9 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     evals = [
         _check_from_spec(s, args.threshold, judge_model, judge_base_url) for s in specs
     ]
-    names = [s.split(":", 1)[0] for s in specs]
+    # Label each check by its FULL spec ("contains:8080", not "contains"), so two
+    # checks of the same kind are told apart in the report ("caught by ...").
+    names = [s if len(s) <= 40 else s[:39] + "…" for s in specs]
     custom_target = bool(getattr(args, "target", None) or getattr(args, "endpoint", None))
     if getattr(args, "target", None):
         from muteval.runners import callable_run
@@ -434,6 +436,14 @@ def _add_input_args(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _nonneg_int(text: str) -> int:
+    """argparse type: an integer >= 0 (argparse turns the error into exit 2)."""
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0 (got {value})")
+    return value
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="muteval",
@@ -454,10 +464,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Subset of mutation operators (default: all).",
     )
     mut.add_argument(
-        "--max-mutants", type=int, default=None, help="Cap the number of mutants (head)."
+        "--max-mutants",
+        type=_nonneg_int,
+        default=None,
+        help="Cap the number of mutants (head).",
     )
     mut.add_argument(
-        "--sample", type=int, default=None, help="Randomly sample N mutants (cheap runs)."
+        "--sample",
+        type=_nonneg_int,
+        default=None,
+        help="Randomly sample N mutants (cheap runs).",
     )
     mut.add_argument(
         "--seed", type=int, default=None, help="Seed for --sample (reproducible)."

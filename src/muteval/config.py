@@ -125,16 +125,28 @@ class MutEvalConfig:
             raise ValueError("config.run must be provided")
         if not self.evals:
             raise ValueError("config.evals must contain at least one eval")
-        # Auto-derive eval labels from function names when not given, so users
-        # don't have to hand-duplicate `eval_names` (which silently drifts).
-        if not self.eval_names:
-            derived = []
-            for i, e in enumerate(self.evals):
-                nm = getattr(e, "__name__", "") or ""
-                if nm in ("", "<lambda>", "_eval", "eval", "_check", "check"):
-                    nm = f"eval_{i}"
-                derived.append(nm)
-            self.eval_names = derived
+        # Eval labels: derived from function names where not given, so users
+        # don't hand-duplicate `eval_names` (which silently drifts). Labels must
+        # line up with the evals and be UNIQUE — they name the eval in reports
+        # (caught_by, flaky_by_eval). A shorter list is filled in; a longer one
+        # is an error (the names would be attached to the wrong evals).
+        names = list(self.eval_names or [])
+        if len(names) > len(self.evals):
+            raise ValueError(
+                f"config.eval_names has {len(names)} names for {len(self.evals)} "
+                "evals; they must line up one-to-one"
+            )
+        for i in range(len(names), len(self.evals)):
+            nm = getattr(self.evals[i], "__name__", "") or ""
+            if nm in ("", "<lambda>", "_eval", "eval", "_check", "check"):
+                nm = f"eval_{i}"
+            names.append(nm)
+        seen: dict = {}
+        for i, nm in enumerate(names):
+            seen[nm] = seen.get(nm, 0) + 1
+            if seen[nm] > 1:  # e.g. two deepeval GEval metrics -> GEval, GEval#2
+                names[i] = f"{nm}#{seen[nm]}"
+        self.eval_names = names
         if self.runs_per_mutant < 1:
             raise ValueError("config.runs_per_mutant must be >= 1")
         if self.baseline_runs < 1:

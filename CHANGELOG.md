@@ -6,6 +6,52 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+Cache & concurrency: an optimization must never change a verdict. Default runs
+without `--cache` / `--concurrency` score exactly as before.
+
+- **The cache keys on what an eval does, not its name.** Outcomes were keyed on
+  the eval's LABEL: editing `contains("X1")` to `contains("ZZZ")` kept serving
+  the old verdicts (a baseline that should fail came back valid), a changed
+  threshold kept the old score, and two evals sharing a label shared one result
+  (`--check contains:8080 --check contains:BANANA`). Outputs ignored the `run`
+  function, so editing `run` (e.g. the model it calls in prompt mode) served
+  stale outputs. v2 keys: an output on the system + case + a fingerprint of
+  `run`; an outcome on the output + case + a fingerprint of the eval (its code,
+  closure values, defaults, thresholds, the simple globals it reads; new
+  `muteval.fingerprint`). Old cache entries are never read. Set `cache_version`
+  on an eval that depends on a file or remote rubric. The result reports how
+  many lookups the cache served (JSON `cache`).
+- **The cache replays `run()`'s writes into the case.** A cache hit skipped
+  `run()`, so an eval reading `case["used_context"]` graded stale state. The
+  post-run case is now stored with the output and restored on a hit. Dict
+  outputs (the `{"final", "trace"}` agent bridge) are cached instead of
+  crashing sqlite; anything that can't round-trip through JSON just isn't cached.
+- **`--concurrency` no longer changes verdicts.** Cases and deepeval metric
+  objects were shared across threads: a stateful metric scored 0%–85% on one
+  suite, and a `run()` writing into the case leaked into other mutants. Each
+  (mutant, case, run) now gets a private copy of the case, and the deepeval
+  adapter measures a shallow copy of its metric per call (a lock if it can't be
+  copied). Queued mutants are cancelled once `--max-calls` is hit.
+- **Skip-unchanged no longer changes verdicts.** It reused the baseline's pass
+  whenever the output was identical, even when `run()` had written different
+  data into the case (the mutated context an eval grades against): 0/11 kills
+  vs 4/11 with it off. It now also requires the post-run case state to match.
+- **Adapter judges are budgeted.** The deepeval and ragas adapters never set
+  `is_llm`, so `--max-calls 20` made 80 paid calls, the judges ran before cheap
+  checks, and the "free" canary called them. They're now tagged.
+- **`System(context=[...], tools=[...])` works.** The README's own form crashed
+  mutant generation (`unhashable type: 'list'`); lists are normalized to tuples.
+- Eval labels are unique and aligned: duplicates get `#2`, `#3` (two deepeval
+  `GEval` metrics), a shorter `eval_names` list is filled in, and a longer one is
+  an error. Zero-config checks are labelled by their full spec (`contains:8080`).
+- Smaller: `--max-mutants -1` silently dropped the last mutant (now rejected,
+  as is a negative `--sample`); `System.key()` crashed on `extra` with mixed key
+  types; one unkeyable baseline sample marked its case undetermined; the ragas
+  adapter split a string context into characters.
+- `Cache.get_outcome`/`set_outcome` now take `(output, case, eval_fingerprint)`
+  instead of `(system, case, label)`; `Cache.lookup_output`/`store_output` carry
+  the post-run case. (Passing a `Cache` to `run_mutation_testing` is unchanged.)
+
 Security: secrets and the judge endpoint.
 
 - **One redaction point for every output.** Only the JSON and manifest were

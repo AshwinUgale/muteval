@@ -111,14 +111,17 @@ muteval run --endpoint https://my-app/answer --prompt-file system.txt --cases ca
 
 Re-running is cheap: `--cache runs.sqlite` memoizes run outputs + eval outcomes,
 so an identical re-run makes **zero** model/judge calls (skipped for noisy suites
-with `--runs-per-mutant > 1`):
+with `--runs-per-mutant > 1`). Entries are keyed on a fingerprint of your `run`
+and eval *code* (closures, thresholds, defaults), so editing an eval never serves
+a stale verdict; set `cache_version` on an eval that reads a file or remote rubric:
 
 ```bash
 muteval run --config muteval_config.py --cache .muteval-cache.sqlite
 ```
 
 Slow because it's API-bound? Evaluate mutants in parallel (results are identical
-to a serial run — order preserved):
+to a serial run — order preserved; each case is copied per call, and the deepeval
+adapter copies its metric per call. Your own *stateful* evals must be thread-safe):
 
 ```bash
 muteval run --config muteval_config.py --concurrency 8 --cache .muteval-cache.sqlite

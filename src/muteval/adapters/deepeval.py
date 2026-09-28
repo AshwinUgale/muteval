@@ -39,6 +39,8 @@ Example::
 
 from __future__ import annotations
 
+import copy
+import threading
 from typing import Any, Callable, List, Optional
 
 from muteval.adapters.base import case_get
@@ -108,18 +110,39 @@ def metric_to_eval(
         input_key, expected_output_key, retrieval_context_key, context_key
     )
     label = getattr(metric, "__name__", type(metric).__name__)
+    lock = threading.Lock()
 
-    def _eval(output: str, case: Any) -> EvalOutcome:
-        test_case = factory(output, case)
-        metric.measure(test_case)
+    def _measure(test_case: Any) -> EvalOutcome:
+        # deepeval metrics keep their result on the INSTANCE (measure() sets
+        # self.score / self.success / self.reason). One shared instance across
+        # --concurrency threads let one call read another's result, so each call
+        # gets a shallow copy (its own attributes, the same model client). A
+        # metric that can't be copied is measured under a lock instead.
+        try:
+            m = copy.copy(metric)
+        except Exception:  # noqa: BLE001
+            m = None
+        if m is None or m is metric:
+            with lock:
+                return _outcome(metric, test_case)
+        return _outcome(m, test_case)
+
+    def _outcome(m: Any, test_case: Any) -> EvalOutcome:
+        m.measure(test_case)
         return EvalOutcome(
-            passed=bool(metric.is_successful()),
-            score=getattr(metric, "score", None),
-            threshold=getattr(metric, "threshold", None),
+            passed=bool(m.is_successful()),
+            score=getattr(m, "score", None),
+            threshold=getattr(m, "threshold", None),
             name=label,
         )
 
+    def _eval(output: str, case: Any) -> EvalOutcome:
+        return _measure(factory(output, case))
+
     _eval.__name__ = label
+    # An LLM-judged metric: ordered after cheap checks, counted by --max-calls,
+    # and never called by the (free) canary.
+    setattr(_eval, "is_llm", True)
     return _eval
 
 

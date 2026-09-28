@@ -31,9 +31,10 @@ NOT abort the whole run. Such a mutant is recorded as "errored" and excluded.
 
 from __future__ import annotations
 
+import copy
 import threading
 from dataclasses import dataclass, field
-from typing import Callable, Dict, FrozenSet, Iterable, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Tuple, cast
 
 from muteval.config import MutEvalConfig
 from muteval.evals import EvalOutcome, coerce_outcome
@@ -130,6 +131,40 @@ class _SuiteRun:
     failing_eval: Optional[str]  # None if the whole suite passed
     outcomes: List[EvalOutcome]  # all outcomes if passed; up to the failure otherwise
     outputs: List[str]  # the system output for each case run (in order)
+    # The case as run() left it, per case (a run() may write side-channel data
+    # such as case["used_context"] for an eval to read). Skip-unchanged only
+    # reuses a baseline verdict when BOTH the output and this state match.
+    states: List[str] = field(default_factory=list)
+
+
+@dataclass
+class _Fingerprints:
+    """Fingerprints of ``config.run`` and each eval (by index), computed ONCE
+    per run before anything executes, so cache keys don't drift as stateful
+    evals mutate themselves."""
+
+    run: str
+    evals: Dict[int, str]
+
+
+def _fingerprints(config: MutEvalConfig) -> "_Fingerprints":
+    from muteval.fingerprint import fingerprint
+
+    return _Fingerprints(
+        run=fingerprint(config.run),
+        evals={i: fingerprint(ev) for i, ev in enumerate(config.evals)},
+    )
+
+
+def _isolate(case: Any) -> Any:
+    """A private copy of ``case`` for one (system, case, run) cell, shared by
+    run() and the evals of that cell only. Without it a run() that writes into
+    the case leaks that write to other mutants — and, under --concurrency, to
+    other threads mid-evaluation. Uncopyable cases are used as-is."""
+    try:
+        return copy.deepcopy(case)
+    except Exception:  # noqa: BLE001 - a case holding a client/lock/socket
+        return case
 
 
 @dataclass
@@ -163,6 +198,10 @@ class MutationResult:
     # system passed. The original must survive the same kill rule as a mutant,
     # or its own noise would be counted as kills.
     baseline_pass_rate: Optional[float] = None
+    # Cache provenance: how many output/outcome lookups were SERVED from --cache
+    # (None = no cache in use), and why a requested cache was disabled.
+    cache_hits: Optional[int] = None
+    cache_note: Optional[str] = None
 
     @property
     def total(self) -> int:
@@ -386,7 +425,12 @@ def _ordered_evals(config: MutEvalConfig):
 
 
 def _run_suite(
-    system: System, config: MutEvalConfig, cache=None, baseline=None, budget=None
+    system: System,
+    config: MutEvalConfig,
+    cache=None,
+    baseline=None,
+    budget=None,
+    fps: "Optional[_Fingerprints]" = None,
 ) -> _SuiteRun:
     """Run the eval suite once over all cases.
 
@@ -395,47 +439,73 @@ def _run_suite(
       short-circuit skips the judge when a cheap check already fails the mutant.
     * **short-circuit** — stop at the first failing eval (a mutant is already
       killed).
-    * **skip-unchanged** — when ``baseline`` is given and a case's output is
-      byte-identical to the baseline's, reuse the baseline's (passing) outcomes
-      instead of re-running the evals (0 judge calls for inert mutants).
-    Plus the optional ``cache`` (memoizes across whole runs).
+    * **skip-unchanged** — when ``baseline`` is given and a case's output AND
+      the case state run() left behind are identical to the baseline's, reuse
+      the baseline's (passing) outcomes instead of re-running the evals (0 judge
+      calls for inert mutants).
+    Plus the optional ``cache`` (memoizes across whole runs; needs ``fps``).
     """
+    from muteval.cache import _case_repr
+
     collected: List[EvalOutcome] = []
     outputs: List[str] = []
+    states: List[str] = []
     ordered = _ordered_evals(config)
-    base_outputs, base_by_case = baseline if baseline else (None, None)
+    base_outputs, base_by_case, base_states = baseline if baseline else (None, None, None)
+    use_cache = cache is not None and fps is not None
     for ci, case in enumerate(config.cases):
-        output = cache.get_output(system, case) if cache is not None else None
-        if output is None:
+        before = _case_repr(case)
+        c = _isolate(case)
+        hit = cache.lookup_output(system, case, fps.run) if use_cache else None
+        if hit is not None:
+            output, post = hit
+            if post is not None:  # replay run()'s writes into the case
+                c = post
+        else:
             if budget is not None:
                 budget.charge()  # a real model call
-            output = config.invoke(system, case)
-            if cache is not None:
-                cache.set_output(system, case, output)
+            output = config.invoke(system, c)
+            if use_cache:
+                after_run = _case_repr(c)
+                cache.store_output(
+                    system,
+                    case,
+                    output,
+                    fps.run,
+                    post_run_case=c if after_run != before else None,
+                )
         outputs.append(output)
-        # Skip-unchanged: identical output => deterministic evals reproduce the
-        # baseline's passing outcomes; reuse them, run no evals for this case.
+        state = _case_repr(c)
+        states.append(state)
+        # Skip-unchanged: identical output AND identical case state => the
+        # evals see exactly what they saw on the baseline, so a deterministic
+        # suite reproduces its passing outcomes; reuse them, run no evals.
         if (
             base_outputs is not None
             and ci < len(base_outputs)
             and output == base_outputs[ci]
+            and state == base_states[ci]
         ):
             collected.extend(base_by_case[ci])
             continue
-        for _idx, ev, label in ordered:
+        for idx, ev, label in ordered:
             outcome = (
-                cache.get_outcome(system, case, label) if cache is not None else None
+                cache.get_outcome(output, c, fps.evals[idx], label) if use_cache else None
             )
             if outcome is None:
                 if budget is not None and getattr(ev, "is_llm", False):
                     budget.charge()  # a real (paid) judge call
-                outcome = coerce_outcome(ev(output, case), name=label)
-                if cache is not None:
-                    cache.set_outcome(system, case, label, outcome)
+                outcome = coerce_outcome(ev(output, c), name=label)
+                if use_cache:
+                    cache.set_outcome(output, c, fps.evals[idx], outcome)
             collected.append(outcome)
             if not outcome.passed:
-                return _SuiteRun(failing_eval=label, outcomes=collected, outputs=outputs)
-    return _SuiteRun(failing_eval=None, outcomes=collected, outputs=outputs)
+                return _SuiteRun(
+                    failing_eval=label, outcomes=collected, outputs=outputs, states=states
+                )
+    return _SuiteRun(
+        failing_eval=None, outcomes=collected, outputs=outputs, states=states
+    )
 
 
 # Obviously-bad outputs a discriminating suite should reject: a blank and a short
@@ -504,7 +574,12 @@ class _BaselineProfile:
 
 
 def _profile(config: MutEvalConfig, samples_by_case: List[List[str]]) -> _BaselineProfile:
-    keyed = [[_key(config, out) for out in outs] for outs in samples_by_case]
+    # A sample whose key raised says nothing about the baseline's spread: drop
+    # it rather than letting one bad sample mark the whole case undetermined.
+    keyed = [
+        [k for k in (_key(config, out) for out in outs) if k is not _UNKEYABLE]
+        for outs in samples_by_case
+    ]
     noisy = [any(k != ks[0] for k in ks[1:]) for ks in keyed]
     return _BaselineProfile(samples=keyed, noisy=noisy)
 
@@ -533,7 +608,7 @@ def _diff_outputs(
     verdicts: List[Optional[bool]] = []
     for base, noisy, out in zip(profile.samples, profile.noisy, mutant):
         k = _key(config, out)
-        if k is _UNKEYABLE or any(b is _UNKEYABLE for b in base):
+        if k is _UNKEYABLE or not base:
             verdicts.append(None)
         elif any(k == b for b in base):
             verdicts.append(False)
@@ -559,6 +634,11 @@ def select_mutants(
 
     ``operators=None`` falls back to ``config.operators`` (then to all operators).
     """
+    if sample is not None and sample < 0:
+        raise ValueError(f"sample must be >= 0 (got {sample})")
+    if max_mutants is not None and max_mutants < 0:
+        # mutants[:-1] silently dropped the last mutant.
+        raise ValueError(f"max_mutants must be >= 0 (got {max_mutants})")
     selected = operators if operators is not None else getattr(config, "operators", None)
     # config.operators is untyped (Any); generate_mutants wants str|Callable ops.
     ops = cast("List[str | Callable] | None", selected)
@@ -603,14 +683,29 @@ def _aggregate_change(
 
 
 def _evaluate_mutant(
-    mutant, config, cache, baseline_arg, baseline_outputs, budget=None, profile=None
+    mutant,
+    config,
+    cache,
+    baseline_arg,
+    baseline_outputs,
+    budget=None,
+    profile=None,
+    fps=None,
 ) -> MutantOutcome:
-    """Evaluate a single mutant into a MutantOutcome. Pure w.r.t. the mutant, so
-    it is safe to run concurrently across a thread pool."""
+    """Evaluate a single mutant into a MutantOutcome. Each (system, case, run)
+    cell works on a private copy of the case (see ``_isolate``), so mutants can
+    run concurrently across a thread pool. EVALS are shared: a stateful eval
+    must be thread-safe under --concurrency (the deepeval adapter copies its
+    metric per call for exactly this reason)."""
     try:
         runs = [
             _run_suite(
-                mutant.system, config, cache=cache, baseline=baseline_arg, budget=budget
+                mutant.system,
+                config,
+                cache=cache,
+                baseline=baseline_arg,
+                budget=budget,
+                fps=fps,
             )
             for _ in range(config.runs_per_mutant)
         ]
@@ -695,8 +790,12 @@ def run_mutation_testing(
     """
     # Caching assumes determinism; a noisy (multi-run) suite must not be cached,
     # and baseline sampling exists to observe variance a cache would erase.
+    cache_note: Optional[str] = None
     if cache is not None and (config.runs_per_mutant > 1 or config.baseline_runs > 1):
         cache = None
+        cache_note = "disabled: repeated runs exist to observe noise a cache would erase"
+    fps = _fingerprints(config) if cache is not None else None
+    hits_before = cache.hits if cache is not None else 0
     budget = _Budget(max_calls)
     # Baseline — graded runs_per_mutant times and judged by the SAME rule as a
     # mutant (see _verdict): if a flaky judge would "kill" the unmodified
@@ -711,7 +810,7 @@ def run_mutation_testing(
         for _attempt in range(3):
             try:
                 graded.append(
-                    _run_suite(config.system, config, cache=cache, budget=budget)
+                    _run_suite(config.system, config, cache=cache, budget=budget, fps=fps)
                 )
                 attempt_error = None
                 break
@@ -745,6 +844,7 @@ def run_mutation_testing(
     )
     if graded and baseline_error is None:
         result.baseline_pass_rate = (len(graded) - base_fails) / len(graded)
+    result.cache_note = cache_note
     # Provenance (recorded regardless of outcome): the model under test, and any
     # judge model muteval can introspect (its own llm_judge/grounded).
     result.model_under_test = config.system.model if config.system else None
@@ -814,11 +914,11 @@ def run_mutation_testing(
             base_by_case = [
                 oc[i * n_evals : (i + 1) * n_evals] for i in range(len(config.cases))
             ]
-            baseline_arg = (baseline_outputs, base_by_case)
+            baseline_arg = (baseline_outputs, base_by_case, baseline_run.states)
 
     def _worker(mutant: Mutant) -> MutantOutcome:
         return _evaluate_mutant(
-            mutant, config, cache, baseline_arg, baseline_outputs, budget, profile
+            mutant, config, cache, baseline_arg, baseline_outputs, budget, profile, fps
         )
 
     concurrency = max(1, int(concurrency or 1))
@@ -827,8 +927,18 @@ def run_mutation_testing(
             from concurrent.futures import ThreadPoolExecutor
 
             with ThreadPoolExecutor(max_workers=concurrency) as ex:
-                # ex.map preserves input order, so outcomes stay deterministic.
-                result.outcomes.extend(ex.map(_worker, mutants))
+                futures = [ex.submit(_worker, m) for m in mutants]
+                try:
+                    # Collected in submission order, so outcomes stay deterministic.
+                    for f in futures:
+                        result.outcomes.append(f.result())
+                except BudgetExceeded:
+                    # Stop QUEUED mutants from starting; without this the pool
+                    # drained every remaining mutant (and its untagged judges)
+                    # after the budget was already spent.
+                    for f in futures:
+                        f.cancel()
+                    raise
         else:
             for mutant in mutants:
                 result.outcomes.append(_worker(mutant))
@@ -836,6 +946,9 @@ def run_mutation_testing(
         # Hit --max-calls partway: the run is incomplete, so no trustworthy score.
         result.status = BUDGET_EXCEEDED
         return result
+
+    if cache is not None:
+        result.cache_hits = cache.hits - hits_before
 
     # Validity: no evidence at all is invalid; too many errors or too many
     # unresolved ties is invalid too (a score over a shrunken denominator is not

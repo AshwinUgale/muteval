@@ -76,6 +76,12 @@ def test_cache_is_thread_safe_under_concurrency(tmp_path):
     r2 = run_mutation_testing(make(), cache=cache, concurrency=4)
     assert calls["n"] == 0  # fully served from the (thread-safe) cache
     cache.close()
-    assert json.dumps(result_to_dict(r1), sort_keys=True) == json.dumps(
-        result_to_dict(r2), sort_keys=True
-    )
+    assert _scored(r1) == _scored(r2)
+
+
+def _scored(result):
+    """The result JSON minus cache provenance (hits legitimately differ between
+    the run that filled the cache and the run it served)."""
+    d = result_to_dict(result)
+    d.pop("cache", None)
+    return json.dumps(d, sort_keys=True)

@@ -143,6 +143,13 @@ your system; muteval mutates your system to test your evals."
     now uses a MAJORITY vote (`config.kill_threshold`, default None = STRICT
     majority so ties survive) so judge
     noise doesn't flip verdicts; `MutationResult.flaky` lists mutants that did.
+  - `cache.py` + `fingerprint.py` — `--cache` (v2 keys): an output is keyed on
+    `System.key()` + case + a fingerprint of `run`; an outcome on the output +
+    case + a fingerprint of the eval (code, closures, thresholds, globals) —
+    NEVER the label. Fingerprints are computed once per run. run()'s writes
+    into the case are stored and replayed on a hit. Each (mutant, case, run)
+    cell gets a private deep copy of the case (`runner._isolate`); skip-unchanged
+    requires identical output AND post-run case state. Adapters set `is_llm`.
   - `suggest.py` — `suggest_eval(outcome)`: operator-aware starter check for
     each survivor (the `fix:` line in the report). Closes diagnostic -> fix.
   - `severity.py` — ranks each mutant: `OPERATOR_SEVERITY` base (invert/corrupt
