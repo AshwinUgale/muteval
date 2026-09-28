@@ -743,6 +743,7 @@ def config_from_promptfoo_dict(
         run=run,
         evals=evals,
         eval_names=names,
+        model_under_test=resolved,
     )
 
 

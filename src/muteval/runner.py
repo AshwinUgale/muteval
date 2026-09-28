@@ -847,7 +847,9 @@ def run_mutation_testing(
     result.cache_note = cache_note
     # Provenance (recorded regardless of outcome): the model under test, and any
     # judge model muteval can introspect (its own llm_judge/grounded).
-    result.model_under_test = config.system.model if config.system else None
+    result.model_under_test = (
+        config.system.model if config.system else None
+    ) or config.model_under_test
     result.judge_models = tuple(
         sorted({m for ev in config.evals if (m := getattr(ev, "judge_model", None))})
     )

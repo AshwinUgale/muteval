@@ -213,6 +213,9 @@ def _load_context(args: argparse.Namespace) -> List[str]:
     return docs
 
 
+_DEFAULT_MODEL = "gpt-4o-mini"
+
+
 def _check_from_spec(
     spec: str, threshold: float, model: str, base_url: Optional[str] = None
 ):
@@ -291,7 +294,8 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
     base_url = getattr(args, "base_url", None)
     # The judge uses the SAME endpoint as the system unless told otherwise, so
     # OPENAI_API_KEY only ever goes where --base-url points.
-    judge_model = getattr(args, "judge_model", None) or args.model
+    model = args.model or _DEFAULT_MODEL
+    judge_model = getattr(args, "judge_model", None) or model
     judge_base_url = getattr(args, "judge_base_url", None) or base_url
     evals = [
         _check_from_spec(s, args.threshold, judge_model, judge_base_url) for s in specs
@@ -314,7 +318,7 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
                 hdrs[k.strip()] = v.strip()
         run = http_run(args.endpoint, headers=hdrs or None)
     else:
-        run = openai_run(model=args.model, base_url=base_url)
+        run = openai_run(model=model, base_url=base_url)
     context_docs = _load_context(args)
     if custom_target and (context_docs or args.mutate_model):
         print(
@@ -332,6 +336,8 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
         runs_per_mutant=args.runs_per_mutant,
         scope_include=args.scope_include,
         scope_exclude=args.scope_exclude,
+        # provenance: the model openai_run calls (a custom target calls its own)
+        model_under_test=None if custom_target else model,
     )
     if context_docs or args.mutate_model:
         # System mode: the corpus is mutable (drop_context_doc / clear_context)
@@ -340,7 +346,7 @@ def _config_from_flags(args: argparse.Namespace) -> MutEvalConfig:
         sys_obj = System(
             prompt=prompt,
             context=tuple(context_docs) if context_docs else None,
-            model=args.model if args.mutate_model else None,
+            model=model if args.mutate_model else None,
         )
         return MutEvalConfig(system=sys_obj, **common)
     return MutEvalConfig(prompt=prompt, **common)
@@ -398,8 +404,9 @@ def _add_input_args(p: argparse.ArgumentParser) -> None:
     )
     g.add_argument(
         "--model",
-        default="gpt-4o-mini",
-        help="Model for the system under test (default gpt-4o-mini).",
+        default=None,
+        help=f"Model for the system under test (default {_DEFAULT_MODEL}; with "
+        "--promptfoo, the suite's own provider).",
     )
     g.add_argument(
         "--base-url",
@@ -751,21 +758,46 @@ def _format_checks(results, use_color: bool = True) -> str:
     return redact("\n".join(lines))
 
 
+# Flags that DEFINE a zero-config run; with --config / --promptfoo they'd be
+# silently ignored, so combining them is an error instead.
+_ZERO_CONFIG_FLAGS = (
+    ("prompt", "--prompt"),
+    ("prompt_file", "--prompt-file"),
+    ("cases", "--cases"),
+    ("check", "--check"),
+    ("judge", "--judge"),
+    ("context", "--context"),
+    ("context_file", "--context-file"),
+    ("target", "--target"),
+    ("endpoint", "--endpoint"),
+)
+
+
 def _load_run_config(args: argparse.Namespace) -> MutEvalConfig:
+    source = (
+        "--config"
+        if args.config
+        else ("--promptfoo" if getattr(args, "promptfoo", None) else None)
+    )
+    if source:
+        clash = [flag for attr, flag in _ZERO_CONFIG_FLAGS if getattr(args, attr, None)]
+        if clash:
+            raise ValueError(
+                f"{', '.join(clash)} can't be combined with {source} (the {source} "
+                "file defines the prompt, cases and evals; these flags would be "
+                "ignored). Use one or the other."
+            )
     if args.config:
         return load_config(args.config)
     if getattr(args, "promptfoo", None):
         from muteval.adapters.promptfoo import from_promptfoo
 
-        # Only override the model when the user explicitly passed --model; otherwise
-        # let the adapter read it from the promptfoo `providers:` block, so muteval
-        # runs the model the suite actually uses (not the gpt-4o-mini default).
-        explicit_model = any(
-            a == "--model" or a.startswith("--model=") for a in sys.argv[1:]
-        )
+        # --model defaults to None, so an explicit --model is exactly a non-None
+        # value (checking sys.argv ignored main([... "--model", X]) calls);
+        # otherwise the adapter reads the promptfoo `providers:` block.
         return from_promptfoo(
             args.promptfoo,
-            model=args.model if explicit_model else None,
+            model=args.model,
             base_url=getattr(args, "base_url", None),
         )
     if args.prompt or args.prompt_file:
@@ -899,6 +931,38 @@ def _write_label_worksheet(config, out, mutants: int = 3, force: bool = False) -
     return n
 
 
+def _load_accept_file(path) -> List[str]:
+    """Accepted survivor signatures from a JSON file: a list of signature
+    strings, or of ``{"signature": ..., "reason": ...}`` objects (a reason is
+    worth recording). Tolerates a UTF-8 BOM (PowerShell's ``Out-File`` writes
+    one). Raises ValueError with a readable message on anything else."""
+    try:
+        text = Path(path).read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        raise ValueError(f"can't read {path}: {exc.strerror or exc}") from exc
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ValueError(f"{path} is not valid JSON ({exc})") from exc
+    if not isinstance(data, list):
+        # a bare string would silently become a set of single characters
+        raise ValueError(
+            f'{path} must be a JSON list of signatures, e.g. ["28a74296a80b"]'
+        )
+    sigs: List[str] = []
+    for item in data:
+        if isinstance(item, dict) and isinstance(item.get("signature"), str):
+            sigs.append(item["signature"])
+        elif isinstance(item, str):
+            sigs.append(item)
+        else:
+            raise ValueError(
+                f"{path}: each entry must be a signature string or "
+                f'{{"signature": "...", "reason": "..."}}, got {item!r}'
+            )
+    return sigs
+
+
 def _load_last_run() -> Optional[dict]:
     if not _LAST_RUN.exists():
         return None
@@ -922,6 +986,18 @@ def _format_results(data: dict, use_color: bool = True) -> str:
 
     survs = data.get("survivors", [])
     lines = ["", c("muteval — survivors from the last run", "1")]
+    status = data.get("status", "valid")
+    if status != "valid":
+        # An invalid run has no score and its survivor list isn't a verdict: it
+        # used to print "✓ ... your evals caught everything".
+        lines.append(
+            c(
+                f"⚠ the last run was INVALID (status: {status}) — no mutation score; "
+                "fix it and re-run before reading survivors.",
+                "1;31",
+            )
+        )
+        return "\n".join(lines)
     eff = data.get("effective_score")
     if eff is not None:
         lines.append(
@@ -934,9 +1010,10 @@ def _format_results(data: dict, use_color: bool = True) -> str:
         return "\n".join(lines)
     for s in survs:
         tag = _severity_tag(s, c)
+        acc = c("  (accepted)", "2") if s.get("accepted") else ""
         lines.append(
             f"  {c(str(s['id']).rjust(3), '1')} {tag} "
-            f"[{s['operator']}] {s['description']}"
+            f"[{s['operator']}] {s['description']}{acc}"
         )
     lines.append("")
     lines.append(c("Inspect one:  muteval show <id>", "2"))
@@ -976,6 +1053,16 @@ def _format_show(s: dict, use_color: bool = True) -> str:
     return "\n".join(lines)
 
 
+_PROBE_DESC = {
+    "discrimination": "do the evals score good outputs above bad ones? (AUC)",
+    "human_agreement": "does each eval agree with human labels? (Cohen's kappa)",
+    "judge_reliability": "does an LLM judge give the same verdict twice? (flip rate)",
+    "redundancy": "do two evals measure the same thing? (score correlation)",
+    "statistical_adequacy": "are there enough cases for the pass rate to mean much?",
+    "threshold_calibration": "is each threshold between the bad and good exemplars?",
+}
+
+
 def _format_list(what: str, use_color: bool = True) -> str:
     """Render `muteval list [operators|checks|probes|all]` — makes the mutation
     operators, built-in checks, and probes discoverable from the CLI."""
@@ -1000,7 +1087,7 @@ def _format_list(what: str, use_color: bool = True) -> str:
             ("not_contains:TXT", "output does NOT contain TXT"),
             ("contains_case:KEY", "output contains the case's [KEY] value"),
             ("regex:PAT", "output matches regex PAT"),
-            ("is_json", "output is valid JSON"),
+            ("is_json", "output is a JSON object or array"),
             ("max_words:N", "output has at most N words"),
             ("equals", "output equals case['expected']"),
             ("judge:<rubric>", "LLM-as-judge on a plain-language rubric"),
@@ -1015,7 +1102,10 @@ def _format_list(what: str, use_color: bool = True) -> str:
         for name in sorted(PROBES):
             tier = _PROBE_TIER.get(name, "")
             tag = f"({tier}) " if tier else ""
-            out.append(f"  {name.ljust(22)} {c(tag + _doc(PROBES[name]), '2')}")
+            # Plain descriptions: the probe functions' first docstring lines were
+            # blank or internal ("Registry entry point: ...").
+            desc = _PROBE_DESC.get(name) or _doc(PROBES[name])
+            out.append(f"  {name.ljust(22)} {c(tag + desc, '2')}")
     return "\n".join(out).rstrip()
 
 
@@ -1136,10 +1226,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             cache = Cache(args.cache)
         accepted = None
         if args.accept_file:
-            import json as _json
-
-            with open(args.accept_file, encoding="utf-8") as fh:
-                accepted = _json.load(fh)
+            try:
+                accepted = _load_accept_file(args.accept_file)
+            except ValueError as exc:
+                # exit 2 (invalid input), never a traceback's exit 1 — which
+                # reads as a failed gate
+                print(f"muteval: --accept-file: {exc}", file=sys.stderr)
+                return 2
         result = run_mutation_testing(
             config,
             operators=args.operators,
@@ -1164,7 +1257,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                 Path(args.manifest).write_text(
                     json.dumps(
                         run_manifest(
-                            result, config, operators=args.operators, seed=args.seed
+                            result,
+                            config,
+                            operators=args.operators,
+                            seed=args.seed,
+                            sample=args.sample,
+                            max_mutants=args.max_mutants,
                         ),
                         indent=2,
                     ),
@@ -1194,9 +1292,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.json:
             from muteval.report import result_to_dict
 
-            Path(args.json).write_text(
-                json.dumps(result_to_dict(result), indent=2), encoding="utf-8"
-            )
+            try:
+                Path(args.json).write_text(
+                    json.dumps(result_to_dict(result), indent=2), encoding="utf-8"
+                )
+            except OSError as exc:
+                print(
+                    redact(f"muteval: could not write {args.json}: {exc}"),
+                    file=sys.stderr,
+                )
+                return 2
 
         # Validity gate. An invalid or empty run has NO trustworthy score, so we
         # fail closed (exit 2) BEFORE writing a badge or applying score/severity
@@ -1243,7 +1348,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.badge:
             from muteval.report import badge_dict
 
-            Path(args.badge).write_text(json.dumps(badge_dict(result)), encoding="utf-8")
+            try:
+                Path(args.badge).write_text(
+                    json.dumps(badge_dict(result)), encoding="utf-8"
+                )
+            except OSError as exc:
+                print(
+                    redact(f"muteval: could not write {args.badge}: {exc}"),
+                    file=sys.stderr,
+                )
+                return 2
 
         failed = False
         if result.score is None:  # belt and braces: a valid run always has one
@@ -1340,7 +1454,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("muteval: no saved run. Run `muteval run ...` first.", file=sys.stderr)
             return 2
         print(_format_results(data, use_color=not args.no_color))
-        return 0
+        return 0 if data.get("status", "valid") == "valid" else 2
 
     if args.command == "show":
         data = _load_last_run()

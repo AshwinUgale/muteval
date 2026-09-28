@@ -59,3 +59,7 @@ coverage.html
 quality.html
 run.json
 >>>>>>> Stashed changes
+
+# Hypothesis' example database (hatch reads only this root .gitignore, so it
+# leaked 700+ files into the sdist)
+.hypothesis/

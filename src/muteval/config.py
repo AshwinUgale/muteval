@@ -87,6 +87,10 @@ class MutEvalConfig:
     scope_exclude: Optional[str] = None
     output_key: Optional[Callable[[Any], Any]] = None
     baseline_runs: int = 1
+    # Provenance only: the model your run() calls when it isn't System.model
+    # (prompt mode, zero-config, promptfoo). Recorded in the result and the
+    # manifest; never mutated (use System(model=...) + downgrade_model for that).
+    model_under_test: Optional[str] = None
 
     def __post_init__(self) -> None:
         # Which calling convention does the user's run expect?

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 from typing import List
 
 from muteval.redact import redact, redact_obj
@@ -343,7 +344,16 @@ def _format_report(result: MutationResult, use_color: bool = True) -> str:
         _sev_label = {HIGH: "HIGH", MEDIUM: "MED", LOW: "LOW"}
         from muteval.suggest import suggest_eval
 
-        for i, o in enumerate(real, start=1):
+        # Number survivors with the SAME ids as the JSON / `muteval show <id>`
+        # (all real survivors, severity-sorted). Numbering only the new ones made
+        # "#1" here a different survivor from `muteval show 1` once any were
+        # accepted.
+        ids = {
+            id(x): n
+            for n, x in enumerate(_severity_sorted(result.real_survivors), start=1)
+        }
+        for o in real:
+            i = ids[id(o)]
             sev = o.severity or MEDIUM
             raw_tag = f"[{_sev_label[sev]}]"
             tag = c(raw_tag, _sev_color[sev]) + " " * (len("[HIGH]") - len(raw_tag))
@@ -593,66 +603,87 @@ def result_to_dict(result) -> dict:
     )
 
 
+# Characters XML 1.0 forbids (a prompt with \x1b or \x0b produced an unparseable
+# JUnit file).
+_XML_INVALID = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")
+
+
+def _xml_text(text) -> str:
+    return _XML_INVALID.sub("", redact(str(text)))
+
+
+def _junit_kind(result: MutationResult, outcome) -> "tuple[str, str]":
+    """(kind, message) for one mutant — kind is error / skipped / failure / pass.
+
+    A JUnit FAILURE is only a real, unaccepted coverage gap: accepted ("untested
+    by design"), observationally-unchanged, tied, and robustness mutants are
+    SKIPPED with the reason — they used to be failures, so CI showed 8 failing
+    tests on a run that exited 0."""
+    from muteval.mutators import ROBUSTNESS
+
+    if outcome.errored:
+        return "error", outcome.error or "mutant errored"
+    if outcome.mutant.intent == ROBUSTNESS:
+        if outcome.killed:
+            return (
+                "skipped",
+                f"robustness (not scored): a meaning-preserving edit flipped "
+                f"{outcome.failing_eval}",
+            )
+        return "skipped", "robustness (not scored): survived, as expected"
+    if outcome.unresolved:
+        return "skipped", "unresolved: the verdict tied over runs_per_mutant"
+    if outcome.killed:
+        return "pass", ""
+    if outcome.output_changed is False:
+        return "skipped", "observationally unchanged: the output didn't change"
+    if outcome.mutant.signature in result.accepted:
+        return "skipped", "accepted: untested by design"
+    return "failure", "mutation survived"
+
+
 def format_report_junit(result: MutationResult) -> str:
     """Serialize mutation outcomes as a JUnit XML document.
 
-    Each generated mutant is one testcase. A killed mutant passes; a survivor
-    is a failure because the eval suite missed the injected regression. Runtime
-    errors are represented as testcase errors. Invalid baselines still produce
-    a valid, empty suite with a suite-level error message.
+    Each generated mutant is one testcase. A killed mutant passes; a real,
+    unaccepted survivor is a failure (the eval suite missed the injected
+    regression); runtime errors are errors; accepted / unchanged / tied /
+    robustness mutants are skipped with the reason. Invalid baselines still
+    produce a valid, empty suite with a suite-level error message.
     """
     from xml.etree.ElementTree import Element, SubElement, tostring
 
-    from muteval.mutators import ROBUSTNESS
-
-    def _robust(o) -> bool:
-        return o.mutant.intent == ROBUSTNESS
-
+    kinds = [(o, *_junit_kind(result, o)) for o in result.outcomes]
     suite = Element(
         "testsuite",
         {
             "name": "muteval",
             "tests": str(result.total),
-            "failures": str(
-                sum(
-                    1
-                    for o in result.outcomes
-                    if not o.errored and not o.killed and not _robust(o)
-                )
-            ),
-            "errors": str(result.errored),
-            "skipped": str(
-                sum(1 for o in result.outcomes if _robust(o) and not o.errored)
-            ),
+            "failures": str(sum(1 for _, k, _ in kinds if k == "failure")),
+            "errors": str(sum(1 for _, k, _ in kinds if k == "error")),
+            "skipped": str(sum(1 for _, k, _ in kinds if k == "skipped")),
         },
     )
     if result.total == 0 and (result.baseline_error or not result.baseline_passed):
         suite.set("tests", "1")
         suite.set("errors", "1")
         case = SubElement(suite, "testcase", {"classname": "muteval", "name": "baseline"})
-        msg = redact(result.baseline_error or "baseline failed")
+        msg = _xml_text(result.baseline_error or "baseline failed")
         error = SubElement(case, "error", {"message": msg})
         error.text = msg
     else:
-        for outcome in result.outcomes:
-            name = redact(f"{outcome.mutant.operator}: {outcome.mutant.description}")
+        for outcome, kind, message in kinds:
+            name = _xml_text(f"{outcome.mutant.operator}: {outcome.mutant.description}")
             case = SubElement(suite, "testcase", {"classname": "muteval", "name": name})
-            if outcome.errored:
-                msg = redact(outcome.error or "mutant errored")
+            if kind == "error":
+                msg = _xml_text(message)
                 error = SubElement(case, "error", {"message": msg})
                 error.text = msg
-            elif _robust(outcome):
-                # Meaning-preserving edit: never a CI failure either way.
-                note = (
-                    "robustness (not scored): a meaning-preserving edit flipped "
-                    f"{outcome.failing_eval}"
-                    if outcome.killed
-                    else "robustness (not scored): survived, as expected"
-                )
-                SubElement(case, "skipped", {"message": note})
-            elif not outcome.killed:
-                failure = SubElement(case, "failure", {"message": "mutation survived"})
-                failure.text = redact(outcome.mutant.description)
+            elif kind == "skipped":
+                SubElement(case, "skipped", {"message": _xml_text(message)})
+            elif kind == "failure":
+                failure = SubElement(case, "failure", {"message": message})
+                failure.text = _xml_text(outcome.mutant.description)
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         + tostring(suite, encoding="unicode")
@@ -660,7 +691,9 @@ def format_report_junit(result: MutationResult) -> str:
     )
 
 
-def run_manifest(result, config, operators=None, seed=None) -> dict:
+def run_manifest(
+    result, config, operators=None, seed=None, sample=None, max_mutants=None
+) -> dict:
     """A reproducible-run manifest: provenance (version, model, seed, operator
     set, config fingerprint, timestamp) + the machine-readable result. Committing
     this next to a real-LLM-judge run makes the number auditable and repeatable.
@@ -677,6 +710,22 @@ def run_manifest(result, config, operators=None, seed=None) -> dict:
         repr(system.key()) if system is not None else repr(getattr(config, "prompt", ""))
     )
     fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    # The WHOLE setup: the system plus the code of run() and every eval (and the
+    # settings that change verdicts). system_fingerprint alone stayed the same
+    # when an eval or its threshold changed.
+    from muteval.fingerprint import fingerprint as _code_fp
+
+    setup = repr(
+        (
+            key,
+            _code_fp(getattr(config, "run", None)),
+            [_code_fp(ev) for ev in (config.evals or [])],
+            config.runs_per_mutant,
+            getattr(config, "kill_threshold", None),
+            getattr(config, "baseline_runs", 1),
+        )
+    )
+    config_fingerprint = hashlib.sha256(setup.encode("utf-8")).hexdigest()[:16]
     return _redact(
         {
             "manifest_version": 1,
@@ -685,13 +734,17 @@ def run_manifest(result, config, operators=None, seed=None) -> dict:
             "platform": platform.platform(),
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "run": {
-                "model": getattr(system, "model", None) if system is not None else None,
+                "model": (getattr(system, "model", None) if system is not None else None)
+                or getattr(config, "model_under_test", None),
                 "operators": list(operators) if operators else "all",
                 "seed": seed,
+                "sample": sample,
+                "max_mutants": max_mutants,
                 "n_cases": len(config.cases) if config.cases else 0,
                 "eval_names": list(config.eval_names),
                 "runs_per_mutant": config.runs_per_mutant,
                 "system_fingerprint": fingerprint,
+                "config_fingerprint": config_fingerprint,
             },
             "result": result_to_dict(result),
         }
@@ -751,7 +804,17 @@ def format_report_html(data: dict, title: str = "muteval — eval coverage repor
 
     cards = []
     for s in survivors:
-        sev = (s.get("severity") or "medium").lower()
+        # From a JSON file: severity is used as a CSS class and as text, so it's
+        # restricted to known values (a crafted file could inject markup).
+        sev = str(s.get("severity") or "medium").lower()
+        if sev not in ("high", "medium", "low"):
+            sev = "medium"
+        sid = html.escape(str(s.get("id", "")))
+        acc = (
+            ' <span class="acc">accepted — untested by design</span>'
+            if s.get("accepted")
+            else ""
+        )
         base, mut = s.get("baseline_output"), s.get("mutant_output")
         diff = (
             _diff_html(base, mut)
@@ -762,7 +825,7 @@ def format_report_html(data: dict, title: str = "muteval — eval coverage repor
             f"""<div class="card {sev}">
   <div class="chd"><span class="sev {sev}">{sev.upper()}</span>
     <span class="op">{html.escape(str(s.get("operator", "")))}</span>
-    <span class="cid">#{s.get("id", "")}</span></div>
+    <span class="cid">#{sid}</span>{acc}</div>
   <div class="desc">{html.escape(str(s.get("description", "")))}</div>
   <div class="fix"><b>fix:</b> {html.escape(str(s.get("fix", "") or "—"))}</div>
   <div class="diff">{diff}</div>
@@ -797,6 +860,7 @@ def format_report_html(data: dict, title: str = "muteval — eval coverage repor
  .chd{{display:flex;gap:.6rem;align-items:center}} .op{{font-family:ui-monospace,monospace;font-weight:600}} .cid{{color:#8b949e;margin-left:auto}}
  .sev{{font-size:.72rem;font-weight:700;padding:.1rem .4rem;border-radius:4px;color:#fff}}
  .sev.high{{background:#f85149}} .sev.medium{{background:#d29922}} .sev.low{{background:#9aa0a6}}
+ .acc{{font-size:.72rem;color:#8b949e;border:1px solid #d0d7de;border-radius:4px;padding:.05rem .4rem}}
  .desc{{margin:.4rem 0}} .fix{{color:#0969da;font-size:.9rem;margin:.3rem 0}}
  .diff{{background:#f6f8fa;border-radius:6px;padding:.4rem;font-family:ui-monospace,monospace;font-size:.82rem;overflow:auto;margin-top:.5rem}}
  .dl{{white-space:pre-wrap}} .dl.add{{background:#e6ffec;color:#116329}} .dl.del{{background:#ffebe9;color:#a40e26}} .dl.ctx{{color:#656d76}}

@@ -220,16 +220,20 @@ Return JSON with a single key 'feedback_message' containing the message.</pre>
       <ul>
         <li><b>Your config path.</b> Replace <code>promptfooconfig.yaml</code> with the path to yours. If it
           defines several prompts, muteval mutates the first — split them into separate configs to cover each.</li>
-        <li><b>Model &amp; key.</b> muteval runs the prompt through a model to produce outputs (default
-          <code>gpt-4o-mini</code>). Set the key your provider needs; to use a different model, load the config
-          in a two-line <code>.py</code> and pass <code>from_promptfoo(path, model="…")</code>.</li>
-        <li><b>Which assertions carry over.</b> <code>contains</code>, <code>icontains</code>,
-          <code>not-contains</code>, <code>equals</code>, <code>regex</code>, and
-          <code>llm-rubric</code>/<code>model-graded</code> become graded checks. <code>is-json</code>,
-          <code>javascript</code>, and <code>python</code> asserts are skipped — if your suite relies on those,
-          add the equivalent muteval <code>checks</code> so they're graded too.</li>
-        <li><b>Prompt variables.</b> <code>{{var}}</code> placeholders are filled from each test's
-          <code>vars</code>, so your existing cases carry over unchanged.</li>
+        <li><b>Model &amp; key.</b> muteval runs the prompt through the model in your config's
+          <code>providers:</code> block (any OpenAI-compatible endpoint), or the one you pass with
+          <code>--model</code> / <code>--base-url</code>. Set the key your provider needs.</li>
+        <li><b>Which assertions carry over.</b> <code>contains</code>/<code>icontains</code> (and
+          <code>-any</code>/<code>-all</code>), <code>not-contains</code>, <code>equals</code>,
+          <code>not-equals</code>, <code>starts-with</code>, <code>regex</code>, their <code>not-</code>
+          forms, <code>is-json</code> (with a schema), and <code>llm-rubric</code>/<code>model-graded</code>
+          become graded checks. <code>javascript</code>, <code>python</code>, <code>similar</code> and
+          <code>assert-set</code> are skipped with a warning — add equivalent muteval <code>checks</code> if
+          your suite relies on them. Output transforms and threshold/weight scoring aren't reproduced
+          (reported in one warning).</li>
+        <li><b>Prompt variables.</b> <code>{{var}}</code> placeholders in prompts <i>and assertion
+          values</i> are filled from each test's <code>vars</code> (plus <code>defaultTest</code> vars and
+          <code>file://</code> refs; array vars run once per value).</li>
         <li><b>Not on promptfoo?</b> Point muteval at a Python config instead — same two reports, any pipeline.
           See <a href="https://github.com/AshwinUgale/muteval/blob/main/docs/ADOPTION.md">Adopting muteval</a>.</li>
       </ul>

@@ -45,8 +45,7 @@ Before investing, confirm BOTH (muteval can't help without them):
       `query()`/`answer()`/chain, not a fixed answers.csv.
 
 If the target only *scores a static file*, or has a pipeline but no eval suite (or
-vice-versa), it does not fit. See `docs/OUTREACH-targets-and-plan.md` for a worked
-vetting checklist.
+vice-versa), it does not fit.
 
 ---
 
@@ -56,11 +55,15 @@ vetting checklist.
    everything your evals need (answer text, retrieved ids, citations…). JSON is
    fine — the evals parse it back.
 2. **Wire the metrics into `evals`.** Each returns `EvalOutcome(passed, score,
-   threshold)`. If a metric is skipped/NA on a case, return `passed=True` (a skip
-   is not a failure).
+   threshold)` (set `higher_is_better=False` for toxicity/bias-style metrics). If a
+   metric doesn't APPLY to a case by design (e.g. a context metric on a case with
+   no context), return `passed=True` there: it can't catch anything on that case,
+   on the baseline or any mutant. If it SKIPPED because the scorer failed or had no
+   evidence, RAISE instead — the mutant is recorded as errored (fail closed),
+   never silently passed. A NaN score is refused the same way.
 3. **Pick a judge** (if needed) — see the judge notes in the table below.
 4. **Get a GREEN baseline.** The eval suite must PASS on the *original* (unmutated)
-   system. muteval 0.1.4 **fails closed** if it doesn't — that's a feature, but it
+   system. muteval **fails closed** if it doesn't — that's a feature, but it
    means the baseline is the first thing to get right.
 5. **Preflight** (see below) — validate the wiring with ~4 calls before running.
 6. **1-mutant trial** — `run_mutation_testing(config, sample=1)`; confirm
