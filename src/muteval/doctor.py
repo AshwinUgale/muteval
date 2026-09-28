@@ -2,7 +2,8 @@
 
 Runs layered checks in order (cheapest first). Structural checks cost 0 model
 calls; the model-calling checks run on a single case by default, so a wiring or
-compatibility bug costs ~1 call, not a whole run. It also surfaces **per-eval
+compatibility bug costs ~2 calls (the second is a repeat that checks whether the
+system and its LLM judges are deterministic), not a whole run. It also surfaces **per-eval
 baseline diagnostics** — the score/verdict of each eval on the ORIGINAL system —
 so a red baseline shows *which* eval failed and why, instead of an opaque
 "baseline failed".
@@ -15,6 +16,7 @@ from typing import List, Optional
 
 from muteval.config import MutEvalConfig
 from muteval.evals import coerce_outcome
+from muteval.mutators import REGRESSION
 from muteval.runner import select_mutants
 
 
@@ -24,6 +26,9 @@ class CheckResult:
     ok: bool
     detail: str = ""
     fatal: bool = False  # a failed fatal check stops the remaining (dependent) checks
+    # A failed WARN check is shown but doesn't make the config "not ready": the
+    # run is valid, but its numbers need care (e.g. a nondeterministic system).
+    warn: bool = False
 
 
 def _has_fatal_failure(results: List[CheckResult]) -> bool:
@@ -31,7 +36,88 @@ def _has_fatal_failure(results: List[CheckResult]) -> bool:
 
 
 def all_ok(results: List[CheckResult]) -> bool:
-    return all(r.ok for r in results)
+    return all(r.ok or r.warn for r in results)
+
+
+def _noise_checks(config: MutEvalConfig, case, first_output) -> List[CheckResult]:
+    """Is the system deterministic on one case, and is each LLM judge stable on
+    one identical output? Non-fatal: reported as WARN with what to set."""
+    out: List[CheckResult] = []
+    try:
+        second = config.invoke(config.system, case)
+    except Exception as exc:  # noqa: BLE001 - a flaky call is itself a finding
+        return [
+            CheckResult(
+                "run() is repeatable",
+                False,
+                f"a second call raised {type(exc).__name__}: {exc}",
+                warn=True,
+            )
+        ]
+    key = getattr(config, "output_key", None)
+    try:
+        same = (key(first_output) == key(second)) if key else first_output == second
+    except Exception:  # noqa: BLE001
+        same = first_output == second
+    if same:
+        out.append(
+            CheckResult(
+                "run() is repeatable", True, "two calls on case[0] gave the same output"
+            )
+        )
+    elif config.runs_per_mutant > 1 or config.baseline_runs > 1 or key:
+        out.append(
+            CheckResult(
+                "run() is repeatable",
+                True,
+                "output varies between calls — handled by your runs_per_mutant / "
+                "baseline_runs / output_key settings",
+            )
+        )
+    else:
+        out.append(
+            CheckResult(
+                "run() is repeatable",
+                False,
+                "two calls on case[0] gave DIFFERENT outputs: with one sample per "
+                "mutant, wording drift looks like a behavior change and noise looks "
+                "like a kill. Set output_key= (the part that IS the behavior) and "
+                "baseline_runs=3, or an odd runs_per_mutant=3",
+                warn=True,
+            )
+        )
+
+    for j, ev in enumerate(config.evals):
+        if not getattr(ev, "is_llm", False):
+            continue  # rule-based checks are deterministic on identical input
+        label = config.eval_names[j] if j < len(config.eval_names) else f"eval[{j}]"
+        try:
+            a = coerce_outcome(ev(first_output, case)).passed
+            b = coerce_outcome(ev(first_output, case)).passed
+        except Exception:  # noqa: BLE001 - the per-eval diagnostics report it
+            continue
+        if a != b and config.runs_per_mutant == 1:
+            out.append(
+                CheckResult(
+                    f"judge '{label}' is stable",
+                    False,
+                    "gave different verdicts on the SAME output — at runs_per_mutant=1 "
+                    "its noise is counted as kills. Use an odd runs_per_mutant (3), or a "
+                    "steadier judge/rubric",
+                    warn=True,
+                )
+            )
+        else:
+            out.append(
+                CheckResult(
+                    f"judge '{label}' is stable",
+                    True,
+                    "same verdict twice on the same output"
+                    if a == b
+                    else "verdicts vary — handled by your runs_per_mutant",
+                )
+            )
+    return out
 
 
 def run_checks(
@@ -62,16 +148,25 @@ def run_checks(
 
     try:
         mutants = select_mutants(config, operators=operators)
-        ok = len(mutants) > 0
-        results.append(
-            CheckResult(
-                "mutants generate",
-                ok,
-                f"{len(mutants)} mutant(s) would run"
-                if ok
-                else "no mutants — prompt too short, or operators/scope filtered them all out",
+        scored = sum(1 for m in mutants if m.intent == REGRESSION)
+        robust = len(mutants) - scored
+        if scored:
+            detail = f"{len(mutants)} mutant(s) would run"
+            if robust:
+                detail += (
+                    f" ({scored} scored, {robust} robustness — reported, not scored)"
+                )
+        elif robust:
+            # Only meaning-preserving operators: the run can't produce a score.
+            detail = (
+                f"only {robust} robustness mutant(s) (paraphrase/reorder) — reported, "
+                "never scored, so there'd be no mutation score; add regression operators"
             )
-        )
+        else:
+            detail = (
+                "no mutants — prompt too short, or operators/scope filtered them all out"
+            )
+        results.append(CheckResult("mutants generate", scored > 0, detail))
     except Exception as exc:  # noqa: BLE001
         results.append(
             CheckResult(
@@ -87,26 +182,32 @@ def run_checks(
 
     try:
         first_output = config.invoke(config.system, cases[0])
-        ok = isinstance(first_output, str)
-        results.append(
-            CheckResult(
-                "run() returns text",
-                ok,
-                f"got {type(first_output).__name__}, {len(first_output)} chars"
-                if ok
-                else f"run() returned {type(first_output).__name__}, expected str",
-                fatal=True,
-            )
-        )
+        # Text, or structured output your evals read (the {"final", "trace"}
+        # agent bridge that checks.on_final / checks.tracelint consume).
+        ok = isinstance(first_output, (str, dict, list))
+        if isinstance(first_output, str):
+            detail = f"got str, {len(first_output)} chars"
+        elif ok:
+            detail = f"got {type(first_output).__name__} (fine if your evals read it)"
+        else:
+            detail = f"run() returned {type(first_output).__name__}, expected str/dict"
+        results.append(CheckResult("run() returns output", ok, detail, fatal=True))
     except Exception as exc:  # noqa: BLE001
         results.append(
             CheckResult(
-                "run() returns text", False, f"{type(exc).__name__}: {exc}", fatal=True
+                "run() returns output", False, f"{type(exc).__name__}: {exc}", fatal=True
             )
         )
 
     if _has_fatal_failure(results):
         return results
+
+    # --- noise check (1 extra model call + 1 extra call per LLM judge) --------
+    # With one sample per mutant, muteval can't see noise: a flaky judge's kill
+    # looks like detection, and free-text wording drift looks like a behavior
+    # change. Catch it here, before a paid run, as a WARNING (the run is still
+    # valid; its numbers need the settings named below).
+    results.extend(_noise_checks(config, cases[0], first_output))
 
     # --- per-eval baseline diagnostics -------------------------------------
     baseline_ok = True

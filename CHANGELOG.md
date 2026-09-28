@@ -6,6 +6,80 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+Operators, severity & scope: every mutant an edit a real person could make,
+severity from WHAT changed, scoping fast and exact. Mutation scores on the
+bundled examples are unchanged or move by one mutant; survivor severities move
+(both ways) and some survivor signatures change (see below).
+
+- **Severity comes from what the edit touched, not its description.** Escalation
+  matched the description, which always contains the modal word itself
+  (never/always/must/do not) plus neighbouring text, so almost every weakened or
+  dropped rule ranked HIGH ("Never use emojis" next to corrupted retrieval) and
+  substrings escalated ("mustard", "nevertheless", "illegally", "police"). Mutants
+  now carry a `focus` (the original line/sentence/doc); escalation needs a
+  safety/correctness CONTENT word there, word-bounded (refunds, customer data,
+  passwords, citations, "don't know", guessing/inventing, ...). `truncate_prompt`
+  and `remove_emphasis` now escalate on what they cut. When two operators produce
+  the same mutant, the more severe framing is kept.
+- **Scoping is fast and exact.** Any active scope ran a character-level diff over
+  the whole prompt per mutant: 287 s on a 5k-char prompt with
+  `--scope-include` (now 0.03 s). A marker hugging a line or sentence rejected
+  that line's own deletion (the line break sits outside the marker).
+  `--scope-include never` kept an "Always -> never" flip (it matched the MUTATED
+  text); include/exclude now match your original lines. Stray or nested
+  `[[/mutate]]` markers, which leaked into the prompt, are rejected.
+- **Operators no longer produce edits no one would make:**
+  - `weaken_modals`: "must not" -> "should not" (was "should avoid share");
+    no second overlapping "must" mutant; "the only exception" / "if and only if"
+    / "You are required to" left alone or weakened grammatically; "You do not
+    have access" isn't treated as a command; "If unsure, do not guess" and
+    "**Do not**" are.
+  - `flip_negation`: contractions (can't, won't, doesn't, shouldn't, curly ’);
+    never "not always" -> "not never"; never inside a quoted literal.
+  - `weaken_numeric_threshold`: direction from the phrase attached to the number
+    ("no fewer than 3" was TIGHTENED to 6); "0.5" and "1,000" are one number
+    ("0.10", "1,1" before); list markers and versions are skipped.
+  - `remove_emphasis`: only UPPERCASE markers with ":" (it deleted "Note that",
+    "Important details" and blank lines, and turned `__init__` into `init`); now
+    also de-emphasizes ALL-CAPS NEVER/MUST/ONLY (YES/NO untouched).
+  - `drop_few_shot_example`: drops blocks SHAPED like demonstrations (repeated
+    "Label: content" lines, or Input/Output, Q/A, User/Assistant), not any block
+    mentioning "example" or "output:"; the rest of the prompt is byte-identical.
+  - `delete_sentences` doesn't split at "e.g."/"i.e." or delete headings and
+    lead-ins; `drop_instruction_lines`/`swap`/`paraphrase` skip headings and short
+    lead-ins ("## Rules", "Follow these steps:").
+  - `truncate_prompt` cuts the tail of the instruction lines wherever the input
+    placeholders sit (it never fired with a placeholder on line 1).
+  - `corrupt_context_doc` changes a FACT number, not an id ("doc-1" -> "doc-2"
+    made the RAG quickstart's mutants inert), never produces "do not not" /
+    "can not't", and names the edited token in its description.
+  - Structured (dict) docs and tool outputs: no crash (a dict doc aborted
+    generation), and swap/deny/corrupt keep the output's type.
+  - Robustness operators (#56 follow-ups): paraphrase never edits quoted
+    literals and tidies "JSON,." / sentence capitals; swap never reorders
+    numbered steps.
+  - More placeholder forms protected: `{0}`, `{}`, `{case.q}`, `{q!r}`,
+    `{q:>10}`, `$question`, `%(q)s`, `%s`.
+- **The RAG quickstart shows what it promises.** `muteval init --template rag`
+  reported 0 survivors (its mock ignored the prompt). The mock now obeys the
+  prompt's abstention rule and the cases include an unanswerable question, so
+  the run surfaces the real gap: nothing checks the "say you don't know" rule.
+- **`muteval check` noise check.** It now calls `run()` twice and grades each
+  LLM judge twice on one case, and WARNs (without blocking) when either varies
+  at settings that can't absorb it. It also reports a robustness-only operator
+  set as not ready, and accepts dict outputs (the `{"final", "trace"}` agent
+  bridge was a fatal "expected str").
+- `--dry-run` mirrors the real run's validity: exit 2 when no scored mutant
+  would run (it exited 0 for a run that would be invalid), and it splits scored
+  vs robustness mutants.
+- `suggest`: a fix for a line with quotes in it isn't cut at the first quote and
+  is valid Python. `autofix`: samples the case whose output changed, and verifies
+  a candidate by the suite's `runs_per_mutant` majority.
+- Signatures change for mutants whose descriptions now name their content
+  (`swap_context_doc`, `clear_context`, `shuffle_context`, `truncate_context_doc`,
+  `truncate_prompt`, `remove_emphasis`, `corrupt_*`, tool operators) — so an
+  accepted survivor no longer survives a completely different doc. Re-accept.
+
 Cache & concurrency: an optimization must never change a verdict. Default runs
 without `--cache` / `--concurrency` score exactly as before.
 

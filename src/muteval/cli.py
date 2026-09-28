@@ -115,10 +115,13 @@ SYSTEM_PROMPT = (
 )
 
 
+def _words(text: str) -> set:
+    cleaned = "".join(ch if ch.isalnum() or ch == "-" else " " for ch in text.lower())
+    return {w for w in cleaned.split() if len(w) > 2}
+
+
 def _overlap(a: str, b: str) -> int:
-    wa = {w for w in a.lower().split() if len(w) > 2}
-    wb = {w for w in b.lower().split() if len(w) > 2}
-    return len(wa & wb)
+    return len(_words(a) & _words(b))
 
 
 # ---- 1. YOUR PIPELINE: run(system, case) -> a FRESH output string ----
@@ -126,10 +129,15 @@ def run(system, case):
     # TODO: replace this mock with YOUR real pipeline:
     #   - retrieve from system.context (the possibly-mutated corpus)
     #   - generate with your LLM using system.prompt
+    # The mock obeys the prompt's abstention rule like a real model would: with
+    # nothing relevant retrieved, it says "I don't know" — or, if that rule was
+    # deleted/inverted, it makes an answer up.
     docs = system.context or ()
-    if not docs:
-        return "I don't know."
-    best = max(docs, key=lambda d: _overlap(case["question"], d))
+    best = max(docs, key=lambda d: _overlap(case["question"], d)) if docs else None
+    if best is None or _overlap(case["question"], best) == 0:
+        if "don't know" in system.prompt.lower():
+            return "I don't know."
+        return "Yes, students get 20% off."   # an invented answer
     return best.split("::", 1)[-1].strip()   # mock "LLM": echo the top doc
 
 
@@ -137,6 +145,9 @@ def run(system, case):
 CASES = [
     {"question": "How long is the Orbit X warranty?", "expected": "24-month"},
     {"question": "How fast does support reply?", "expected": "one business day"},
+    # Not answerable from the context. The suite has NO check for what the answer
+    # should be here ("expected" is empty) — that's the gap muteval will find.
+    {"question": "Is there a student discount?", "expected": ""},
 ]
 
 
@@ -704,7 +715,12 @@ def _format_checks(results, use_color: bool = True) -> str:
 
     lines = ["", c("muteval check — config doctor", "1"), ""]
     for r in results:
-        tag = c("PASS", "32") if r.ok else c("FAIL", "1;31")
+        if r.ok:
+            tag = c("PASS", "32")
+        elif getattr(r, "warn", False):
+            tag = c("WARN", "33")  # shown, but doesn't make the config "not ready"
+        else:
+            tag = c("FAIL", "1;31")
         line = f"  [{tag}] {r.name}"
         if r.detail:
             line += c(f"  — {r.detail}", "2" if r.ok else "33")
@@ -1018,15 +1034,33 @@ def main(argv: Optional[List[str]] = None) -> int:
                 seed=args.seed,
                 max_mutants=args.max_mutants,
             )
+            from muteval.mutators import REGRESSION
+
             ctx = config.system.context or ()
+            scored = sum(1 for m in mutants if m.intent == REGRESSION)
+            robust = len(mutants) - scored
+            split = (
+                f" ({scored} scored, {robust} robustness — not scored)" if robust else ""
+            )
+            valid = scored > 0 or (len(mutants) == 0 and args.allow_empty)
             print(
-                "muteval dry-run OK:\n"
-                f"  prompt:  {len(config.system.prompt)} chars\n"
+                ("muteval dry-run OK:\n" if valid else "muteval dry-run:\n")
+                + f"  prompt:  {len(config.system.prompt)} chars\n"
                 f"  context: {len(ctx)} doc(s)\n"
                 f"  cases:   {len(config.cases)}\n"
                 f"  evals:   {', '.join(config.eval_names) or len(config.evals)}\n"
-                f"  mutants that would run: {len(mutants)}"
+                f"  mutants that would run: {len(mutants)}{split}"
             )
+            # Mirror the real run's validity gate, so a CI dry-run can't be
+            # green for a run that would be invalid (exit 2).
+            if scored == 0 and not (len(mutants) == 0 and args.allow_empty):
+                why = (
+                    "only robustness operators selected — no mutation score"
+                    if robust
+                    else "no mutants would be generated (use --allow-empty to pass)"
+                )
+                print(f"muteval: a real run would be INVALID — {why}.", file=sys.stderr)
+                return 2
             return 0
 
         cache = None

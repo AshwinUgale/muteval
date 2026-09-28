@@ -53,35 +53,41 @@ OPERATOR_SEVERITY = {
     "swap_adjacent_instructions": LOW,
 }
 
-# If a mutation's changed text matches any of these, bump severity one level.
+# If the text a mutation acted on (its line / sentence / doc — ``Mutant.focus``)
+# is about safety or correctness, bump severity one level. CONTENT words only,
+# with word boundaries: the modal words themselves (never / always / must /
+# do not / cannot) used to be here, but every weaken/flip/drop of a modal line
+# contains them, so they escalated nearly everything to HIGH ("Never use emojis"
+# ranked with corrupted retrieval) and matched inside words ("mustard",
+# "nevertheless", "tornado nothing").
 CRITICAL_PATTERNS = [
-    r"never",
-    r"always",
-    r"must",
-    r"do\s*n.?t",
-    r"cannot",
-    r"refus",
-    r"refund",
-    r"privac",
+    r"\brefus",
+    r"\brefund",
+    r"\bprivacy\b|\bprivate\b",
     r"\bpii\b",
-    r"secur",
-    r"safe",
-    r"polic",
-    r"confidential",
-    r"password",
-    r"credential",
-    r"medical",
-    r"legal",
-    r"hallucin",
-    r"\bcite\b",
-    r"\bsource",
-    r"don.?t know",
-    r"author",
-    r"\bdelete\b",
-    r"customer",
-    r"\bdata\b",
-    r"comply",
-    r"complian",
+    r"\bpersonal (?:data|information|details)",
+    r"\b(?:customer|user|patient|client)s?['’]? (?:data|information|details|records)",
+    r"\bsecur(?:e|ity)\b",
+    r"\b(?:un)?safe(?:ty)?\b",
+    r"\bpolic(?:y|ies)\b",
+    r"\bconfidential",
+    r"\bpassword",
+    r"\bcredential",
+    r"\bsecrets?\b",
+    r"\bmedical\b|\bdiagnos",
+    r"\blegal(?:ly)?\b",
+    r"\bhallucinat",
+    # hallucination rules said plainly ("do not guess", "never invent facts")
+    r"\bguess(?:es|ing)?\b|\binvent(?:s|ed|ing)?\b|\bfabricat"
+    r"|\bmake (?:things |anything )?up\b",
+    r"\bcit(?:e|es|ing|ation|ations)\b",
+    r"\bsources?\b",
+    r"(?:don['’]?t|do not) know",
+    r"\b(?:un)?authori[sz]",
+    r"\bdelet(?:e|es|ing|ion)\b",
+    r"\bcompl(?:y|ies|iance|iant)\b",
+    r"\binjection\b|\bjailbreak",
+    r"\bpayments?\b|\bcharge[sd]?\b",
 ]
 _CRITICAL_RE = re.compile("|".join(CRITICAL_PATTERNS), re.IGNORECASE)
 
@@ -89,11 +95,14 @@ _CRITICAL_RE = re.compile("|".join(CRITICAL_PATTERNS), re.IGNORECASE)
 def severity_of(mutant, extra_critical: Optional[Iterable[str]] = None) -> str:
     """Severity for one mutant: operator base, escalated on critical content.
 
-    Content is read from the mutant's human description (which includes the
-    changed snippet), so this needs no separate diff.
+    Content is read from ``mutant.focus`` — the ORIGINAL text the mutation
+    acted on (the weakened line, the dropped sentence, the corrupted doc) —
+    not the description, which also carries the operator's trigger word and
+    neighboring text. Custom mutants without a focus fall back to the
+    description.
     """
     base = OPERATOR_SEVERITY.get(getattr(mutant, "operator", ""), MEDIUM)
-    text = getattr(mutant, "description", "") or ""
+    text = getattr(mutant, "focus", "") or getattr(mutant, "description", "") or ""
     hit = bool(_CRITICAL_RE.search(text))
     if not hit and extra_critical:
         hit = any(re.search(t, text, re.IGNORECASE) for t in extra_critical)

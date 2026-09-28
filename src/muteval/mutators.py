@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import re
 import warnings
-from dataclasses import dataclass
-from typing import Callable, Dict, List
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Tuple
 
 from muteval.scope import Scope, filter_mutants
 from muteval.system import System, Target, as_system
@@ -31,6 +31,9 @@ class Mutant:
     description: str  # human-readable "what was broken"
     system: System  # the fully mutated system
     target: str = "prompt"  # which part of the system was mutated
+    # The ORIGINAL text this mutation acted on (its line / sentence / doc), for
+    # severity ranking. Not part of the signature. "" = unknown (custom ops).
+    focus: str = field(default="", compare=False)
 
     @property
     def prompt(self) -> str:
@@ -61,10 +64,14 @@ class Mutant:
 
 # Pairs of (strong -> weak) wordings. Case-insensitive, whole-word matches.
 _MODAL_WEAKENINGS = [
-    ("must not", "should avoid"),
+    # Longer phrases first: a shorter pair never re-matches inside a span a
+    # longer one already weakened ("must" inside "must not" used to yield a
+    # second, overlapping mutant).
+    ("must not", "should not"),  # "should avoid share X" wasn't English
     ("must", "should"),
     ("never", "rarely"),
     ("always", "usually"),
+    ("required to", "encouraged to"),  # "You are optional to" wasn't English
     ("required", "optional"),
     ("do not", "try not to"),
     ("don't", "try not to"),
@@ -80,18 +87,38 @@ _MODAL_WEAKENINGS = [
 # changes try not to make ..."), a mutant no real edit could produce.
 _IMPERATIVE_ONLY = {"do not", "don't"}
 
+# "only" as a restriction ("use only X", "only answer ...") weakens to
+# "preferably"; as a determiner or in a fixed phrase it doesn't: "the only
+# exception", "not only ... but", "if and only if".
+_ONLY_SKIP_BEFORE = re.compile(
+    r"\b(?:the|a|an|and|not|our|your|its|their|my|his|her|one)\s+\Z", re.IGNORECASE
+)
+_ONLY_SKIP_AFTER = re.compile(r"\A\s+if\b", re.IGNORECASE)
+
+
+def _overlaps(used: "List[Tuple[int, int]]", start: int, end: int) -> bool:
+    return any(s < end and start < e for s, e in used)
+
 
 def _weaken(system: System, pairs, snippets: bool) -> List[Mutant]:
     prompt = system.prompt
     mutants: List[Mutant] = []
+    used: List[Tuple[int, int]] = []
     for strong, weak in pairs:
-        pattern = re.compile(rf"\b{re.escape(strong)}\b", re.IGNORECASE)
+        pattern = re.compile(rf"\b{_apostrophes(re.escape(strong))}\b", re.IGNORECASE)
         for match in pattern.finditer(prompt):
             start, end = match.span()
-            if strong.lower() in _IMPERATIVE_ONLY and not _is_imperative_at(
-                prompt, start
+            if _overlaps(used, start, end) or _in_quotes(prompt, start):
+                continue
+            key = strong.lower().replace("’", "'")
+            if key in _IMPERATIVE_ONLY and not _is_imperative_at(prompt, start):
+                continue
+            if key == "only" and (
+                _ONLY_SKIP_BEFORE.search(prompt[:start])
+                or _ONLY_SKIP_AFTER.search(prompt[end:])
             ):
                 continue
+            used.append((start, end))
             mutated = prompt[:start] + _match_case(match.group(0), weak) + prompt[end:]
             # Description keeps the canonical (lower-case) replacement so a
             # mutant's signature is stable across case-preservation changes.
@@ -103,6 +130,7 @@ def _weaken(system: System, pairs, snippets: bool) -> List[Mutant]:
                     operator="weaken_modals",
                     description=description,
                     system=system.with_prompt(mutated),
+                    focus=_line_at(prompt, start),
                 )
             )
     return mutants
@@ -137,13 +165,21 @@ def drop_instruction_lines(target: Target) -> List[Mutant]:
                 operator="drop_instruction_lines",
                 description=f'dropped line: "{_truncate(stripped)}"',
                 system=system.with_prompt(mutated),
+                focus=stripped,
             )
         )
     return mutants
 
 
+_NUMBERED = re.compile(r"^\d+[.)]\s")
+
+
 def swap_adjacent_instructions(target: Target) -> List[Mutant]:
-    """Swap adjacent instruction lines to expose order-sensitive prompts."""
+    """Swap adjacent instruction lines to expose order-sensitive prompts.
+
+    A ROBUSTNESS operator: it assumes an unordered rule list. Numbered items
+    (ordered steps) are never swapped — reordering steps is a real change, and
+    "2." above "1." isn't a paraphrase of anything."""
     system = as_system(target)
     lines = system.prompt.splitlines()
     mutants: List[Mutant] = []
@@ -151,6 +187,8 @@ def swap_adjacent_instructions(target: Target) -> List[Mutant]:
         first = lines[i].strip()
         second = lines[i + 1].strip()
         if not (_is_instruction_line(first) and _is_instruction_line(second)):
+            continue
+        if _NUMBERED.match(first) or _NUMBERED.match(second):
             continue
         swapped = lines[:]
         swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
@@ -162,6 +200,7 @@ def swap_adjacent_instructions(target: Target) -> List[Mutant]:
                     f'"{_truncate(first)}" before "{_truncate(second)}"'
                 ),
                 system=system.with_prompt("\n".join(swapped)),
+                focus=f"{first}\n{second}",
             )
         )
     return mutants
@@ -208,11 +247,7 @@ def paraphrase_instruction(target: Target) -> List[Mutant]:
             continue
         indent = line[: len(line) - len(line.lstrip())]
         for pattern, replacement in _PARAPHRASES:
-
-            def _sub(m: "re.Match[str]", r: str = replacement) -> str:
-                return _match_case(m.group(0), r)
-
-            rewritten = re.sub(pattern, _sub, stripped, flags=re.IGNORECASE)
+            rewritten = _rewrite_outside_quotes(stripped, pattern, replacement)
             # The rule didn't fire: tidying alone isn't a paraphrase.
             if rewritten == stripped:
                 continue
@@ -225,9 +260,41 @@ def paraphrase_instruction(target: Target) -> List[Mutant]:
                         operator="paraphrase_instruction",
                         description=f'paraphrased line: "{_truncate(stripped)}" -> "{_truncate(new_line)}"',
                         system=system.with_prompt("\n".join(new_lines)),
+                        focus=stripped,
                     )
                 )
     return mutants
+
+
+def _rewrite_outside_quotes(line: str, pattern: str, replacement: str) -> str:
+    """Apply one paraphrase rule to ``line``, never inside a quoted literal (a
+    required phrase such as ``say "I don't know"`` is not a paraphrase target).
+    Deleting a capitalized word mid-line ("Be brief. Please use JSON.")
+    re-capitalizes the word that now starts the sentence."""
+    out: List[str] = []
+    pos = 0
+    cap_next = False
+    for m in re.finditer(pattern, line, flags=re.IGNORECASE):
+        if _in_quotes(line, m.start()):
+            continue
+        segment = line[pos : m.start()]
+        out.append(_capitalize_first(segment) if cap_next else segment)
+        rep = _match_case(m.group(0), replacement)
+        cap_next = not rep and m.group(0)[:1].isupper() and m.start() > 0
+        out.append(rep)
+        pos = m.end()
+    tail = line[pos:]
+    out.append(_capitalize_first(tail) if cap_next else tail)
+    return "".join(out)
+
+
+def _capitalize_first(text: str) -> str:
+    for k, ch in enumerate(text):
+        if ch.isalpha():
+            return text[:k] + ch.upper() + text[k + 1 :]
+        if ch not in " ,;:":
+            return text
+    return text
 
 
 def delete_sentences(target: Target) -> List[Mutant]:
@@ -251,7 +318,14 @@ def delete_sentences(target: Target) -> List[Mutant]:
     mutants: List[Mutant] = []
     for i, prefix, body, s, e in spans:
         sentence = body[s:e]
-        if len(sentence) < 12:
+        # Skip fragments, headings ("## Output format") and lead-ins ("Follow
+        # these steps:") — deleting those isn't dropping an instruction.
+        if (
+            len(sentence) < 12
+            or sentence.endswith(":")
+            or prefix.strip() == ""
+            and (body.lstrip().startswith("#"))
+        ):
             continue
         left, right = body[:s].rstrip(), body[e:].lstrip()
         rest = left + (" " if left and right else "") + right
@@ -264,17 +338,26 @@ def delete_sentences(target: Target) -> List[Mutant]:
                 operator="delete_sentences",
                 description=f'deleted sentence: "{_truncate(sentence)}"',
                 system=system.with_prompt("\n".join(new_lines)),
+                focus=sentence,
             )
         )
     return mutants
 
 
 # Pairs that INVERT meaning — a stronger regression than mere weakening.
+# Apostrophes match both ' and ’ (see _apostrophes).
 _NEGATION_FLIPS = [
     ("must not", "must"),
+    ("mustn't", "must"),
     ("should not", "should"),
+    ("shouldn't", "should"),
     ("cannot", "can"),
     ("can not", "can"),
+    ("can't", "can"),
+    ("will not", "will"),
+    ("won't", "will"),
+    ("does not", "does"),
+    ("doesn't", "does"),
     ("do not", "do"),
     ("don't", "do"),
     ("never", "always"),
@@ -294,10 +377,19 @@ def flip_negation(target: Target) -> List[Mutant]:
     system = as_system(target)
     prompt = system.prompt
     mutants: List[Mutant] = []
+    used: List[Tuple[int, int]] = []
     for src, dst in _NEGATION_FLIPS:
-        pattern = re.compile(rf"\b{re.escape(src)}\b", re.IGNORECASE)
+        pattern = re.compile(rf"\b{_apostrophes(re.escape(src))}\b", re.IGNORECASE)
         for match in pattern.finditer(prompt):
             start, end = match.span()
+            if _overlaps(used, start, end) or _in_quotes(prompt, start):
+                continue  # never flip a quoted literal ('say "I don't know"')
+            # "not always" -> "not never" is nonsense, not an inversion.
+            if src in ("never", "always") and re.search(
+                r"\bnot\s+\Z", prompt[:start], re.IGNORECASE
+            ):
+                continue
+            used.append((start, end))
             mutated = prompt[:start] + _match_case(match.group(0), dst) + prompt[end:]
             snippet = _context_snippet(prompt, start, end)
             mutants.append(
@@ -305,6 +397,7 @@ def flip_negation(target: Target) -> List[Mutant]:
                     operator="flip_negation",
                     description=f'inverted "{match.group(0)}" -> "{dst}" (near: {snippet})',
                     system=system.with_prompt(mutated),
+                    focus=_line_at(prompt, start),
                 )
             )
     return mutants
@@ -316,73 +409,111 @@ def truncate_prompt(target: Target) -> List[Mutant]:
     Models a prompt that got clipped — by a token budget, a bad edit, or
     context-window pressure — silently dropping its later instructions.
 
-    When the prompt carries input placeholders (``{{var}}``, ``{var}``,
-    ``${VAR}``), only the instruction region ABOVE the first placeholder line is
-    truncated. Cutting the input template itself means the model never sees the
-    input, so every eval fails: a guaranteed kill that says nothing about eval
-    coverage but still inflates the score.
+    Lines carrying input placeholders (``{{var}}``, ``{var}``, ``${VAR}``, ...)
+    are never cut — only the tail of the INSTRUCTION lines is, wherever they sit
+    (above, around or below the input block). Cutting the input template means
+    the model never sees the input, so every eval fails: a guaranteed kill that
+    says nothing about eval coverage but still inflates the score.
     """
     system = as_system(target)
     lines = system.prompt.splitlines()
-    region_end = next(
-        (i for i, line in enumerate(lines) if _PLACEHOLDER_RE.search(line)), len(lines)
-    )
-    region, tail = lines[:region_end], lines[region_end:]
-    if len(region) < 4:
+    candidates = [i for i, line in enumerate(lines) if not _PLACEHOLDER_RE.search(line)]
+    has_inputs = len(candidates) < len(lines)
+    if len(candidates) < 4:
         return []
     mutants: List[Mutant] = []
     for frac in (0.5, 0.75):
-        keep = max(1, int(len(region) * frac))
-        if keep >= len(region):
+        keep = max(1, int(len(candidates) * frac))
+        if keep >= len(candidates):
             continue
-        mutated = "\n".join(region[:keep] + tail)
-        dropped = len(region) - keep
-        if tail:
-            description = (
-                f"truncated prompt — dropped the last {dropped} of {len(region)} "
-                "instruction lines above the input block"
-            )
-        else:
-            description = (
-                f"truncated prompt — dropped the last {dropped} of {len(lines)} lines"
-            )
+        dropped = set(candidates[keep:])
+        mutated = "\n".join(line for i, line in enumerate(lines) if i not in dropped)
+        cut = [lines[i].strip() for i in sorted(dropped) if lines[i].strip()]
+        noun = "instruction lines (input lines kept)" if has_inputs else "lines"
+        description = (
+            f"truncated prompt — dropped the last {len(dropped)} of "
+            f"{len(candidates) if has_inputs else len(lines)} {noun}, from "
+            f'"{_truncate(cut[0] if cut else "", 40)}"'
+        )
         mutants.append(
             Mutant(
                 operator="truncate_prompt",
                 description=description,
                 system=system.with_prompt(mutated),
+                focus="\n".join(cut),
             )
         )
     return mutants
 
 
-# Markers that signal a few-shot example/demonstration block.
-_EXAMPLE_MARKER = re.compile(
-    r"(?im)(\bexample\b|input:|output:|^\s*q:|^\s*a:|user:|assistant:)"
+# A demonstration line: "Label: content" at the start of a line.
+_LABEL_LINE = re.compile(
+    r"^[ \t]*([A-Za-z][A-Za-z ]{0,24}?)[ \t]*:[ \t]*\S", re.MULTILINE
 )
+# Known input/output label pairs of a demonstration.
+_IO_PAIRS = (
+    ({"input"}, {"output"}),
+    ({"q", "question"}, {"a", "answer"}),
+    ({"user", "human", "customer"}, {"assistant", "ai", "agent", "bot"}),
+)
+
+
+def _demo_labels(block: str) -> "frozenset[str]":
+    return frozenset(m.group(1).strip().lower() for m in _LABEL_LINE.finditer(block))
 
 
 def drop_few_shot_example(target: Target) -> List[Mutant]:
     """Remove a single few-shot example block at a time.
 
     For few-shot prompts: drops one demonstration so you can see whether your
-    evals notice degraded in-context guidance.
+    evals notice degraded in-context guidance. A block counts as a
+    demonstration only if it is SHAPED like one: at least two "Label: content"
+    lines, whose label set either repeats across blocks (Review:/Label: ...
+    Review:/Label:) or is a known input/output pair (Input/Output, Q/A,
+    User/Assistant). A keyword match ("Format your output: ...", "For example,
+    ...") used to drop instructions and miss the real demos. The rest of the
+    prompt is left byte-identical (it used to be re-joined and stripped).
     """
     system = as_system(target)
-    blocks = re.split(r"\n\s*\n", system.prompt)
-    if len(blocks) < 2:
+    prompt = system.prompt
+    # Blocks separated by blank lines, as (start, end) spans in the original.
+    spans = [m.span() for m in re.finditer(r"[^\n]+(?:\n(?![ \t]*\n)[^\n]*)*", prompt)]
+    spans = [(s, e) for s, e in spans if prompt[s:e].strip()]
+    if len(spans) < 2:
         return []
+    labels = [_demo_labels(prompt[s:e]) for s, e in spans]
+    counts: Dict[frozenset, int] = {}
+    for lb in labels:
+        if len(lb) >= 2:
+            counts[lb] = counts.get(lb, 0) + 1
+
+    def is_demo(lb: "frozenset[str]") -> bool:
+        if len(lb) < 2:
+            return False
+        if counts.get(lb, 0) >= 2:
+            return True
+        return any(lb & ins and lb & outs for ins, outs in _IO_PAIRS)
+
     mutants: List[Mutant] = []
-    for i, block in enumerate(blocks):
-        if not _EXAMPLE_MARKER.search(block):
+    for (s, e), lb in zip(spans, labels):
+        if not is_demo(lb):
             continue
-        remaining = blocks[:i] + blocks[i + 1 :]
-        mutated = "\n\n".join(remaining).strip()
+        block = prompt[s:e]
+        # Remove the block and the blank-line separator AFTER it (or before it,
+        # for the last block); nothing else changes.
+        after = re.match(r"\n[ \t]*\n+", prompt[e:])
+        if after:
+            mutated = prompt[:s] + prompt[e + after.end() :]
+        else:
+            before = re.search(r"\n[ \t]*\n+\Z", prompt[:s])
+            cut = before.start() if before else s
+            mutated = prompt[:cut] + prompt[e:]
         mutants.append(
             Mutant(
                 operator="drop_few_shot_example",
                 description=f'dropped example block: "{_truncate(block.strip())}"',
                 system=system.with_prompt(mutated),
+                focus=block.strip(),
             )
         )
     return mutants
@@ -396,35 +527,138 @@ def remove_emphasis(target: Target) -> List[Mutant]:
     """
     system = as_system(target)
     prompt = system.prompt
-    mutated = re.sub(r"\*\*(.+?)\*\*", r"\1", prompt)
-    mutated = re.sub(r"__(.+?)__", r"\1", mutated)
+    removed: List[str] = []
+
+    def unbold(m: "re.Match[str]") -> str:
+        inner = m.group(2)
+        # __init__ / __name__ are identifiers, not bold text.
+        if m.group(1) == "__" and re.fullmatch(r"[a-z_][a-z0-9_]*", inner):
+            return m.group(0)
+        removed.append(f"{m.group(1)}bold{m.group(1)}")
+        return inner
+
+    mutated = re.sub(r"(\*\*|__)(?=\S)(.+?)(?<=\S)\1", unbold, prompt)
+
+    # Label markers: UPPERCASE only, followed by ":" or "!" (the old
+    # case-insensitive match deleted "Note that ..." / "Important details").
+    # Indentation and bullets stay; blank lines are never touched.
+    def unlabel(m: "re.Match[str]") -> str:
+        removed.append(f"{m.group(2)}:")
+        return m.group(1)
+
     mutated = re.sub(
-        r"(?im)^\s*(IMPORTANT|CRITICAL|NOTE|WARNING|ATTENTION)\b:?\s*", "", mutated
+        r"(?m)^([ \t]*(?:[-*+][ \t]+)?)(IMPORTANT|CRITICAL|NOTE|WARNING|ATTENTION)"
+        r"[ \t]*[:!][ \t]*",
+        unlabel,
+        mutated,
+    )
+
+    # ALL-CAPS emphasis ("NEVER share", "you MUST") -> normal case. YES/NO are
+    # left alone: they're usually required output tokens, not emphasis.
+    def uncaps(m: "re.Match[str]") -> str:
+        word = m.group(0)
+        removed.append(f'"{word}"')
+        lowered = word.lower()
+        before = m.string[: m.start()]
+        at_start = not before.strip() or re.search(
+            r"(?:[.!?:]|^[ \t]*[-*+])[ \t]*\Z", before, re.M
+        )
+        return lowered[:1].upper() + lowered[1:] if at_start else lowered
+
+    mutated = re.sub(
+        r"\b(?:DO NOT|DON'T|NEVER|ALWAYS|MUST|NOT|ONLY|CANNOT|REQUIRED|STRICTLY"
+        r"|IMPORTANT|CRITICAL)\b",
+        uncaps,
+        mutated,
     )
     if mutated == prompt:
         return []
+    counts: Dict[str, int] = {}
+    for r in removed:
+        counts[r] = counts.get(r, 0) + 1
+    summary = ", ".join(f"{k} x{v}" if v > 1 else k for k, v in counts.items())
+    changed = [a for a, b in zip(prompt.splitlines(), mutated.splitlines()) if a != b]
     return [
         Mutant(
             operator="remove_emphasis",
-            description="removed emphasis cues (bold / IMPORTANT / CRITICAL markers)",
+            description=f"removed emphasis: {_truncate(summary, 60)}",
             system=system.with_prompt(mutated),
+            focus="\n".join(line.strip() for line in changed),
         )
     ]
 
 
-# Words that signal a numeric *bound* in an instruction, split by direction so a
-# threshold is loosened the right way (an upper bound goes up, a lower bound down).
-_UPPER_BOUND = re.compile(
-    r"\b(at most|no more than|up to|maximum|max|fewer than|less than|"
-    r"no longer than|within|under|below|limit(?:ed)? to)\b",
-    re.IGNORECASE,
-)
-_LOWER_BOUND = re.compile(
-    r"\b(at least|no fewer than|no less than|minimum|min|more than|"
-    r"greater than|over|above)\b",
-    re.IGNORECASE,
-)
-_THRESHOLD_WINDOW = 40  # chars around a number to look for a bound word
+# A numeric BOUND is decided by the phrase attached to the number — directly
+# before it ("at most 3", "under 50", "limit it to 3") or directly after it
+# ("3 or fewer", "50 words max") — not by any bound word within 40 chars. The
+# old window read "no fewer than 3" as an UPPER bound (it contains "fewer
+# than") and tightened it to 6, and read "at least 2 and at most 4" as one bound.
+# Negated compounds are checked first.
+_BOUND_BEFORE = [
+    (re.compile(r"\b(?:no|not)\s+(?:fewer|less)\s+than\s+\Z", re.I), "lower"),
+    (re.compile(r"\b(?:no|not)\s+(?:more|greater|longer)\s+than\s+\Z", re.I), "upper"),
+    (
+        re.compile(
+            r"\b(?:at\s+least|minimum(?:\s+of)?|min\.?|more\s+than|greater\s+than"
+            r"|over|above|exceed(?:ing)?)\s+\Z",
+            re.I,
+        ),
+        "lower",
+    ),
+    (
+        re.compile(
+            r"\b(?:at\s+most|up\s+to|maximum(?:\s+of)?|max\.?|fewer\s+than|less\s+than"
+            r"|within|under|below|limit(?:ed)?\s+(?:\w+\s+)?to)\s+\Z",
+            re.I,
+        ),
+        "upper",
+    ),
+]
+_BOUND_AFTER = [
+    (
+        re.compile(
+            r"\A\s+(?:\w+\s+)?(?:or\s+(?:fewer|less)|at\s+most|max(?:imum)?)\b", re.I
+        ),
+        "upper",
+    ),
+    (
+        re.compile(r"\A\s+(?:\w+\s+)?(?:or\s+more|at\s+least|min(?:imum)?)\b", re.I),
+        "lower",
+    ),
+]
+# One number token: grouped thousands ("1,000") or a decimal ("0.5") is ONE
+# number (the old \b\d+\b turned "0.5" into "0.10" and "1,000" into "1,1").
+_NUMBER = re.compile(r"(?<![\w.,])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?![\w]|[.,]\d)")
+
+
+def _bound_direction(prompt: str, start: int, end: int) -> "str | None":
+    line_start = prompt.rfind("\n", 0, start) + 1
+    line_end = prompt.find("\n", end)
+    before = prompt[line_start:start]
+    after = prompt[end : line_end if line_end != -1 else len(prompt)]
+    for rx, direction in _BOUND_BEFORE:
+        if rx.search(before):
+            return direction
+    for rx, direction in _BOUND_AFTER:
+        if rx.search(after):
+            return direction
+    return None
+
+
+def _loosen(token: str, direction: str) -> str:
+    grouped = "," in token
+    value = float(token.replace(",", "")) if "." in token else int(token.replace(",", ""))
+    if direction == "upper":
+        new = value * 2 if value > 0 else 1
+    elif isinstance(value, int):
+        new = value // 2 if value > 1 else 0
+    else:
+        new = value / 2
+    if grouped:
+        return f"{int(new):,}"
+    if isinstance(new, float):
+        return f"{new:g}"
+    return str(new)
 
 
 def weaken_numeric_threshold(target: Target) -> List[Mutant]:
@@ -433,37 +667,30 @@ def weaken_numeric_threshold(target: Target) -> List[Mutant]:
     An upper bound is increased ("at most 3" -> "at most 6"), a lower bound is
     decreased ("at least 5" -> "at least 2"). Models a common silent regression —
     a limit that got loosened — that output-grading and reference-free evals
-    usually say nothing about. Only fires on a number that sits near a bound word,
-    so it skips versions, years, and other incidental digits.
+    usually say nothing about. Only fires on a number with a bound phrase
+    attached (see ``_BOUND_BEFORE`` / ``_BOUND_AFTER``), so it skips versions,
+    years, list markers ("1. Keep ...") and other incidental digits.
     """
     system = as_system(target)
     prompt = system.prompt
     mutants: List[Mutant] = []
-    for match in re.finditer(r"\b\d+\b", prompt):
+    for match in _NUMBER.finditer(prompt):
         start, end = match.span()
-        window = (
-            prompt[max(0, start - _THRESHOLD_WINDOW) : start]
-            + " "
-            + prompt[end : end + _THRESHOLD_WINDOW]
-        )
-        upper = _UPPER_BOUND.search(window)
-        lower = _LOWER_BOUND.search(window)
-        if not (upper or lower):
+        direction = _bound_direction(prompt, start, end)
+        if direction is None:
             continue
-        n = int(match.group(0))
-        if lower and not upper:
-            new = n // 2 if n > 1 else 0  # loosen a lower bound -> decrease
-        else:
-            new = n * 2 if n > 0 else 1  # loosen an upper bound -> increase
-        if new == n:
+        old = match.group(0)
+        new = _loosen(old, direction)
+        if new == old:
             continue
-        mutated = prompt[:start] + str(new) + prompt[end:]
+        mutated = prompt[:start] + new + prompt[end:]
         snippet = _context_snippet(prompt, start, end)
         mutants.append(
             Mutant(
                 operator="weaken_numeric_threshold",
-                description=f"loosened threshold {n} -> {new} (near: {snippet})",
+                description=f"loosened threshold {old} -> {new} (near: {snippet})",
                 system=system.with_prompt(mutated),
+                focus=_line_at(prompt, start),
             )
         )
     return mutants
@@ -493,6 +720,7 @@ def drop_context_doc(target: Target) -> List[Mutant]:
                 description=f'dropped retrieved doc #{i + 1}: "{_truncate(doc)}"',
                 system=system.replace(context=tuple(remaining)),
                 target="context",
+                focus=str(doc),
             )
         )
     return mutants
@@ -503,14 +731,19 @@ def clear_context(target: Target) -> List[Mutant]:
     system = as_system(target)
     if not system.context:
         return []
+    docs = list(system.context)
     return [
         Mutant(
             operator="clear_context",
+            # Names the first doc so an accepted signature doesn't survive a
+            # completely different context.
             description=(
-                f"cleared all retrieved context (dropped {len(system.context)} doc(s))"
+                f"cleared all retrieved context (dropped {len(docs)} doc(s), "
+                f'starting "{_truncate(docs[0], 40)}")'
             ),
             system=system.replace(context=()),
             target="context",
+            focus="\n".join(str(d) for d in docs),
         )
     ]
 
@@ -522,17 +755,45 @@ _IRRELEVANT_DOC = (
 )
 
 
-def _corrupt_doc(doc: str) -> "str | None":
-    """Deterministic, rule-based corruption: change the first number, else flip a
-    polarity verb. Returns a plausible-but-wrong doc, or None if uncorruptible."""
-    m = re.search(r"\d+", doc)
+# A FACT number: standalone, not glued to letters/hyphens/underscores — so an
+# id like "doc-1", "B2B", "v2" or "ORD-9" is never the thing corrupted (changing
+# "doc-1" to "doc-2" altered a label, not a fact, so the mutant was inert).
+_FACT_NUMBER = re.compile(r"(?<![\w\-])\d+(?:\.\d+)?(?![\w\-])")
+_POLARITY_VERB = re.compile(
+    r"\b(is|are|was|were|can|will|does|do|should|must)\b(?!['’]t)", re.IGNORECASE
+)
+
+
+def _corrupt_doc(doc: str) -> "tuple[str, str, str] | None":
+    """Deterministic, rule-based corruption of ONE fact. Returns
+    ``(corrupted_doc, before, after)`` — the edited token, for the description —
+    or None if nothing is safely corruptible.
+
+    1. Change the first FACT number (not an id; see ``_FACT_NUMBER``).
+    2. Else flip a polarity verb: remove an existing "not" ("is not open" ->
+       "is open") or add one ("is open" -> "is not open"). Never "do not not"
+       or "can not't".
+    """
+    m = _FACT_NUMBER.search(doc)
     if m:
-        n = int(m.group(0))
-        wrong = str(n + 1 if n != 0 else 9)
-        return doc[: m.start()] + wrong + doc[m.end() :]
-    flip = re.search(r"\b(is|are|was|were|can|will|does|do)\b", doc)
-    if flip:
-        return doc[: flip.end()] + " not" + doc[flip.end() :]
+        old = m.group(0)
+        if "." in old:
+            new = f"{float(old) + 1:g}"
+        else:
+            n = int(old)
+            new = str(n + 1 if n != 0 else 9)
+        return doc[: m.start()] + new + doc[m.end() :], old, new
+    for verb in _POLARITY_VERB.finditer(doc):
+        rest = doc[verb.end() :]
+        negated = re.match(r"\s+not\b", rest, re.IGNORECASE)
+        if negated:
+            before = verb.group(0) + negated.group(0)
+            return doc[: verb.end()] + rest[negated.end() :], before, verb.group(0)
+        return (
+            doc[: verb.end()] + " not" + rest,
+            verb.group(0),
+            verb.group(0) + " not",
+        )
     return None
 
 
@@ -547,16 +808,25 @@ def corrupt_context_doc(target: Target) -> List[Mutant]:
     docs = list(system.context)
     mutants: List[Mutant] = []
     for i, doc in enumerate(docs):
-        bad = _corrupt_doc(doc)
-        if bad is None or bad == doc:
+        if not isinstance(doc, str):
+            continue  # opaque doc (dict/object): nothing safe to corrupt in place
+        corrupted = _corrupt_doc(doc)
+        if corrupted is None or corrupted[0] == doc:
             continue
+        bad, before, after = corrupted
         new = docs[:i] + [bad] + docs[i + 1 :]
         mutants.append(
             Mutant(
                 operator="corrupt_context_doc",
-                description=f'corrupted retrieved doc #{i + 1}: "{_truncate(bad)}"',
+                # Name the edited token: a change deep in a long doc was
+                # invisible in a truncated preview of the doc.
+                description=(
+                    f'corrupted retrieved doc #{i + 1}: "{before}" -> "{after}" in '
+                    f'"{_truncate(doc, 50)}"'
+                ),
                 system=system.replace(context=tuple(new)),
                 target="context",
+                focus=doc,
             )
         )
     return mutants
@@ -570,15 +840,21 @@ def swap_context_doc(target: Target) -> List[Mutant]:
     docs = list(system.context)
     mutants: List[Mutant] = []
     for i in range(len(docs)):
-        if docs[i] == _IRRELEVANT_DOC:
+        # A string stand-in for a structured (dict) doc would change its TYPE —
+        # a guaranteed crash/kill, not a bad retrieval hit.
+        if not isinstance(docs[i], str) or docs[i] == _IRRELEVANT_DOC:
             continue
         new = docs[:i] + [_IRRELEVANT_DOC] + docs[i + 1 :]
         mutants.append(
             Mutant(
                 operator="swap_context_doc",
-                description=f"swapped retrieved doc #{i + 1} for an irrelevant doc",
+                description=(
+                    f'swapped retrieved doc #{i + 1} ("{_truncate(docs[i], 40)}") '
+                    "for an irrelevant doc"
+                ),
                 system=system.replace(context=tuple(new)),
                 target="context",
+                focus=docs[i],
             )
         )
     return mutants
@@ -595,9 +871,13 @@ def shuffle_context(target: Target) -> List[Mutant]:
     return [
         Mutant(
             operator="shuffle_context",
-            description=f"reversed the order of {len(system.context)} retrieved docs",
+            description=(
+                f"reversed the order of {len(system.context)} retrieved docs "
+                f'(first was "{_truncate(system.context[0], 40)}")'
+            ),
             system=system.replace(context=reordered),
             target="context",
+            focus="\n".join(str(d) for d in system.context),
         )
     ]
 
@@ -617,6 +897,7 @@ def duplicate_context_doc(target: Target) -> List[Mutant]:
                 description=f'duplicated retrieved doc #{i + 1}: "{_truncate(doc)}"',
                 system=system.replace(context=tuple(new)),
                 target="context",
+                focus=str(doc),
             )
         )
     return mutants
@@ -630,20 +911,29 @@ def truncate_context_doc(target: Target) -> List[Mutant]:
     docs = list(system.context)
     mutants: List[Mutant] = []
     for i, doc in enumerate(docs):
-        words = doc.split()
+        if not isinstance(doc, str):
+            continue  # a structured doc can't be clipped as text
+        words = list(re.finditer(r"\S+", doc))
         if len(words) < 6:
             continue
         keep = max(1, len(words) // 2)
-        clipped = " ".join(words[:keep])
+        # Cut at the character offset where word #keep ends, so the kept half
+        # keeps its own line breaks (re-joining words reflowed the whole doc).
+        clipped = doc[: words[keep - 1].end()]
         if clipped == doc:
             continue
         new = docs[:i] + [clipped] + docs[i + 1 :]
+        cut = " ".join(w.group(0) for w in words[keep:])
         mutants.append(
             Mutant(
                 operator="truncate_context_doc",
-                description=f"truncated retrieved doc #{i + 1} to its first {keep} words",
+                description=(
+                    f"truncated retrieved doc #{i + 1} to its first {keep} words "
+                    f'(cut "{_truncate(cut, 40)}")'
+                ),
                 system=system.replace(context=tuple(new)),
                 target="context",
+                focus=cut,
             )
         )
     return mutants
@@ -701,6 +991,19 @@ def downgrade_model(target: Target) -> List[Mutant]:
 # agent pipelines consume system.tools via their own run(system, case).
 
 _IRRELEVANT_TOOL = 'tool_result: {"status": "ok", "data": "unrelated"}'
+_IRRELEVANT_TOOL_DICT = {"status": "ok", "data": "unrelated"}
+
+
+def _same_type(original: Any, as_text: str, as_dict: dict) -> Any:
+    """A stand-in of the SAME type as ``original`` (a string for a string, a
+    dict for a dict), or None. Swapping a dict tool output for a string changed
+    its type — a guaranteed crash/kill in the agent, not the fault being
+    modeled."""
+    if isinstance(original, str):
+        return as_text
+    if isinstance(original, dict):
+        return dict(as_dict)
+    return None
 
 
 def drop_tool_output(target: Target) -> List[Mutant]:
@@ -718,9 +1021,23 @@ def drop_tool_output(target: Target) -> List[Mutant]:
                 description=f'dropped tool output #{i + 1}: "{_truncate(str(tools[i]))}"',
                 system=system.replace(tools=tuple(new)),
                 target="tools",
+                focus=str(tools[i]),
             )
         )
     return mutants
+
+
+def _corrupt_tool(tool: Any) -> "tuple[Any, str, str] | None":
+    """Corrupt one fact in a tool output, keeping its type: a string via
+    ``_corrupt_doc``; a dict by bumping its first numeric field."""
+    if isinstance(tool, str):
+        return _corrupt_doc(tool)
+    if isinstance(tool, dict):
+        for key, value in tool.items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                bumped = value + 1 if value != 0 else 9
+                return {**tool, key: bumped}, f"{key}: {value}", f"{key}: {bumped}"
+    return None
 
 
 def corrupt_tool_output(target: Target) -> List[Mutant]:
@@ -731,16 +1048,21 @@ def corrupt_tool_output(target: Target) -> List[Mutant]:
     tools = list(system.tools)
     mutants: List[Mutant] = []
     for i, tool in enumerate(tools):
-        bad = _corrupt_doc(str(tool))
-        if bad is None or bad == str(tool):
+        corrupted = _corrupt_tool(tool)
+        if corrupted is None or corrupted[0] == tool:
             continue
+        bad, before, after = corrupted
         new = tools[:i] + [bad] + tools[i + 1 :]
         mutants.append(
             Mutant(
                 operator="corrupt_tool_output",
-                description=f'corrupted tool output #{i + 1}: "{_truncate(bad)}"',
+                description=(
+                    f'corrupted tool output #{i + 1}: "{before}" -> "{after}" in '
+                    f'"{_truncate(str(tool), 50)}"'
+                ),
                 system=system.replace(tools=tuple(new)),
                 target="tools",
+                focus=str(tool),
             )
         )
     return mutants
@@ -754,15 +1076,20 @@ def swap_tool_output(target: Target) -> List[Mutant]:
     tools = list(system.tools)
     mutants: List[Mutant] = []
     for i in range(len(tools)):
-        if tools[i] == _IRRELEVANT_TOOL:
+        stand_in = _same_type(tools[i], _IRRELEVANT_TOOL, _IRRELEVANT_TOOL_DICT)
+        if stand_in is None or tools[i] == stand_in:
             continue
-        new = tools[:i] + [_IRRELEVANT_TOOL] + tools[i + 1 :]
+        new = tools[:i] + [stand_in] + tools[i + 1 :]
         mutants.append(
             Mutant(
                 operator="swap_tool_output",
-                description=f"swapped tool output #{i + 1} for an irrelevant result",
+                description=(
+                    f'swapped tool output #{i + 1} ("{_truncate(str(tools[i]), 40)}") '
+                    "for an irrelevant result"
+                ),
                 system=system.replace(tools=tuple(new)),
                 target="tools",
+                focus=str(tools[i]),
             )
         )
     return mutants
@@ -773,6 +1100,7 @@ def swap_tool_output(target: Target) -> List[Mutant]:
 # agent that trusts the transport status proceeds as if the call worked. Only a
 # declared failure contract (e.g. tracelint's failure_when) catches it.
 _DENIED_TOOL_OUTPUT = '{"status": "declined", "reason": "insufficient_funds"}'
+_DENIED_TOOL_OUTPUT_DICT = {"status": "declined", "reason": "insufficient_funds"}
 
 
 def deny_tool_output(target: Target) -> List[Mutant]:
@@ -790,18 +1118,20 @@ def deny_tool_output(target: Target) -> List[Mutant]:
     tools = list(system.tools)
     mutants: List[Mutant] = []
     for i in range(len(tools)):
-        if tools[i] == _DENIED_TOOL_OUTPUT:
+        stand_in = _same_type(tools[i], _DENIED_TOOL_OUTPUT, _DENIED_TOOL_OUTPUT_DICT)
+        if stand_in is None or tools[i] == stand_in:
             continue
-        new = tools[:i] + [_DENIED_TOOL_OUTPUT] + tools[i + 1 :]
+        new = tools[:i] + [stand_in] + tools[i + 1 :]
         mutants.append(
             Mutant(
                 operator="deny_tool_output",
                 description=(
                     f"tool output #{i + 1} returned a domain failure "
-                    "(HTTP 200 + status:declined)"
+                    f'(HTTP 200 + status:declined) instead of "{_truncate(str(tools[i]), 40)}"'
                 ),
                 system=system.replace(tools=tuple(new)),
                 target="tools",
+                focus=str(tools[i]),
             )
         )
     return mutants
@@ -944,11 +1274,13 @@ def generate_mutants(
     (``{{var}}`` / ``{var}`` / ``${VAR}``) is dropped: the model would never see
     the input, so every eval fails — a guaranteed kill that measures nothing.
     """
+    from muteval.severity import severity_of, severity_rank
+
     original = as_system(target)
     original_key = original.key()
     inputs = _placeholders(original.prompt)
     selected = operators if operators is not None else list(OPERATORS.keys())
-    seen = set()
+    index: Dict[tuple, int] = {}
     mutants: List[Mutant] = []
     for item in selected:
         if callable(item):
@@ -961,12 +1293,21 @@ def generate_mutants(
                 )
         for mutant in op(original):
             mkey = mutant.system.key()
-            # Skip no-ops (identical to the original) and exact duplicates.
-            if mkey == original_key or mkey in seen:
+            if mkey == original_key:  # a no-op
                 continue
-            seen.add(mkey)
             if inputs and not inputs <= _placeholders(mutant.system.prompt):
                 continue
+            if mkey in index:
+                # The same mutated system from two operators (dropping the only
+                # doc == clearing the context): keep the MORE severe framing,
+                # rather than whichever operator happened to run first.
+                pos = index[mkey]
+                if severity_rank(severity_of(mutant)) < severity_rank(
+                    severity_of(mutants[pos])
+                ):
+                    mutants[pos] = mutant
+                continue
+            index[mkey] = len(mutants)
             mutants.append(mutant)
     return filter_mutants(original.prompt, mutants, scope)
 
@@ -975,16 +1316,28 @@ def generate_mutants(
 
 
 def _is_instruction_line(stripped: str) -> bool:
-    if len(stripped) < 8:
+    """Is this line an instruction (droppable / swappable / paraphrasable)?
+    Headings ("## Rules", "Rules:") and short lead-ins ("Follow these steps:")
+    aren't — dropping one removes a label, not a capability. A longer line
+    ending in ":" ("Classify the sentiment of the review below:") still is."""
+    if len(stripped) < 8 or stripped.startswith("#"):
+        return False
+    if stripped.endswith(":") and len(stripped.split()) < 4:
         return False
     bullet = re.match(r"^([-*+]|\d+[.)])\s+", stripped)
     return bool(bullet) or stripped.endswith((".", ":", "!"))
 
 
 # Input placeholders a prompt template fills in: {{var}} (mustache / jinja /
-# promptfoo), {var} (str.format), ${VAR} (shell / JS template).
+# promptfoo); {var}, {0}, {}, {case.q}, {q!r}, {q:>10} (str.format); ${VAR} /
+# $VAR (shell / JS / string.Template); %(q)s / %s (%-formatting).
 _PLACEHOLDER_RE = re.compile(
-    r"\{\{[^{}]+\}\}|\{[A-Za-z_][A-Za-z0-9_]*\}|\$\{[A-Za-z_][A-Za-z0-9_]*\}"
+    r"\{\{[^{}]+\}\}"
+    r"|\{(?:[A-Za-z_][\w.\[\]]*|\d*)(?:![rsa])?(?::[^{}]*)?\}"
+    r"|\$\{[A-Za-z_]\w*\}"
+    r"|\$[A-Za-z_]\w*"
+    r"|%\([A-Za-z_]\w*\)[sdrifx]"
+    r"|%[sd]\b"
 )
 
 
@@ -993,10 +1346,12 @@ def _placeholders(text: str) -> "set[str]":
 
 
 # What may precede an IMPERATIVE "do not": the start of the text / a line / a
-# bullet, sentence punctuation, or an addressee ("you", "you must", "please").
+# bullet, sentence or clause punctuation ("If unsure, do not guess"), "please" /
+# "then", optionally followed by an emphasis marker ("- **Do not** reveal").
+# NOT a bare "you": "You do not have access to X" describes, it doesn't command.
 _IMPERATIVE_LEAD = re.compile(
-    r"(?:(?:\A|\n)[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:;][ \t]+|[\"'(][ \t]*"
-    r"|\b(?:you(?:[ \t]+(?:must|should))?|please)[ \t]+)\Z",
+    r"(?:(?:\A|\n)[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:;,][ \t]+|[\"'(][ \t]*"
+    r"|\b(?:please|then)[ \t]+)(?:\*\*|__|\*|_)?\Z",
     re.IGNORECASE,
 )
 _LEADING_BULLET = re.compile(r"\A[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?")
@@ -1028,6 +1383,8 @@ def _tidy_line(rewritten: str, original: str) -> str:
     body = rewritten[len(bullet) :] if rewritten.startswith(bullet) else rewritten
     body = re.sub(r"[ \t]{2,}", " ", body)
     body = re.sub(r"[ \t]+([,.;:!?])", r"\1", body)
+    # "Respond in JSON, please." minus "please" -> "Respond in JSON."
+    body = re.sub(r"[,;]([.!?])", r"\1", body)
     body = body.lstrip(" \t,;:")
     if orig_body[:1].isupper() and body[:1].islower():
         body = body[:1].upper() + body[1:]
@@ -1045,8 +1402,44 @@ def _split_bullet(line: str) -> "tuple[str, str]":
 _SENTENCE_RE = re.compile(r"\S.*?(?:[.!?]+(?=\s|$)|$)")
 
 
+# A "sentence" ending in one of these isn't finished ("Use JSON, e.g. a list").
+_ABBREVIATION_END = re.compile(
+    r"\b(?:e\.g|i\.e|etc|vs|approx|incl|mr|mrs|ms|dr|no|fig)\.\Z", re.IGNORECASE
+)
+
+
 def _sentence_spans(body: str) -> "List[tuple[int, int]]":
-    return [m.span() for m in _SENTENCE_RE.finditer(body) if m.group(0).strip()]
+    spans: List[Tuple[int, int]] = []
+    for m in _SENTENCE_RE.finditer(body):
+        if not m.group(0).strip():
+            continue
+        if spans and _ABBREVIATION_END.search(body[spans[-1][0] : spans[-1][1]]):
+            spans[-1] = (spans[-1][0], m.end())  # continue the abbreviated sentence
+        else:
+            spans.append(m.span())
+    return spans
+
+
+def _line_at(text: str, pos: int) -> str:
+    """The (stripped) line containing ``pos`` — a mutation's severity focus."""
+    start = text.rfind("\n", 0, pos) + 1
+    end = text.find("\n", pos)
+    return text[start : end if end != -1 else len(text)].strip()
+
+
+def _in_quotes(text: str, pos: int) -> bool:
+    """Is ``pos`` inside a double-quoted literal on its line? A quoted phrase
+    ('say "I don't know"') is a required string, not an instruction to rewrite.
+    Straight quotes pair up; curly quotes open/close explicitly."""
+    line = text[text.rfind("\n", 0, pos) + 1 : pos]
+    if line.count('"') % 2 == 1:
+        return True
+    return line.count("“") > line.count("”")
+
+
+def _apostrophes(escaped: str) -> str:
+    """Let an escaped pattern's apostrophe match both ' and ’ ("Don’t")."""
+    return escaped.replace("'", "['’]").replace("\\'", "['’]")
 
 
 def _context_snippet(text: str, start: int, end: int, width: int = 24) -> str:
@@ -1056,6 +1449,6 @@ def _context_snippet(text: str, start: int, end: int, width: int = 24) -> str:
     return _truncate(snippet, 60)
 
 
-def _truncate(text: str, limit: int = 70) -> str:
-    text = " ".join(text.split())
+def _truncate(text: Any, limit: int = 70) -> str:
+    text = " ".join(str(text).split())  # docs / tool outputs may be dicts
     return text if len(text) <= limit else text[: limit - 1] + "…"

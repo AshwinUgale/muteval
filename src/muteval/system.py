@@ -71,7 +71,11 @@ class System:
         """A hashable signature used to dedupe mutants and detect no-ops."""
         return (
             self.prompt,
-            self.context,
+            # Structured docs (dicts) are unhashable: use their repr so mutant
+            # de-duplication doesn't crash on a context of dicts.
+            None
+            if self.context is None
+            else tuple(d if isinstance(d, str) else repr(d) for d in self.context),
             repr(self.tools),
             self.model,
             # Sorted by repr: extra may mix key types ({1: .., "a": ..}), which

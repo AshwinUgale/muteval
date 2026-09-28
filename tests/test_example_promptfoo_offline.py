@@ -44,7 +44,12 @@ def test_demo_survivor_is_the_uncovered_language_rule(monkeypatch):
     result = _run(monkeypatch)
     gaps = result.real_survivors
     assert gaps, "expected at least one real survivor (the uncovered rule)"
-    # The uncovered rule is the language one; it must surface as a HIGH survivor.
+    # The uncovered rule is the language one; it must surface as a survivor.
     descs = " ".join(o.mutant.description for o in gaps).lower()
     assert "reply in english" in descs
-    assert any(o.severity == "high" for o in result.high_severity_survivors)
+    # A language rule isn't a safety/correctness rule: MEDIUM, not HIGH. (It
+    # used to rank HIGH only because its description contains "Always" — the
+    # modal word every weakened/dropped rule carries.)
+    lang = [o for o in gaps if "reply in english" in o.mutant.description.lower()]
+    assert all(o.severity == "medium" for o in lang)
+    assert result.high_severity_survivors == []

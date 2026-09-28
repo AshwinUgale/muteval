@@ -36,23 +36,38 @@ class VerifiedFix:
     killed_case: Any = None  # a case on which the candidate catches the mutant
 
 
+def _runs(config) -> int:
+    return max(1, int(getattr(config, "runs_per_mutant", 1) or 1))
+
+
 def _passes_all(config, system, candidate) -> bool:
-    """True iff the candidate passes on EVERY case for this system."""
-    for case in config.cases:
-        out = config.invoke(system, case)
-        if not coerce_outcome(candidate(out, case)).passed:
-            return False
+    """True iff the candidate passes on EVERY case for this system, on every
+    one of ``runs_per_mutant`` runs (a fix that reddens the baseline even
+    sometimes is not a fix)."""
+    for _ in range(_runs(config)):
+        for case in config.cases:
+            out = config.invoke(system, case)
+            if not coerce_outcome(candidate(out, case)).passed:
+                return False
     return True
 
 
 def _first_catch(config, system, candidate):
-    """Return the first case on which the candidate FAILS (catches a regression),
-    or None if it passes everywhere."""
-    for case in config.cases:
-        out = config.invoke(system, case)
-        if not coerce_outcome(candidate(out, case)).passed:
-            return case
-    return None
+    """The first case on which the candidate FAILS (catches the regression) —
+    only if it does so on a strict MAJORITY of ``runs_per_mutant`` runs, the
+    same rule that kills a mutant. One lucky catch on a noisy system used to
+    "verify" a candidate against a mutant identical to the baseline."""
+    n = _runs(config)
+    hits = 0
+    first = None
+    for _ in range(n):
+        for case in config.cases:
+            out = config.invoke(system, case)
+            if not coerce_outcome(candidate(out, case)).passed:
+                hits += 1
+                first = case if first is None else first
+                break
+    return first if hits * 2 > n else None
 
 
 def verify_fix(config, mutant_system, candidate) -> tuple[bool, bool]:
@@ -154,14 +169,22 @@ def parse_specs(raw: str) -> List[EvalFn]:
 
 def _sample_outputs(config, survivor):
     """The baseline vs mutant output pair to feed the generator (from the
-    survivor if captured, else computed on the first case)."""
+    survivor if captured, else the first case whose output actually CHANGED —
+    always using case 0 fed the generator two identical outputs when only a
+    later case differed)."""
     base = getattr(survivor, "baseline_output", None)
     mut = getattr(survivor, "mutant_output", None)
     if base is not None and mut is not None:
         return base, mut
     mutant = getattr(survivor, "mutant", survivor)
-    case = config.cases[0]
-    return config.invoke(config.system, case), config.invoke(mutant.system, case)
+    first = None
+    for case in config.cases:
+        pair = config.invoke(config.system, case), config.invoke(mutant.system, case)
+        if first is None:
+            first = pair
+        if pair[0] != pair[1]:
+            return pair
+    return first
 
 
 def generate_candidates(

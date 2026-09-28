@@ -7,6 +7,7 @@ context/tool/model mutations) that would kill that mutant. Operator-aware.
 
 from __future__ import annotations
 
+import json
 import re
 
 # Structural mutations imply a specific *kind* of missing eval.
@@ -52,7 +53,10 @@ def _short(s: str, n: int = 52) -> str:
 
 
 def _quoted(desc: str):
-    m = re.search(r'"([^"]{6,}?)"', desc or "")
+    """The quoted text of a 'dropped line: "..."' description — GREEDY to the
+    closing quote, so a line that itself contains quotes ('- Say "I don't
+    know" when ...') isn't cut at its first inner quote."""
+    m = re.search(r'"(.{6,})"', desc or "")
     return m.group(1).strip() if m else None
 
 
@@ -75,7 +79,12 @@ def suggest_eval(outcome) -> str:
     if op in ("drop_instruction_lines", "delete_sentences"):
         phrase = _quoted(desc)
         if phrase:
-            return f'add checks.llm_judge("the reply still follows: {_short(phrase)}")'
+            # A JSON string literal is also a valid Python one: it keeps the
+            # suggested line runnable when the phrase has quotes of its own.
+            rubric = json.dumps(
+                f"the reply still follows: {_short(phrase)}", ensure_ascii=False
+            )
+            return f"add checks.llm_judge({rubric})"
 
     if op in ("flip_negation", "weaken_modals"):
         near = _near(desc)
