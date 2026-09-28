@@ -209,7 +209,13 @@ A coverage number you can't trust is worse than none. muteval **fails closed**:
 - **Non-determinism** → strict-majority verdicts over `runs_per_mutant`, Wilson
   confidence intervals on the score, flaky-mutant flagging.
 - **Cosmetic changes** → output-diffing separates real coverage gaps from
-  "observationally unchanged" mutants.
+  "observationally unchanged" mutants. For free-text output, set `output_key=`
+  (the part that *is* the behavior, e.g. the label) and `baseline_runs=N` so
+  wording drift isn't mistaken for a behavior change.
+- **Meaning-preserving edits** (paraphrase, reorder) are reported, never scored.
+  Surviving them is healthy; a flip means an eval keys on wording.
+- **No input-deleting mutants** → a mutant that drops a `{{placeholder}}` is a
+  guaranteed kill that measures nothing, so it's never generated.
 
 In a controlled, CI-enforced experiment the mutation score rises monotonically
 with eval-suite coverage — **0% with no evals → 100% with complete coverage** —
@@ -220,9 +226,9 @@ when to distrust the number.
 ## What it can mutate (22 operators)
 
 **Prompt:** `weaken_modals`, `flip_negation`, `drop_instruction_lines`,
-`swap_adjacent_instructions`, `paraphrase_instruction`, `delete_sentences`,
-`truncate_prompt`, `drop_few_shot_example`, `remove_emphasis`,
-`weaken_numeric_threshold`.
+`delete_sentences`, `truncate_prompt`, `drop_few_shot_example`,
+`remove_emphasis`, `weaken_numeric_threshold`. Robustness (reported, not
+scored): `swap_adjacent_instructions`, `paraphrase_instruction`.
 **Retrieved context (RAG):** `drop_context_doc`, `clear_context`,
 `corrupt_context_doc`, `swap_context_doc`, `shuffle_context`,
 `duplicate_context_doc`, `truncate_context_doc`.

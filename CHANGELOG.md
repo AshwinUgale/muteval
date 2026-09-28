@@ -6,6 +6,50 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+Mutant realism: fixes found by running muteval on a real external suite (a
+promptfoo PR-scope classifier), where malformed, meaning-preserving,
+input-deleting and wording-only mutants distorted the score. **Scores can move**
+on existing suites: they get more honest, not uniformly higher or lower. Some
+survivor signatures change (`delete_sentences`, `paraphrase_instruction`,
+`truncate_prompt`); re-accept those if you use `--accept-file`.
+
+- **Robustness operators are no longer scored.** `paraphrase_instruction` and
+  `swap_adjacent_instructions` make meaning-preserving edits, so a survivor is
+  healthy, not a coverage gap. They still run; the report lists any that flipped
+  a verdict ("an eval may key on wording/order"), and JUnit marks them skipped.
+  Custom operators can opt in via `register_operator(name, fn,
+  intent="robustness")`. Both also get a LOW base severity; they previously had
+  no entry and fell back to MEDIUM, then escalated to HIGH.
+- **Mutants never delete the input.** Any mutant that drops an input
+  placeholder (`{{var}}`, `{var}`, `${VAR}`) is discarded: a guaranteed kill
+  that inflated the score. `truncate_prompt` now only truncates the instructions
+  above the input block.
+- **`delete_sentences` makes one change.** It used to collapse every newline in
+  the prompt too, and glue unpunctuated lines (headings, the input template)
+  into one "sentence". It now removes only the sentence's span. When a line held
+  a single sentence, the mutant now dedupes against `drop_instruction_lines`
+  (it was the same deletion, previously counted twice).
+- **No ungrammatical mutants.** `weaken_modals` only weakens an imperative
+  `do not` ("Do not X" → "Try not to X"), never a descriptive one ("changes do
+  not make …" → "changes try not to make …"). `paraphrase_instruction` rewrites
+  `do not` → `never` (was "avoid follow …"), `make sure` → `be sure`,
+  `ensure` → `make sure`, `in order to` → `to`, and tidies deletions (no
+  stranded "not", no leading space, the sentence's capital restored).
+  `weaken_modals` and `flip_negation` preserve case ("Do not" → "Do", "MUST" →
+  "SHOULD"). `flip_negation` still inverts descriptive rules, since that is a
+  real inversion.
+- **Behavior-level equivalence (opt-in).** New `output_key=` (the part of the
+  output that *is* the behavior, e.g. a classifier's label) and
+  `baseline_runs=N` (sample the baseline's variance; outputs only, no extra
+  judge calls). With free-text output, every survivor used to look like a real
+  gap because the wording always differs. Survivors whose output couldn't be
+  told apart from baseline noise are flagged *undetermined*. Defaults are
+  unchanged.
+- The effective-score line now uses the resolved denominator (it used
+  `evaluated`, which disagreed with the number when there were unresolved ties).
+- JSON: `robustness`, `brittle`, `noisy_cases`, `undetermined`
+  (`schema_version` → 6).
+
 ## [0.11.0] — 2026-09-16
 
 - **Accept a survivor as "untested by design".** Each survivor now shows a stable

@@ -46,6 +46,16 @@ class MutEvalConfig:
             ``kill_threshold`` to use an explicit fail-rate threshold instead.
         eval_names: Optional human labels for evals, used in reports.
         system: The full mutation target. Mutually exclusive with ``prompt``.
+        output_key: Optional ``fn(output) -> value`` picking the part of the
+            output that IS the behavior (e.g. the label of a classifier:
+            ``lambda o: o.split()[0]``). Used ONLY to decide whether a surviving
+            mutant changed behavior (inert vs real gap), never to grade. Default:
+            the whole output, where any wording change counts as a change.
+        baseline_runs: Sample the ORIGINAL system this many times (outputs only;
+            no extra judge calls) to learn its natural variance. A mutant output
+            that matches any baseline sample isn't evidence of change; on cases
+            where the baseline itself varied, an unseen output is "undetermined"
+            rather than a confirmed change. >1 disables the cache.
     """
 
     prompt: Optional[str] = None
@@ -69,6 +79,8 @@ class MutEvalConfig:
     accepted_survivors: Optional[List[str]] = None
     scope_include: Optional[str] = None
     scope_exclude: Optional[str] = None
+    output_key: Optional[Callable[[Any], Any]] = None
+    baseline_runs: int = 1
 
     def __post_init__(self) -> None:
         # Which calling convention does the user's run expect?
@@ -119,6 +131,10 @@ class MutEvalConfig:
             self.eval_names = derived
         if self.runs_per_mutant < 1:
             raise ValueError("config.runs_per_mutant must be >= 1")
+        if self.baseline_runs < 1:
+            raise ValueError("config.baseline_runs must be >= 1")
+        if self.output_key is not None and not callable(self.output_key):
+            raise ValueError("config.output_key must be a callable fn(output) -> value")
         if self.kill_threshold is not None and not 0.0 < self.kill_threshold <= 1.0:
             raise ValueError("config.kill_threshold must be None or in (0, 1]")
         if not 0.0 <= self.max_error_rate <= 1.0:

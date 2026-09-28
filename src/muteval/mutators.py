@@ -50,6 +50,12 @@ class Mutant:
             :12
         ]
 
+    @property
+    def intent(self) -> str:
+        """``"regression"`` (scored) or ``"robustness"`` (meaning-preserving,
+        reported separately, never scored). See ``OPERATOR_INTENT``."""
+        return intent_of(self.operator)
+
 
 # --- Prompt operators --------------------------------------------------------
 
@@ -68,29 +74,48 @@ _MODAL_WEAKENINGS = [
 ]
 
 
-def weaken_modals(target: Target) -> List[Mutant]:
-    """Soften strong instructions (MUST -> should, never -> rarely, ...).
+# Weakenings that only make sense addressed to an agent: "try not to" needs an
+# imperative ("Do not X" -> "Try not to X"). Applied to a descriptive clause
+# ("small changes do not make a PR out-of-scope") it yields nonsense ("small
+# changes try not to make ..."), a mutant no real edit could produce.
+_IMPERATIVE_ONLY = {"do not", "don't"}
 
-    Each replaceable occurrence becomes its own mutant so a single missed
-    instruction is isolated.
-    """
-    system = as_system(target)
+
+def _weaken(system: System, pairs, snippets: bool) -> List[Mutant]:
     prompt = system.prompt
     mutants: List[Mutant] = []
-    for strong, weak in _MODAL_WEAKENINGS:
+    for strong, weak in pairs:
         pattern = re.compile(rf"\b{re.escape(strong)}\b", re.IGNORECASE)
         for match in pattern.finditer(prompt):
             start, end = match.span()
-            mutated = prompt[:start] + weak + prompt[end:]
-            snippet = _context_snippet(prompt, start, end)
+            if strong.lower() in _IMPERATIVE_ONLY and not _is_imperative_at(
+                prompt, start
+            ):
+                continue
+            mutated = prompt[:start] + _match_case(match.group(0), weak) + prompt[end:]
+            # Description keeps the canonical (lower-case) replacement so a
+            # mutant's signature is stable across case-preservation changes.
+            description = f'weakened "{match.group(0)}" -> "{weak}"'
+            if snippets:
+                description += f" (near: {_context_snippet(prompt, start, end)})"
             mutants.append(
                 Mutant(
                     operator="weaken_modals",
-                    description=f'weakened "{match.group(0)}" -> "{weak}" (near: {snippet})',
+                    description=description,
                     system=system.with_prompt(mutated),
                 )
             )
     return mutants
+
+
+def weaken_modals(target: Target) -> List[Mutant]:
+    """Soften strong instructions (MUST -> should, never -> rarely, ...).
+
+    Each replaceable occurrence becomes its own mutant so a single missed
+    instruction is isolated. ``do not`` / ``don't`` are only weakened where they
+    are imperative (see ``_IMPERATIVE_ONLY``); letter case is preserved.
+    """
+    return _weaken(as_system(target), _MODAL_WEAKENINGS, snippets=True)
 
 
 def drop_instruction_lines(target: Target) -> List[Mutant]:
@@ -142,24 +167,38 @@ def swap_adjacent_instructions(target: Target) -> List[Mutant]:
     return mutants
 
 
+# Meaning-preserving rewrites. Every replacement must stay grammatical for any
+# verb that follows: "do not X" -> "never X" works for every X, where the old
+# "avoid" produced "avoid follow ...". "in order to" -> "to" keeps the
+# infinitive ("for" did not). Deletions are tidied afterwards (spacing, the
+# capital letter that started the sentence).
+_PARAPHRASES = [
+    # not before "not": deleting "you should" from "you should not X" leaves "not X".
+    (r"\b(?:you should|please|kindly)\b(?!\s+not\b)", ""),
+    # "make sure to X" -> "be sure to X"; "ensure X" -> "make sure X". (The old
+    # "verify that" broke on "make sure to ..." -> "verify that to ...".)
+    (r"\bmake sure\b", "be sure"),
+    (r"\bensure\b", "make sure"),
+    (r"\b(?:do not|don't)\b", "never"),
+    (r"\b(?:in order to)\b", "to"),
+    (r"\b(?:at this point|currently)\b", ""),
+    (r"\b(?:it is important to)\b", ""),
+    (r"\b(?:a number of|several)\b", "some"),
+    (r"\b(?:the fact that)\b", "that"),
+    (r"\b(?:in the event that)\b", "if"),
+    (r"\b(?:has the ability to)\b", "can"),
+]
+
+
 def paraphrase_instruction(target: Target) -> List[Mutant]:
     """Reword a single instruction line while preserving meaning.
 
     Uses simple synonym swaps and phrasing changes to expose evals that
-    depend on exact wording rather than semantic content.
+    depend on exact wording rather than semantic content. This is a ROBUSTNESS
+    operator (see ``OPERATOR_INTENT``): a survivor is the healthy outcome and a
+    kill means something reacted to wording alone, so it is never scored as a
+    coverage gap.
     """
-    _PARAPHRASES = [
-        (r"\b(?:you should|please|kindly)\b", ""),
-        (r"\b(?:make sure|ensure)\b", "verify that"),
-        (r"\b(?:do not|don't)\b", "avoid"),
-        (r"\b(?:in order to)\b", "for"),
-        (r"\b(?:at this point|now|currently)\b", ""),
-        (r"\b(?:it is important to)\b", ""),
-        (r"\b(?:a number of|several)\b", "some"),
-        (r"\b(?:the fact that)\b", "that"),
-        (r"\b(?:in the event that)\b", "if"),
-        (r"\b(?:has the ability to)\b", "can"),
-    ]
     system = as_system(target)
     lines = system.prompt.splitlines()
     mutants: List[Mutant] = []
@@ -167,11 +206,20 @@ def paraphrase_instruction(target: Target) -> List[Mutant]:
         stripped = line.strip()
         if not _is_instruction_line(stripped):
             continue
+        indent = line[: len(line) - len(line.lstrip())]
         for pattern, replacement in _PARAPHRASES:
-            new_line = re.sub(pattern, replacement, stripped, flags=re.IGNORECASE)
+
+            def _sub(m: "re.Match[str]", r: str = replacement) -> str:
+                return _match_case(m.group(0), r)
+
+            rewritten = re.sub(pattern, _sub, stripped, flags=re.IGNORECASE)
+            # The rule didn't fire: tidying alone isn't a paraphrase.
+            if rewritten == stripped:
+                continue
+            new_line = _tidy_line(rewritten, stripped)
             if new_line != stripped:
                 new_lines = lines.copy()
-                new_lines[i] = new_line
+                new_lines[i] = indent + new_line
                 mutants.append(
                     Mutant(
                         operator="paraphrase_instruction",
@@ -183,22 +231,39 @@ def paraphrase_instruction(target: Target) -> List[Mutant]:
 
 
 def delete_sentences(target: Target) -> List[Mutant]:
-    """Delete a single sentence at a time (for prose-style prompts)."""
+    """Delete a single sentence at a time (for prose-style prompts).
+
+    Only the sentence's own span is removed; every other byte of the prompt
+    (line breaks, bullets, indentation) is left as it was, so the mutant is ONE
+    change. A sentence never crosses a line break, so an unpunctuated line (a
+    heading, an input template) can't be glued onto its neighbours.
+    """
     system = as_system(target)
-    sentences = _split_sentences(system.prompt)
-    if len(sentences) < 2:
+    lines = system.prompt.splitlines()
+    spans = [
+        (i, prefix, body, s, e)
+        for i, line in enumerate(lines)
+        for prefix, body in [_split_bullet(line)]
+        for s, e in _sentence_spans(body)
+    ]
+    if len(spans) < 2:
         return []
     mutants: List[Mutant] = []
-    for i, sentence in enumerate(sentences):
-        if len(sentence.strip()) < 12:
+    for i, prefix, body, s, e in spans:
+        sentence = body[s:e]
+        if len(sentence) < 12:
             continue
-        remaining = sentences[:i] + sentences[i + 1 :]
-        mutated = " ".join(s.strip() for s in remaining).strip()
+        left, right = body[:s].rstrip(), body[e:].lstrip()
+        rest = left + (" " if left and right else "") + right
+        if rest.strip():
+            new_lines = lines[:i] + [prefix + rest] + lines[i + 1 :]
+        else:  # the line held only this sentence: drop the whole line
+            new_lines = lines[:i] + lines[i + 1 :]
         mutants.append(
             Mutant(
                 operator="delete_sentences",
-                description=f'deleted sentence: "{_truncate(sentence.strip())}"',
-                system=system.with_prompt(mutated),
+                description=f'deleted sentence: "{_truncate(sentence)}"',
+                system=system.with_prompt("\n".join(new_lines)),
             )
         )
     return mutants
@@ -221,7 +286,10 @@ def flip_negation(target: Target) -> List[Mutant]:
     """Invert a rule (do not -> do, never -> always).
 
     A meaning-inverting mutation — a far more dangerous regression than merely
-    weakening a modal, so any eval worth its salt should catch it.
+    weakening a modal, so any eval worth its salt should catch it. Unlike
+    ``weaken_modals`` this also applies to DESCRIPTIVE rules ("small changes do
+    not make a PR out-of-scope" -> "... do make ..."): that is a grammatical,
+    real inversion of the rule. Letter case is preserved.
     """
     system = as_system(target)
     prompt = system.prompt
@@ -230,7 +298,7 @@ def flip_negation(target: Target) -> List[Mutant]:
         pattern = re.compile(rf"\b{re.escape(src)}\b", re.IGNORECASE)
         for match in pattern.finditer(prompt):
             start, end = match.span()
-            mutated = prompt[:start] + dst + prompt[end:]
+            mutated = prompt[:start] + _match_case(match.group(0), dst) + prompt[end:]
             snippet = _context_snippet(prompt, start, end)
             mutants.append(
                 Mutant(
@@ -247,24 +315,41 @@ def truncate_prompt(target: Target) -> List[Mutant]:
 
     Models a prompt that got clipped — by a token budget, a bad edit, or
     context-window pressure — silently dropping its later instructions.
+
+    When the prompt carries input placeholders (``{{var}}``, ``{var}``,
+    ``${VAR}``), only the instruction region ABOVE the first placeholder line is
+    truncated. Cutting the input template itself means the model never sees the
+    input, so every eval fails: a guaranteed kill that says nothing about eval
+    coverage but still inflates the score.
     """
     system = as_system(target)
     lines = system.prompt.splitlines()
-    if len(lines) < 4:
+    region_end = next(
+        (i for i, line in enumerate(lines) if _PLACEHOLDER_RE.search(line)), len(lines)
+    )
+    region, tail = lines[:region_end], lines[region_end:]
+    if len(region) < 4:
         return []
     mutants: List[Mutant] = []
     for frac in (0.5, 0.75):
-        keep = max(1, int(len(lines) * frac))
-        if keep >= len(lines):
+        keep = max(1, int(len(region) * frac))
+        if keep >= len(region):
             continue
-        mutated = "\n".join(lines[:keep])
-        dropped = len(lines) - keep
+        mutated = "\n".join(region[:keep] + tail)
+        dropped = len(region) - keep
+        if tail:
+            description = (
+                f"truncated prompt — dropped the last {dropped} of {len(region)} "
+                "instruction lines above the input block"
+            )
+        else:
+            description = (
+                f"truncated prompt — dropped the last {dropped} of {len(lines)} lines"
+            )
         mutants.append(
             Mutant(
                 operator="truncate_prompt",
-                description=(
-                    f"truncated prompt — dropped the last {dropped} of {len(lines)} lines"
-                ),
+                description=description,
                 system=system.with_prompt(mutated),
             )
         )
@@ -731,22 +816,7 @@ def make_weaken_modals(pairs: "List[tuple]") -> "Callable[[Target], List[Mutant]
     """Build a weaken_modals-style operator with custom (strong, weak) pairs."""
 
     def op(target: Target) -> List[Mutant]:
-        system = as_system(target)
-        prompt = system.prompt
-        mutants: List[Mutant] = []
-        for strong, weak in pairs:
-            pattern = re.compile(rf"\b{re.escape(strong)}\b", re.IGNORECASE)
-            for match in pattern.finditer(prompt):
-                start, end = match.span()
-                mutated = prompt[:start] + weak + prompt[end:]
-                mutants.append(
-                    Mutant(
-                        operator="weaken_modals",
-                        description=f'weakened "{match.group(0)}" -> "{weak}"',
-                        system=system.with_prompt(mutated),
-                    )
-                )
-        return mutants
+        return _weaken(as_system(target), pairs, snippets=False)
 
     op.__name__ = "weaken_modals_custom"
     return op
@@ -817,9 +887,27 @@ OPERATORS: Dict[str, Callable[[Target], List[Mutant]]] = {
     "deny_tool_output": deny_tool_output,
 }
 
+# What a mutant is FOR. A "regression" operator injects a degradation the evals
+# should catch: kill = good, survivor = coverage gap (scored). A "robustness"
+# operator makes a meaning-preserving edit: survival is the healthy outcome and a
+# kill means an eval (or the system) reacted to wording/order alone. Robustness
+# mutants are never scored; the report lists the ones that flipped a verdict.
+# Operators not listed here are "regression".
+REGRESSION = "regression"
+ROBUSTNESS = "robustness"
+OPERATOR_INTENT: Dict[str, str] = {
+    "paraphrase_instruction": ROBUSTNESS,
+    "swap_adjacent_instructions": ROBUSTNESS,
+}
+
+
+def intent_of(operator: str) -> str:
+    """``"regression"`` (scored) or ``"robustness"`` (meaning-preserving)."""
+    return OPERATOR_INTENT.get(operator, REGRESSION)
+
 
 def register_operator(
-    name: str, fn: "Callable[[Target], List[Mutant]]"
+    name: str, fn: "Callable[[Target], List[Mutant]]", intent: str = REGRESSION
 ) -> "Callable[[Target], List[Mutant]]":
     """Register a custom mutation operator under ``name`` so it runs by default
     and can be selected via ``--operators name`` / ``operators=[name]``.
@@ -828,8 +916,17 @@ def register_operator(
     bare prompt string; use ``as_system(target)``). Returns ``fn`` so it can be
     used as a decorator. Bring-your-own operators never touch the eval suite —
     they only produce mutated Systems, preserving muteval's orthogonality.
+
+    ``intent="robustness"`` marks a meaning-preserving operator (see
+    ``OPERATOR_INTENT``): its mutants are reported but never scored.
     """
+    if intent not in (REGRESSION, ROBUSTNESS):
+        raise ValueError(f"intent must be {REGRESSION!r} or {ROBUSTNESS!r}")
     OPERATORS[name] = fn
+    if intent == ROBUSTNESS:
+        OPERATOR_INTENT[name] = ROBUSTNESS
+    else:
+        OPERATOR_INTENT.pop(name, None)
     return fn
 
 
@@ -842,9 +939,14 @@ def generate_mutants(
 
     ``operators`` items may be registered operator NAMES (str) or operator
     CALLABLES (``fn(target) -> list[Mutant]``) for bring-your-own operators.
+
+    A mutant whose prompt lost any of the original's input placeholders
+    (``{{var}}`` / ``{var}`` / ``${VAR}``) is dropped: the model would never see
+    the input, so every eval fails — a guaranteed kill that measures nothing.
     """
     original = as_system(target)
     original_key = original.key()
+    inputs = _placeholders(original.prompt)
     selected = operators if operators is not None else list(OPERATORS.keys())
     seen = set()
     mutants: List[Mutant] = []
@@ -863,6 +965,8 @@ def generate_mutants(
             if mkey == original_key or mkey in seen:
                 continue
             seen.add(mkey)
+            if inputs and not inputs <= _placeholders(mutant.system.prompt):
+                continue
             mutants.append(mutant)
     return filter_mutants(original.prompt, mutants, scope)
 
@@ -877,9 +981,72 @@ def _is_instruction_line(stripped: str) -> bool:
     return bool(bullet) or stripped.endswith((".", ":", "!"))
 
 
-def _split_sentences(text: str) -> List[str]:
-    parts = re.split(r"(?<=[.!?])\s+", text.replace("\n", " "))
-    return [p for p in parts if p.strip()]
+# Input placeholders a prompt template fills in: {{var}} (mustache / jinja /
+# promptfoo), {var} (str.format), ${VAR} (shell / JS template).
+_PLACEHOLDER_RE = re.compile(
+    r"\{\{[^{}]+\}\}|\{[A-Za-z_][A-Za-z0-9_]*\}|\$\{[A-Za-z_][A-Za-z0-9_]*\}"
+)
+
+
+def _placeholders(text: str) -> "set[str]":
+    return {" ".join(m.split()) for m in _PLACEHOLDER_RE.findall(text)}
+
+
+# What may precede an IMPERATIVE "do not": the start of the text / a line / a
+# bullet, sentence punctuation, or an addressee ("you", "you must", "please").
+_IMPERATIVE_LEAD = re.compile(
+    r"(?:(?:\A|\n)[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:;][ \t]+|[\"'(][ \t]*"
+    r"|\b(?:you(?:[ \t]+(?:must|should))?|please)[ \t]+)\Z",
+    re.IGNORECASE,
+)
+_LEADING_BULLET = re.compile(r"\A[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?")
+
+
+def _is_imperative_at(text: str, start: int) -> bool:
+    """Is the phrase starting at ``start`` addressed to the reader (a command)?"""
+    return bool(_IMPERATIVE_LEAD.search(text[:start]))
+
+
+def _match_case(original: str, replacement: str) -> str:
+    """Carry ``original``'s case onto ``replacement``: ALL CAPS stays all caps,
+    a capitalised word stays capitalised (sentence-initial "Do not" -> "Try not
+    to", not "try not to")."""
+    if not replacement:
+        return replacement
+    if original.isupper() and len(original) > 1:
+        return replacement.upper()
+    if original[:1].isupper():
+        return replacement[:1].upper() + replacement[1:]
+    return replacement
+
+
+def _tidy_line(rewritten: str, original: str) -> str:
+    """Clean up after a phrase was deleted from a line: collapse doubled spaces,
+    drop space before punctuation, and re-capitalise the first word when the
+    original line started with a capital (after any bullet marker)."""
+    bullet, orig_body = _split_bullet(original)
+    body = rewritten[len(bullet) :] if rewritten.startswith(bullet) else rewritten
+    body = re.sub(r"[ \t]{2,}", " ", body)
+    body = re.sub(r"[ \t]+([,.;:!?])", r"\1", body)
+    body = body.lstrip(" \t,;:")
+    if orig_body[:1].isupper() and body[:1].islower():
+        body = body[:1].upper() + body[1:]
+    return (bullet + body).rstrip()
+
+
+def _split_bullet(line: str) -> "tuple[str, str]":
+    """Split a line into its (indent + bullet marker) prefix and its body."""
+    prefix = _LEADING_BULLET.match(line).group(0)  # always matches (all-optional)
+    return prefix, line[len(prefix) :]
+
+
+# A sentence within ONE line: from a non-space char to terminal punctuation
+# followed by whitespace/end-of-line, or to the end of the line.
+_SENTENCE_RE = re.compile(r"\S.*?(?:[.!?]+(?=\s|$)|$)")
+
+
+def _sentence_spans(body: str) -> "List[tuple[int, int]]":
+    return [m.span() for m in _SENTENCE_RE.finditer(body) if m.group(0).strip()]
 
 
 def _context_snippet(text: str, start: int, end: int, width: int = 24) -> str:

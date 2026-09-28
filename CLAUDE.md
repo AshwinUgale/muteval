@@ -107,8 +107,12 @@ your system; muteval mutates your system to test your evals."
     `--max-error-rate`/`--allow-mutant-errors` accept it. The baseline gate
     early-returns before generating mutants. Verdict uses STRICT majority when
     `kill_threshold is None` (ties survive). `output_changed` aggregates ALL
-    survivor runs (any observed change wins) so `runs_per_mutant` hardens
-    equivalence detection. `select_mutants()` is shared by the runner and
+    survivor runs (any observed change wins), compared under `config.output_key`
+    against every `baseline_runs` sample (unseen output on a noisy baseline case
+    = undetermined). For free text WITHOUT output_key, more runs = more wording
+    drift = fewer inert mutants (see LIMITATIONS). Robustness-intent operators
+    (paraphrase/swap, `mutators.OPERATOR_INTENT`) are never scored; mutants that
+    drop an input placeholder are never generated. `select_mutants()` is shared by the runner and
     `--dry-run` (operators/scope/sample/cap) so counts never drift. CLI exits 2
     on invalid runs (before writing any badge); `--allow-empty` lets a
     zero-mutant run pass.
