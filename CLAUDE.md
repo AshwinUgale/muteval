@@ -104,9 +104,18 @@ your system; muteval mutates your system to test your evals."
     and `score`/`effective_score` are `None` (NOT a vacuous 1.0). PARTIAL mutant
     errors above `config.max_error_rate` (default 0.0 = fail closed) set status
     `partial_errors` — score over a shrunken denominator is untrusted; CLI
-    `--max-error-rate`/`--allow-mutant-errors` accept it. The baseline gate
-    early-returns before generating mutants. Verdict uses STRICT majority when
-    `kill_threshold is None` (ties survive). `output_changed` aggregates ALL
+    `--max-error-rate`/`--allow-mutant-errors` accept it. Ties are gated the same
+    way: `no_confident_score` (all tied) / `partial_unresolved` (above
+    `config.max_unresolved_rate`, default 0.0); `no_scored_mutants` = only
+    robustness operators ran. The baseline is graded `runs_per_mutant` times by
+    the SAME `_verdict` rule as a mutant (the original must survive what a
+    mutant is killed by) and early-returns before generating mutants. Verdict
+    uses STRICT majority when `kill_threshold is None` (ties -> unresolved).
+    Kills whose outputs match a baseline sample are `noise_kills`, dropped from
+    the effective score; `--fail-under` gates min(raw, effective).
+    `coerce_outcome` raises on non-verdicts (numbers, strings, NaN scores) and
+    the built-in judge parser raises on unusable replies: errored, never a
+    fake kill. `output_changed` aggregates ALL
     survivor runs (any observed change wins), compared under `config.output_key`
     against every `baseline_runs` sample (unseen output on a noisy baseline case
     = undetermined). For free text WITHOUT output_key, more runs = more wording

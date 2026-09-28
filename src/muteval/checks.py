@@ -343,17 +343,40 @@ def _default_openai_judge(
     model: str, base_url: Optional[str] = None
 ) -> Callable[[str], float]:
     def _judge(prompt: str) -> float:
-        text = _openai_chat_stdlib(prompt, model, base_url).strip()
-        # Parse the LAST number; normalize a 0-10 integer to [0, 1]; clamp.
-        nums = re.findall(r"\d+(?:\.\d+)?", text)
-        if not nums:
-            return 0.0
-        val = float(nums[-1])
-        if val > 1:
-            val = val / 10.0
-        return max(0.0, min(1.0, val))
+        return _parse_judge_score(_openai_chat_stdlib(prompt, model, base_url))
 
     return _judge
+
+
+# "8/10", "8 / 10", "8 out of 10" — the explicit form wins wherever it appears.
+_OUT_OF_TEN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:/|out\s+of)\s*10(?!\d)", re.IGNORECASE)
+# Otherwise the FIRST standalone number ("8\n\nNote: step 3 ..." is an 8).
+_FIRST_NUMBER = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?")
+
+
+def _parse_judge_score(text: str) -> float:
+    """Parse the built-in judge's reply (asked for an integer 0-10) into [0, 1].
+
+    Fails closed: an empty reply, a reply with no number, or a number outside
+    0-10 RAISES, so the mutant is recorded as *errored* rather than silently
+    killed (a 0.0 score) or passed. The old parser took the LAST number and
+    only rescaled values > 1, so "0/10" and "3/10" parsed as 1.0 (a perfect
+    pass) and a bare "1" meant 1.0, not 1/10.
+    """
+    reply = (text or "").strip()
+    if not reply:
+        raise ValueError("judge returned an empty reply (no score)")
+    m = _OUT_OF_TEN.search(reply)
+    raw = m.group(1) if m else None
+    if raw is None:
+        m = _FIRST_NUMBER.search(reply)
+        if m is None:
+            raise ValueError(f"judge reply contains no score: {reply[:80]!r}")
+        raw = m.group(0)
+    val = float(raw)
+    if not 0.0 <= val <= 10.0:
+        raise ValueError(f"judge score {val:g} is outside 0-10: {reply[:80]!r}")
+    return val / 10.0
 
 
 # --- Agent-trace checks (the {"final", "trace"} bridge) ----------------------

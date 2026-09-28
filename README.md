@@ -207,7 +207,12 @@ A coverage number you can't trust is worse than none. muteval **fails closed**:
 - **Partial mutant errors** above a budget → `partial_errors`, not a score over a
   shrunken denominator. `--max-error-rate` / `--allow-mutant-errors` to accept.
 - **Non-determinism** → strict-majority verdicts over `runs_per_mutant`, Wilson
-  confidence intervals on the score, flaky-mutant flagging.
+  confidence intervals on the score, flaky-mutant flagging. The original system
+  must pass the same majority rule as a mutant, and a kill on output the
+  original itself produces is a *noise kill*, not detection. Tied verdicts are
+  gated like errors (`--max-unresolved-rate`; an odd `runs_per_mutant` can't tie).
+- **A bad judge reply is an error, not a verdict** — an empty/unparseable judge
+  reply, a NaN score, or an eval returning `0.2` / `"fail"` fails closed.
 - **Cosmetic changes** → output-diffing separates real coverage gaps from
   "observationally unchanged" mutants. For free-text output, set `output_key=`
   (the part that *is* the behavior, e.g. the label) and `baseline_runs=N` so

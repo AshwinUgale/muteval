@@ -49,9 +49,9 @@ def _cfg(pattern):
 
 
 def test_killed_only_when_failing_majority_of_runs():
-    # baseline passes, then the mutant fails 2 of 3 runs -> killed.
+    # the baseline passes its 3 graded runs, then the mutant fails 2 of 3 -> killed.
     r = run_mutation_testing(
-        _cfg([True, False, False, True]), operators=["remove_emphasis"]
+        _cfg([True, True, True, False, False, True]), operators=["remove_emphasis"]
     )
     assert r.baseline_passed
     o = r.outcomes[0]
@@ -61,9 +61,9 @@ def test_killed_only_when_failing_majority_of_runs():
 
 
 def test_survives_when_failing_only_a_minority():
-    # baseline passes, mutant fails 1 of 3 -> NOT killed (old code would kill it).
+    # the baseline passes its 3 graded runs; mutant fails 1 of 3 -> NOT killed.
     r = run_mutation_testing(
-        _cfg([True, False, True, True]), operators=["remove_emphasis"]
+        _cfg([True, True, True, False, True, True]), operators=["remove_emphasis"]
     )
     o = r.outcomes[0]
     assert abs(o.kill_rate - 1 / 3) < 1e-9
@@ -73,7 +73,7 @@ def test_survives_when_failing_only_a_minority():
 
 def test_score_ci_is_well_formed():
     r = run_mutation_testing(
-        _cfg([True, False, False, True]), operators=["remove_emphasis"]
+        _cfg([True, True, True, False, False, True]), operators=["remove_emphasis"]
     )
     lo, hi = r.score_ci
     assert 0.0 <= lo <= hi <= 1.0
