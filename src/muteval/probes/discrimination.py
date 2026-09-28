@@ -38,9 +38,12 @@ def _eval_name(config, idx, ev) -> str:
 
 
 def _score(ev, output, case) -> float:
-    oc = coerce_outcome(ev(output, case))
+    """The eval's score oriented so HIGHER = BETTER (a lower-is-better metric
+    such as toxicity is negated; a perfect one used to read as AUC 0.00)."""
+    oc = coerce_outcome(ev(output, case))  # raises on a NaN score
     if oc.score is not None:
-        return float(oc.score)
+        score = float(oc.score)
+        return score if oc.higher_is_better else -score
     return 1.0 if oc.passed else 0.0
 
 
@@ -94,13 +97,16 @@ def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
         have = True
         for idx, ev in enumerate(config.evals):
             name = _eval_name(config, idx, ev)
+            # All-or-nothing per case: an eval that errors on some exemplars
+            # must not contribute a lopsided set (errors on every BAD exemplar
+            # left n_bad = 0, which read as "AUC 0.50, barely separates").
             try:
-                for o in goods:
-                    good.setdefault(name, []).append(_score(ev, o, case))
-                for o in bads:
-                    bad.setdefault(name, []).append(_score(ev, o, case))
-            except Exception:  # noqa: BLE001 - skip a broken eval
+                g = [_score(ev, o, case) for o in goods]
+                b = [_score(ev, o, case) for o in bads]
+            except Exception:  # noqa: BLE001 - skip a broken eval on this case
                 continue
+            good.setdefault(name, []).extend(g)
+            bad.setdefault(name, []).extend(b)
 
     if not have:
         return ProbeResult(
@@ -114,6 +120,8 @@ def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
     stats = {}
     for n in good:
         g, b = good[n], bad.get(n, [])
+        if not g or not b:
+            continue  # nothing to compare: not assessable, not "AUC 0.5"
         auc, u = _auc(g, b)
         stats[n] = {
             "auc": auc,
@@ -124,12 +132,31 @@ def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
             "n_bad": len(b),
         }
 
+    if not stats:
+        return ProbeResult(
+            name="discrimination",
+            ok=True,
+            summary="not assessed (every eval errored on its good or bad exemplars)",
+            detail="fix the erroring eval(s) so they can score the exemplars.",
+            metrics={"assessed": False},
+        )
+
     worst = min(stats, key=lambda n: stats[n]["auc"])
     w = stats[worst]
     ok = w["auc"] >= min_auc
+    all_names = [_eval_name(config, i, ev) for i, ev in enumerate(config.evals)]
+    unassessed = [n for n in all_names if n not in stats]
+    skipped_note = (
+        f" ({len(unassessed)} not assessable — errored on its exemplars: "
+        f"{', '.join(unassessed)})"
+        if unassessed
+        else ""
+    )
 
     if ok:
-        summary = f"all evals separate good from bad (min AUC {w['auc']:.2f})"
+        summary = (
+            f"all evals separate good from bad (min AUC {w['auc']:.2f}){skipped_note}"
+        )
         detail = f">= the {min_auc:.2f} target — the metrics discriminate quality."
     else:
         d_str = f", d={w['cohen_d']:.2f}" if w["cohen_d"] is not None else ""
@@ -152,6 +179,7 @@ def discrimination(config, min_auc: float = 0.7) -> ProbeResult:
             "worst_eval": worst,
             "min_auc": w["auc"],
             "stats": stats,
+            "not_assessable": unassessed,
             # back-compat: flat gap map kept for existing consumers
             "gaps": {n: stats[n]["gap"] for n in stats},
         },

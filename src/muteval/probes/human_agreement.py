@@ -62,9 +62,36 @@ def human_agreement_from_rows(pairs: List[Tuple[bool, bool]]) -> ProbeResult:
         )
     machine = [m for m, _ in pairs]
     human = [h for _, h in pairs]
+    agree = sum(1 for m, h in pairs if m == h) / len(pairs)
+    # Kappa is undefined when a rater uses one class only, and unstable when one
+    # class dominates (the "kappa paradox": 29/30 agreement can read 0.00). A
+    # baseline-only worksheet is exactly that — the outputs pass by
+    # construction. Report agreement, not a misleading kappa.
+    top_share = max(
+        max(sum(machine), len(machine) - sum(machine)) / len(machine),
+        max(sum(human), len(human) - sum(human)) / len(human),
+    )
+    if top_share >= 0.9:
+        one_class = top_share == 1.0
+        return ProbeResult(
+            name="human_agreement",
+            ok=True,
+            summary=(
+                f"not assessable: {'one class only' if one_class else f'{top_share:.0%} one class'} "
+                f"over {len(pairs)} rows ({agree * 100:.0f}% raw agreement) — Cohen's "
+                f"kappa is {'undefined' if one_class else 'unstable'} here"
+            ),
+            detail="label outputs the eval FAILS too: `muteval label` includes "
+            "mutant outputs (--mutants N) so both classes appear.",
+            metrics={
+                "assessed": False,
+                "n": len(pairs),
+                "raw_agreement": agree,
+                "majority_share": top_share,
+            },
+        )
     kappa = cohens_kappa(machine, human)
     lo, hi = kappa_ci(machine, human)
-    agree = sum(1 for m, h in pairs if m == h) / len(pairs)
     # Landis & Koch: >=0.6 substantial. Flag weak agreement.
     ok = kappa is not None and kappa >= 0.6
     ci = f" [95% CI {lo:.2f}–{hi:.2f}]" if lo is not None else ""

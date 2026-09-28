@@ -179,6 +179,7 @@ class Cache:
             # Identical evals may share an entry; report under THIS eval's label.
             name=label or d["name"],
             detail=d["detail"],
+            higher_is_better=d.get("higher_is_better", True),
         )
 
     def set_outcome(
@@ -193,6 +194,7 @@ class Cache:
             "threshold": outcome.threshold,
             "name": outcome.name,
             "detail": outcome.detail,
+            "higher_is_better": outcome.higher_is_better,
         }
         self._set(key, json.dumps(d))
 

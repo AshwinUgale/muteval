@@ -9,6 +9,7 @@ and near 0/1 (unlike the naive normal/Wald interval).
 from __future__ import annotations
 
 import math
+from statistics import NormalDist
 from typing import Tuple
 
 # z for common two-sided confidence levels (full precision: norm.ppf(1-alpha/2),
@@ -29,7 +30,11 @@ def wilson_interval(
     """
     if n <= 0:
         return (0.0, 1.0)
-    z = _Z.get(confidence, _Z[0.95])  # unknown level -> precise 95% z
+    if not 0.0 < confidence < 1.0:
+        raise ValueError(f"confidence must be in (0, 1), got {confidence}")
+    # Any level is exact (it used to silently return the 95% interval for a
+    # level not in the table, e.g. 0.8).
+    z = _Z.get(confidence) or NormalDist().inv_cdf(0.5 + confidence / 2)
     p = successes / n
     denom = 1.0 + z * z / n
     center = (p + z * z / (2 * n)) / denom

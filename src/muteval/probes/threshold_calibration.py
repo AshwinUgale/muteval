@@ -25,28 +25,43 @@ from muteval.probes.discrimination import _eval_name
 
 
 def _score_and_threshold(ev, output, case):
+    """(score, threshold, higher_is_better), with a lower-is-better metric's
+    score and threshold NEGATED so all the math below reads "higher = better"
+    (a perfect toxicity metric was reported as miscalibrated)."""
     oc = coerce_outcome(ev(output, case))
     score = float(oc.score) if oc.score is not None else (1.0 if oc.passed else 0.0)
-    return score, oc.threshold
+    thr = oc.threshold
+    if not oc.higher_is_better:
+        score = -score
+        thr = -thr if thr is not None else None
+    return score, thr, oc.higher_is_better
 
 
 def _verdict(
-    good_scores: List[float], bad_scores: List[float], threshold: float
+    good_scores: List[float],
+    bad_scores: List[float],
+    threshold: float,
+    higher_is_better: bool = True,
 ) -> Dict[str, Any]:
+    """Scores/threshold arrive oriented higher = better; the numbers reported
+    are converted back to the metric's own units."""
     max_bad = max(bad_scores)
     min_good = min(good_scores)
     separates = min_good > max_bad
     v = "ok"
     if threshold <= max_bad:
-        v = "too_lenient"  # a bad-example score is >= threshold -> would pass
+        v = "too_lenient"  # a bad example would pass
     elif threshold > min_good:
-        v = "too_strict"  # a good-example score is < threshold -> would fail
+        v = "too_strict"  # a good example would fail
+    sign = 1 if higher_is_better else -1
     return {
-        "threshold": round(threshold, 3),
-        "max_bad": round(max_bad, 3),
-        "min_good": round(min_good, 3),
+        "threshold": round(sign * threshold, 3),
+        # "worst" bad / good in the metric's own direction
+        "max_bad": round(sign * max_bad, 3),
+        "min_good": round(sign * min_good, 3),
+        "higher_is_better": higher_is_better,
         "separates": separates,
-        "recommended": round((max_bad + min_good) / 2, 3) if separates else None,
+        "recommended": round(sign * (max_bad + min_good) / 2, 3) if separates else None,
         "verdict": v,
     }
 
@@ -55,6 +70,7 @@ def threshold_calibration(config) -> ProbeResult:
     good: Dict[str, List[float]] = {}
     bad: Dict[str, List[float]] = {}
     thr: Dict[str, Optional[float]] = {}
+    direction: Dict[str, bool] = {}
     have = False
 
     for case in config.cases:
@@ -67,11 +83,12 @@ def threshold_calibration(config) -> ProbeResult:
             name = _eval_name(config, idx, ev)
             try:
                 for o in goods:
-                    s, t = _score_and_threshold(ev, o, case)
+                    s, t, hib = _score_and_threshold(ev, o, case)
                     good.setdefault(name, []).append(s)
                     thr[name] = t
+                    direction[name] = hib
                 for o in bads:
-                    s, _ = _score_and_threshold(ev, o, case)
+                    s, _, _ = _score_and_threshold(ev, o, case)
                     bad.setdefault(name, []).append(s)
             except Exception:  # noqa: BLE001 - skip a broken eval
                 continue
@@ -89,7 +106,7 @@ def threshold_calibration(config) -> ProbeResult:
     for name in good:
         if name in bad and thr.get(name) is not None:
             results[name] = _verdict(
-                good[name], bad[name], thr[name]
+                good[name], bad[name], thr[name], direction.get(name, True)
             )  # scored evals only
 
     if not results:

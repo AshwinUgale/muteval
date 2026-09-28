@@ -96,6 +96,13 @@ your system; muteval mutates your system to test your evals."
   - `adapters/ragas.py` — wrap RAGAS metrics (score + threshold). `[ragas]` extra.
   - `adapters/promptfoo.py` — parse a promptfooconfig.yaml (prompt + tests +
     assertions) into a MutEvalConfig. `[promptfoo]` extra (pyyaml). `from_promptfoo`.
+    TRANSLATES (never executes) promptfoo: assertion values render `{{var}}` per
+    case; file:// vars/values, defaultTest vars, array-var expansion, CSV
+    `__expectedN`, llm-rubric threshold/provider. Anything not reproducible
+    (transforms, threshold/weight, extra prompts, code asserts) is WARNED about
+    (fidelity notes), never silently changed; chat-JSON prompts are refused.
+  - `EvalOutcome.higher_is_better` — score direction; `margin` is always
+    "distance on the passing side". Probes orient scores with it.
   - `runner.py` — engine: baseline check -> generate mutants -> grade -> score;
     records near-miss margins for survivors. Works on `System` via `config.invoke`.
     VALIDITY GATE: a run only earns a score when the baseline PASSED and >=1

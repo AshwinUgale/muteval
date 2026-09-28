@@ -6,6 +6,56 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+promptfoo fidelity & probe correctness.
+
+- **promptfoo assertions check what promptfoo checks.** `{{var}}` in an
+  assertion value was never rendered: `not-contains: "{{forbidden}}"` compared
+  against the literal text and always passed (it guarded nothing), and
+  `contains: "{{answer}}"` always failed. Values are now rendered per case. Also
+  handled like promptfoo: `file://` vars and assertion values (were literal
+  text), `defaultTest.vars` (were dropped, so `{{doc}}` stayed in the prompt),
+  array vars (now one case per combination; were sent as a Python repr), `equals`
+  on objects (JSON equality), `is-json` with a schema (type / required keys, or
+  full validation with `jsonschema`), CSV `__expected1..N` and prefixes like
+  `grade:` / `is-json` / `javascript:` (they fell through to `equals "<cell>"`,
+  failing the baseline), and `not-regex` / `not-starts-with`.
+- **`llm-rubric` uses its own threshold and grader.** It always called
+  gpt-4o-mini (breaking on a non-OpenAI `--base-url`), ignored its `threshold`
+  and `provider`, and returned a bare bool, losing the score for near-miss
+  reporting. The grader is the assertion's / `defaultTest.options` provider, else
+  the model under test.
+- **What muteval can't reproduce is reported, not silently changed:** output
+  `transform`s (those tests are dropped — their assertions grade transformed
+  output), test `threshold` / assertion `weight` scoring, extra prompts. A
+  chat-format prompt (JSON message list) is refused instead of being mutated as
+  JSON text (half the mutants were invalid JSON).
+- **The judge-bias panel is two-sided.** Verbosity and self-preference counted
+  only a preference for the longer / own answer against a 0.1 cap, so a judge
+  that ALWAYS prefers the shorter answer passed, a fair coin-flip failed, and an
+  always-tie judge was "not assessed". They're now two-sided biases in [0, 1]
+  (ties are fair), flagged only when the evidence also excludes neutral (a fair
+  coin is flagged ~5% of the time, the test's false-positive rate).
+- **Lower-is-better metrics are read correctly.** `EvalOutcome` gains
+  `higher_is_better` (set by `scorer_to_eval`, inferred for deepeval metrics such
+  as Bias / Toxicity). A perfect toxicity metric was called "too_lenient" and
+  "AUC 0.00", and every survivor printed "near miss: passed by +-0.300".
+- **Probes don't report numbers they can't back:** redundancy aligned score
+  vectors by position, so one timeout made two identical metrics look distinct;
+  discrimination reported "AUC 0.50" for an eval that errored on every bad
+  example; judge reliability with `runs=1` reported "0% flaky"; Cohen's kappa
+  reported "1.00 substantial" when every label was one class (undefined) and
+  swung wildly at extreme prevalence. Each is now "not assessed / not
+  assessable" with the reason.
+- **Probe card:** unassessed probes show `N/A` (they showed PASS), and
+  `muteval probe` fails only on a core/validity WARN — a hygiene WARN, which the
+  card calls a footnote, exited 1.
+- **`muteval label`** adds a few mutant outputs (`--mutants N`, default 3) so the
+  worksheet has failing verdicts too (baseline outputs pass by construction), and
+  refuses to overwrite an existing worksheet — it may hold your labels — without
+  `--force`.
+- `stats.wilson_interval` honors any confidence level (it silently returned the
+  95% interval for levels not in its table, e.g. 0.80).
+
 Operators, severity & scope: every mutant an edit a real person could make,
 severity from WHAT changed, scoping fast and exact. Mutation scores on the
 bundled examples are unchanged or move by one mutant; survivor severities move

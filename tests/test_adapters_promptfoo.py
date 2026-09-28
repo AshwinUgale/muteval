@@ -55,8 +55,9 @@ def test_type_eval_honors_all_asserts_of_that_type():
         ]
     }
     ev = _type_eval("contains")
-    assert ev("port 8080, source: server.md", case) is True
-    assert ev("no port, source: server.md", case) is False
+    # (returns an EvalOutcome, so a graded assertion's score can survive)
+    assert ev("port 8080, source: server.md", case).passed is True
+    assert ev("no port, source: server.md", case).passed is False
 
 
 def test_skipped_types_warn_and_build(capsys):
@@ -86,8 +87,8 @@ def test_is_json_assertion_is_graded():
     cfg = config_from_promptfoo_dict(data, run=lambda p, c: '{"ok": true}')
 
     assert cfg.eval_names == ["promptfoo:is-json"]
-    assert cfg.evals[0]('{"ok": true}', cfg.cases[0]) is True
-    assert cfg.evals[0]("not json", cfg.cases[0]) is False
+    assert cfg.evals[0]('{"ok": true}', cfg.cases[0]).passed is True
+    assert cfg.evals[0]("not json", cfg.cases[0]).passed is False
 
 
 def test_mixed_unsupported_case_is_dropped_not_fatal(capsys):
