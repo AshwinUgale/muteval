@@ -32,14 +32,30 @@ Consequently:
 muteval never stores your API keys; it reads them from the environment at call
 time (e.g. `OPENAI_API_KEY`, `GEMINI_API_KEY`) exactly like the SDKs do.
 
-- **Machine-readable output is redacted.** `result_to_dict` (the `--json` output)
-  scrubs anything matching common key formats (`sk-…`, `gsk_…`, `AIza…`,
-  `Authorization: …`) before returning, so a mutated prompt or an error string
-  that echoed a key cannot leak into CI logs or a committed badge. This is
-  enforced by `tests/test_output.py`.
-- Still, **treat muteval's stdout/verbose logs as potentially sensitive** if your
-  prompts or eval code print secrets themselves — redaction covers the structured
-  JSON contract, not arbitrary text your own `run`/evals emit.
+- **Everything muteval emits is redacted, through one function**
+  (`muteval.redact.redact`): the terminal report, `--json`, JUnit, HTML, the
+  manifest, `muteval check`, the probe card, and CLI error lines. (Before
+  0.12, only the JSON and manifest were; a provider error that echoed a key was
+  printed verbatim to the terminal and JUnit.) Two layers:
+  - **Known shapes:** provider key prefixes (`sk-…` incl. `sk-proj-`/`sk-ant-`,
+    `gsk_…`, `AIza…`, `ghp_…`/`github_pat_…`, `hf_…`, `xai-…`, `xox?-…`,
+    `AKIA…`), `Bearer <token>`, credential assignments (`OPENAI_API_KEY=…`,
+    `"api_key": "…"`, `token: …`, `Authorization: Bearer …`), and URL query
+    credentials (`?key=…`, `&access_token=…`).
+  - **Your actual secrets:** the exact value of any environment variable whose
+    name contains `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL` or `AUTH`
+    (8+ chars), so a key in a format no pattern knows (Azure, a proxy token)
+    is still caught when it came from your environment.
+
+  Enforced across every output format by `tests/test_secret_redaction.py`.
+- **The judge only calls the endpoint you configured.** A zero-config
+  `judge:<rubric>` check uses `--base-url` (override with `--judge-base-url` /
+  `--judge-model`), so `OPENAI_API_KEY` is sent only where you pointed it. (Before
+  0.12 the judge ignored `--base-url` and sent the key to api.openai.com.)
+- Still, **treat logs as potentially sensitive** if your own `run`/evals print
+  secrets directly (muteval doesn't intercept their stdout), or a secret sits in
+  your prompt in a shape no pattern knows and it isn't in your environment.
+  Redaction is defense in depth, not a guarantee.
 
 ## Supported versions
 

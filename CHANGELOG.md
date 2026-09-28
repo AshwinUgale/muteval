@@ -6,6 +6,26 @@ additive features; the public API is not yet frozen — that lands at 1.0).
 
 ## [Unreleased]
 
+Security: secrets and the judge endpoint.
+
+- **One redaction point for every output.** Only the JSON and manifest were
+  redacted; a provider error that echoed a key (e.g.
+  `…generateContent?key=AIza…`, `401: Bearer …`) was printed verbatim in the
+  terminal report, JUnit, `muteval check`, and CLI error lines. All outputs now
+  go through `muteval.redact` (terminal, JSON, JUnit, HTML — including an old
+  unredacted JSON fed to `muteval report` — manifest, doctor, probe card, CLI
+  errors).
+- **The pattern covers what it missed.** `Bearer <token>` (the token survived
+  `Authorization: Bearer …`), `OPENAI_API_KEY=…` / `GITHUB_TOKEN: …` style
+  assignments, `"api_key": "…"`, GitHub (`ghp_`, `github_pat_`), Hugging Face,
+  xAI, Slack and AWS keys, and URL query credentials. Plus the exact values of
+  secret-named environment variables, for key formats no pattern knows. False
+  positives like `max_tokens: 256` are left alone.
+- **The zero-config judge no longer sends your key to OpenAI.** A `judge:<rubric>`
+  check ignored `--base-url`, so with a Groq/Gemini/GitHub Models setup the judge
+  called api.openai.com with that provider's key. It now uses `--base-url`; new
+  `--judge-base-url` / `--judge-model` pick a different judge endpoint explicitly.
+
 Gates & validity: from a full audit of the trust core, every way a run could be
 scored or gated on evidence it doesn't have. Default single-run suites score
 exactly as before; runs with a noisy judge, ties, or odd eval return values now

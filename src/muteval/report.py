@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import html
-import re
 from typing import List
 
+from muteval.redact import redact, redact_obj
 from muteval.runner import MutationResult
 
 
@@ -50,6 +50,12 @@ def _robustness_lines(result: MutationResult, c) -> List[str]:
 
 
 def format_report(result: MutationResult, use_color: bool = True) -> str:
+    """The terminal report. Redacted: error strings (baseline_error, mutant
+    errors) can echo request URLs, auth headers, or a key in a prompt."""
+    return redact(_format_report(result, use_color))
+
+
+def _format_report(result: MutationResult, use_color: bool = True) -> str:
     def c(text: str, code: str) -> str:
         return f"\033[{code}m{text}\033[0m" if use_color else text
 
@@ -401,7 +407,7 @@ def format_probe_card(results, use_color: bool = True) -> str:
     ]
     if not results:
         lines.append("No probes ran.")
-        return "\n".join(lines)
+        return redact("\n".join(lines))
     # Show core lenses first, then validity, then hygiene, then anything custom.
     order = {"core": 0, "validity": 1, "hygiene": 2}
     ranked = sorted(results, key=lambda r: order.get(_PROBE_TIER.get(r.name, ""), 3))
@@ -414,7 +420,7 @@ def format_probe_card(results, use_color: bool = True) -> str:
         if r.detail:
             lines.append(c(f"         {r.detail}", "2"))
         lines.append("")
-    return "\n".join(lines)
+    return redact("\n".join(lines))
 
 
 def format_probe_card_html(
@@ -430,12 +436,14 @@ def format_probe_card_html(
         badge = "PASS" if r.ok else "WARN"
         tier = _PROBE_TIER.get(r.name, "")
         tier_html = f'<span class="tier">{tier}</span>' if tier else ""
-        detail = f'<div class="pd">{html.escape(r.detail)}</div>' if r.detail else ""
+        detail = (
+            f'<div class="pd">{html.escape(redact(r.detail))}</div>' if r.detail else ""
+        )
         cards.append(
             f"""<div class="card {state}">
   <div class="chd"><span class="badge {state}">{badge}</span>
     <span class="pn">{html.escape(r.name)}</span>{tier_html}</div>
-  <div class="psum">{html.escape(r.summary)}</div>
+  <div class="psum">{html.escape(redact(r.summary))}</div>
   {detail}
 </div>"""
         )
@@ -470,25 +478,10 @@ def format_probe_card_html(
 # consumers can branch on it. Snapshotted in tests/test_output.py.
 RESULT_SCHEMA_VERSION = 6
 
-# Patterns that must never appear in emitted JSON/logs (defense in depth: a
-# survivor description or error string could echo a prompt containing a key).
-_SECRET_RE = re.compile(
-    r"(sk-[A-Za-z0-9_\-]{8,}"  # OpenAI-style
-    r"|gsk_[A-Za-z0-9_\-]{8,}"  # Groq-style
-    r"|AIza[A-Za-z0-9_\-]{20,}"  # Google API keys
-    r"|(?i:(?:api[_-]?key|authorization|bearer)\s*[:=]\s*)\S+)"
-)
-
-
-def _redact(obj):
-    """Recursively replace secret-looking substrings in any string value."""
-    if isinstance(obj, str):
-        return _SECRET_RE.sub("[REDACTED]", obj)
-    if isinstance(obj, dict):
-        return {k: _redact(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_redact(v) for v in obj]
-    return obj
+# Secrets never reach any output: every formatter below goes through the one
+# redaction point in muteval.redact (see its module doc). Kept under the old
+# name for back-compat.
+_redact = redact_obj
 
 
 def _severity_sorted(survivors):
@@ -605,19 +598,17 @@ def format_report_junit(result: MutationResult) -> str:
         suite.set("tests", "1")
         suite.set("errors", "1")
         case = SubElement(suite, "testcase", {"classname": "muteval", "name": "baseline"})
-        error = SubElement(
-            case, "error", {"message": result.baseline_error or "baseline failed"}
-        )
-        error.text = result.baseline_error or "baseline failed"
+        msg = redact(result.baseline_error or "baseline failed")
+        error = SubElement(case, "error", {"message": msg})
+        error.text = msg
     else:
         for outcome in result.outcomes:
-            name = f"{outcome.mutant.operator}: {outcome.mutant.description}"
+            name = redact(f"{outcome.mutant.operator}: {outcome.mutant.description}")
             case = SubElement(suite, "testcase", {"classname": "muteval", "name": name})
             if outcome.errored:
-                error = SubElement(
-                    case, "error", {"message": outcome.error or "mutant errored"}
-                )
-                error.text = outcome.error or "mutant errored"
+                msg = redact(outcome.error or "mutant errored")
+                error = SubElement(case, "error", {"message": msg})
+                error.text = msg
             elif _robust(outcome):
                 # Meaning-preserving edit: never a CI failure either way.
                 note = (
@@ -629,7 +620,7 @@ def format_report_junit(result: MutationResult) -> str:
                 SubElement(case, "skipped", {"message": note})
             elif not outcome.killed:
                 failure = SubElement(case, "failure", {"message": "mutation survived"})
-                failure.text = outcome.mutant.description
+                failure.text = redact(outcome.mutant.description)
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         + tostring(suite, encoding="unicode")
@@ -710,6 +701,9 @@ def _diff_html(base: str, mutant: str) -> str:
 def format_report_html(data: dict, title: str = "muteval — eval coverage report") -> str:
     """Render a result_to_dict() payload (or a saved last_run.json) as a
     self-contained HTML report: score, survivors, and baseline→mutant diffs."""
+    # The payload may be an older / hand-edited JSON file, not one this version
+    # wrote (already redacted) — redact again before rendering.
+    data = redact_obj(data)
 
     def pct(x):
         return "n/a" if x is None else f"{round(x * 100)}%"
