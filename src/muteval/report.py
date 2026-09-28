@@ -400,8 +400,20 @@ _PROBE_TIER = {
 }
 _PROBE_TIER_LEGEND = (
     "core = catches a real eval defect · validity = needs labels · "
-    "hygiene = sanity check (a WARN here is a footnote)"
+    "hygiene = sanity check (a WARN here is a footnote) · N/A = not assessed"
 )
+
+
+def probe_assessed(r) -> bool:
+    """False when a probe couldn't assess anything (no exemplars / labels /
+    runs): shown as N/A, never as a PASS."""
+    return (getattr(r, "metrics", None) or {}).get("assessed", True) is not False
+
+
+def probe_blocks(r) -> bool:
+    """Does this probe result fail `muteval probe`? A WARN from a core or
+    validity lens does; a hygiene WARN is a footnote, and N/A never blocks."""
+    return probe_assessed(r) and not r.ok and _PROBE_TIER.get(r.name) != "hygiene"
 
 
 def format_probe_card(results, use_color: bool = True) -> str:
@@ -423,7 +435,10 @@ def format_probe_card(results, use_color: bool = True) -> str:
     order = {"core": 0, "validity": 1, "hygiene": 2}
     ranked = sorted(results, key=lambda r: order.get(_PROBE_TIER.get(r.name, ""), 3))
     for r in ranked:
-        tag = c("PASS", "32") if r.ok else c("WARN", "33")
+        if not probe_assessed(r):
+            tag = c("N/A ", "2")
+        else:
+            tag = c("PASS", "32") if r.ok else c("WARN", "33")
         tier = _PROBE_TIER.get(r.name, "")
         tier_str = c(f"  ({tier})", "2") if tier else ""
         lines.append(f"  [{tag}] {c(r.name, '1')}{tier_str}")
@@ -443,8 +458,8 @@ def format_probe_card_html(
     ranked = sorted(results, key=lambda r: order.get(_PROBE_TIER.get(r.name, ""), 3))
     cards = []
     for r in ranked:
-        state = "pass" if r.ok else "warn"
-        badge = "PASS" if r.ok else "WARN"
+        state = "na" if not probe_assessed(r) else ("pass" if r.ok else "warn")
+        badge = "N/A" if not probe_assessed(r) else ("PASS" if r.ok else "WARN")
         tier = _PROBE_TIER.get(r.name, "")
         tier_html = f'<span class="tier">{tier}</span>' if tier else ""
         detail = (
@@ -475,6 +490,7 @@ def format_probe_card_html(
  .chd{{display:flex;gap:.6rem;align-items:center}} .pn{{font-family:ui-monospace,monospace;font-weight:600}}
  .badge{{font-size:.72rem;font-weight:700;padding:.1rem .45rem;border-radius:4px;color:#fff}}
  .badge.pass{{background:#2ea043}} .badge.warn{{background:#d29922}}
+ .badge.na{{background:#8b949e}}
  .psum{{margin:.4rem 0}} .pd{{color:#656d76;font-size:.9rem}}
  .tier{{font-size:.7rem;color:#656d76;border:1px solid #d0d7de;border-radius:4px;padding:.05rem .35rem;text-transform:uppercase;letter-spacing:.03em}}
 </style>

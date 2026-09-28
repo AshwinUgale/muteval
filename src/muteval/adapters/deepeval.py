@@ -129,11 +129,15 @@ def metric_to_eval(
 
     def _outcome(m: Any, test_case: Any) -> EvalOutcome:
         m.measure(test_case)
+        passed = bool(m.is_successful())
+        score = getattr(m, "score", None)
+        threshold = getattr(m, "threshold", None)
         return EvalOutcome(
-            passed=bool(m.is_successful()),
-            score=getattr(m, "score", None),
-            threshold=getattr(m, "threshold", None),
+            passed=passed,
+            score=score,
+            threshold=threshold,
             name=label,
+            higher_is_better=_higher_is_better(m, passed, score, threshold),
         )
 
     def _eval(output: str, case: Any) -> EvalOutcome:
@@ -144,6 +148,26 @@ def metric_to_eval(
     # and never called by the (free) canary.
     setattr(_eval, "is_llm", True)
     return _eval
+
+
+def _higher_is_better(metric: Any, passed: bool, score: Any, threshold: Any) -> bool:
+    """Score direction of a deepeval metric. deepeval's Bias / Toxicity /
+    Hallucination pass when the score is at or BELOW the threshold. An explicit
+    ``higher_is_better`` / ``lower_is_better`` attribute wins; otherwise it's
+    read off the verdict (passing below the threshold, or failing above it,
+    means lower is better). Defaults to higher-is-better when undecidable."""
+    explicit = getattr(metric, "higher_is_better", None)
+    if isinstance(explicit, bool):
+        return explicit
+    lower = getattr(metric, "lower_is_better", None)
+    if isinstance(lower, bool):
+        return not lower
+    if isinstance(score, (int, float)) and isinstance(threshold, (int, float)):
+        if passed and score < threshold:
+            return False
+        if not passed and score > threshold:
+            return False
+    return True
 
 
 def metrics_to_evals(

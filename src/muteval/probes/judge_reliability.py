@@ -68,6 +68,16 @@ def judge_reliability(
 ) -> ProbeResult:
     from muteval.stats import icc
 
+    if runs < 2:
+        # One run can't flip: "0% flaky, alpha 1.00" would be vacuous.
+        return ProbeResult(
+            name="judge_reliability",
+            ok=True,
+            summary=f"not assessed (runs={runs}; reliability needs >= 2 runs)",
+            detail="re-run each eval on the same output at least twice (default 3).",
+            metrics={"assessed": False, "runs": runs},
+        )
+
     total = flipped = 0
     worst: dict = {}  # eval name -> flips
     matrices: dict = {}  # eval name -> [per-case list of `runs` verdicts]

@@ -35,20 +35,28 @@ class EvalOutcome:
     threshold: Optional[float] = None
     name: Optional[str] = None
     detail: Optional[str] = None
+    # Direction of the score. Toxicity / bias / hallucination-style metrics
+    # pass when the score is at or BELOW the threshold; without this their
+    # margins came out negative ("near miss: passed by only +-0.300") and the
+    # calibration / discrimination probes read a perfect metric as broken.
+    higher_is_better: bool = True
 
     def __bool__(self) -> bool:
         return bool(self.passed)
 
     @property
     def margin(self) -> Optional[float]:
-        """``score - threshold`` when both are known, else ``None``.
+        """How far the score is on the PASSING side of the threshold (positive =
+        passing side, whatever the score's direction), when both are known.
 
         A small positive margin on a *passing* check is a near miss: the eval
         barely caught (or barely missed catching) the regression.
         """
         if self.score is None or self.threshold is None:
             return None
-        return self.score - self.threshold
+        if self.higher_is_better:
+            return self.score - self.threshold
+        return self.threshold - self.score
 
 
 # An eval check: (output_text, case) -> bool | EvalOutcome  (truthy == passed).

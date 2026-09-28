@@ -83,7 +83,7 @@ files = ["src/muteval"]
 
 [[tool.mypy.overrides]]
 # Optional third-party integrations (behind extras) have no stubs installed.
-module = ["ragas.*", "deepeval.*", "tracelint.*", "yaml", "certifi"]
+module = ["ragas.*", "deepeval.*", "tracelint.*", "yaml", "certifi", "jsonschema", "jsonschema.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

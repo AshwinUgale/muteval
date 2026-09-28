@@ -46,7 +46,9 @@ _SUPPORTED_TYPES = {
     "equals",
     "not-equals",
     "starts-with",
+    "not-starts-with",
     "regex",
+    "not-regex",
     "is-json",
     "llm-rubric",
     "model-graded",
@@ -61,14 +63,40 @@ def _as_list(val):
     return [s.strip() for s in str(val).split(",") if s.strip()]
 
 
+def _lookup(variables: dict, dotted: str):
+    """``a.b`` -> variables["a"]["b"] (nunjucks-style), else a flat key."""
+    if dotted in variables:
+        return variables[dotted]
+    cur = variables
+    for part in dotted.split("."):
+        if isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
+            return None
+    return cur
+
+
 def _render(template: str, variables: dict) -> str:
-    """Minimal {{ var }} substitution (promptfoo uses nunjucks; we cover the
-    common variable case)."""
+    """Minimal {{ var }} / {{ a.b }} substitution (promptfoo uses nunjucks; we
+    cover variable references). An unknown variable is left as written."""
 
     def repl(m):
-        return str(variables.get(m.group(1).strip(), m.group(0)))
+        value = _lookup(variables, m.group(1).strip())
+        return m.group(0) if value is None else str(value)
 
     return re.sub(r"\{\{\s*([\w.]+)\s*\}\}", repl, template or "")
+
+
+def _render_value(value, variables: dict):
+    """Render {{var}} in an ASSERTION value (a string, or each item of a list)
+    against the case's vars — promptfoo does, so `not-contains: "{{forbidden}}"`
+    checks the forbidden word, not the literal text "{{forbidden}}" (which
+    guarded nothing: it always passed)."""
+    if isinstance(value, str):
+        return _render(value, variables)
+    if isinstance(value, (list, tuple)):
+        return [_render(v, variables) if isinstance(v, str) else v for v in value]
+    return value
 
 
 def _norm_type(assertion: dict) -> str:
@@ -80,6 +108,8 @@ def _norm_type(assertion: dict) -> str:
         return "not-icontains"
     if t in ("regex", "matches"):
         return "regex"
+    if t in ("not-regex", "not-matches"):
+        return "not-regex"
     if t.startswith("llm-rubric"):
         return "llm-rubric"
     if t.startswith("model-graded"):
@@ -87,75 +117,157 @@ def _norm_type(assertion: dict) -> str:
     return t
 
 
-def _assertion_check(assertion: dict, base_url=None):
-    """Translate ONE promptfoo assertion to a check fn, or None if unsupported."""
+def _vars(case) -> dict:
+    return (
+        {k: v for k, v in case.items() if k != "_asserts"}
+        if isinstance(case, dict)
+        else {}
+    )
+
+
+def _json_equal(output: str, expected) -> bool:
+    import json
+
+    try:
+        return json.loads(output) == expected
+    except (TypeError, ValueError):
+        return False
+
+
+def _schema_ok(output: str, schema) -> bool:
+    """is-json with a JSON schema: parse, then check the schema's top-level
+    ``type`` and ``required`` keys (a pragmatic subset; the full schema is
+    validated when the optional ``jsonschema`` package is installed)."""
+    import json
+
+    try:
+        data = json.loads(output)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(schema, dict):
+        return True
+    try:
+        import jsonschema
+
+        try:
+            jsonschema.validate(data, schema)
+            return True
+        except jsonschema.ValidationError:
+            return False
+    except ImportError:
+        pass
+    kind = schema.get("type")
+    types = {"object": dict, "array": list, "string": str, "boolean": bool}
+    if kind in types and not isinstance(data, types[kind]):
+        return False
+    if kind in ("number", "integer") and (
+        isinstance(data, bool) or not isinstance(data, (int, float))
+    ):
+        return False
+    required = schema.get("required") or []
+    return not (
+        required and not (isinstance(data, dict) and all(k in data for k in required))
+    )
+
+
+def _assertion_check(assertion: dict, base_url=None, grader_model=None):
+    """Translate ONE promptfoo assertion to a check fn ``(output, case)`` —
+    returning a bool, or an EvalOutcome for graded ones — or None if
+    unsupported. Values are rendered against the case's vars at check time."""
     typ = _norm_type(assertion)
-    val = assertion.get("value")
+    raw = assertion.get("value")
+
+    def val(c):
+        return _render_value(raw, _vars(c))
 
     if typ == "contains":
-        return lambda o, c: str(val) in o
+        return lambda o, c: str(val(c)) in o
     if typ == "icontains":
-        return lambda o, c: str(val).lower() in o.lower()
+        return lambda o, c: str(val(c)).lower() in o.lower()
     if typ == "not-contains":
-        return lambda o, c: str(val) not in o
+        return lambda o, c: str(val(c)) not in o
     if typ == "not-icontains":
-        return lambda o, c: str(val).lower() not in o.lower()
+        return lambda o, c: str(val(c)).lower() not in o.lower()
     if typ == "equals":
-        return lambda o, c: o.strip() == str(val).strip()
+        if isinstance(raw, (dict, list)):  # promptfoo compares objects as JSON
+            return lambda o, c: _json_equal(o, raw)
+        return lambda o, c: o.strip() == str(val(c)).strip()
     if typ == "regex":
-        return lambda o, c: re.search(str(val), o) is not None
+        return lambda o, c: re.search(str(val(c)), o) is not None
     if typ == "is-json":
-        from muteval import checks
-
-        return checks.is_json()
+        return lambda o, c: _schema_ok(o, raw)
     if typ in ("llm-rubric", "model-graded"):
         from muteval import checks
 
-        judge = checks.llm_judge(str(val), base_url=base_url)
+        threshold = assertion.get("threshold")
+        judge_kwargs = {"base_url": base_url}
+        grader = assertion.get("_grader") or grader_model  # assertion's provider wins
+        if grader:
+            judge_kwargs["model"] = grader
+        if isinstance(threshold, (int, float)):
+            judge_kwargs["threshold"] = float(threshold)
 
         def _graded(o, c):
+            judge = checks.llm_judge(str(val(c)), **judge_kwargs)
             # promptfoo vars use arbitrary names (question / query / …), but
             # llm_judge reads case["input"] — so an un-`input` suite showed the
             # judge "User input: None" (#36). Keep an existing `input` var; else
             # synthesize one from all the case's vars so the judge sees the real
             # input instead of nothing.
             if isinstance(c, dict) and c.get("input") is None:
-                vars_only = {k: v for k, v in c.items() if k != "_asserts"}
+                vars_only = _vars(c)
                 c = {**c, "input": "\n".join(f"{k}: {v}" for k, v in vars_only.items())}
-            return bool(judge(o, c))
+            return judge(o, c)  # an EvalOutcome: the score survives for near misses
 
+        _graded.is_llm = True  # type: ignore[attr-defined]
         return _graded
     if typ == "contains-any":
-        items = _as_list(val)
-        return lambda o, c: any(s in o for s in items)
+        return lambda o, c: any(s in o for s in _as_list(val(c)))
     if typ == "contains-all":
-        items = _as_list(val)
-        return lambda o, c: all(s in o for s in items)
+        return lambda o, c: all(s in o for s in _as_list(val(c)))
     if typ == "icontains-any":
-        items = [s.lower() for s in _as_list(val)]
-        return lambda o, c: any(s in o.lower() for s in items)
+        return lambda o, c: any(s.lower() in o.lower() for s in _as_list(val(c)))
     if typ == "icontains-all":
-        items = [s.lower() for s in _as_list(val)]
-        return lambda o, c: all(s in o.lower() for s in items)
+        return lambda o, c: all(s.lower() in o.lower() for s in _as_list(val(c)))
     if typ == "not-equals":
-        return lambda o, c: o.strip() != str(val).strip()
+        if isinstance(raw, (dict, list)):
+            return lambda o, c: not _json_equal(o, raw)
+        return lambda o, c: o.strip() != str(val(c)).strip()
     if typ == "starts-with":
-        return lambda o, c: o.lstrip().startswith(str(val))
+        return lambda o, c: o.lstrip().startswith(str(val(c)))
+    if typ == "not-starts-with":
+        return lambda o, c: not o.lstrip().startswith(str(val(c)))
+    if typ == "not-regex":
+        return lambda o, c: re.search(str(val(c)), o) is None
     return None  # javascript / python / custom -> not translatable
 
 
-def _type_eval(typ: str, base_url=None):
+def _type_eval(typ: str, base_url=None, grader_model=None):
     """A muteval eval for ONE assertion type: passes iff every assertion of that
-    type on the case passes (and iff there is none of that type)."""
+    type on the case passes (and iff there is none of that type). A graded
+    assertion's score is kept (the closest passing one, for near-miss
+    reporting)."""
+    from muteval.evals import EvalOutcome, coerce_outcome
 
-    def _eval(output, case) -> bool:
+    def _eval(output, case):
+        closest = None
         for a in case.get("_asserts", []):
-            if _norm_type(a) == typ:
-                chk = _assertion_check(a, base_url)
-                if chk is not None and not chk(output, case):
-                    return False
-        return True
+            if _norm_type(a) != typ:
+                continue
+            chk = _assertion_check(a, base_url, grader_model)
+            if chk is None:
+                continue
+            outcome = coerce_outcome(chk(output, case))
+            if not outcome.passed:
+                return outcome
+            if outcome.margin is not None and (
+                closest is None or outcome.margin < closest.margin
+            ):
+                closest = outcome
+        return closest if closest is not None else EvalOutcome(passed=True)
 
+    if typ in ("llm-rubric", "model-graded"):
+        _eval.is_llm = True  # type: ignore[attr-defined]
     return _eval
 
 
@@ -189,26 +301,72 @@ def _prompt_from(data, base_dir=Path(".")) -> str:
         if not fp.exists():
             raise ValueError(f"promptfoo prompt file not found: {p}")
         p = fp.read_text(encoding="utf-8")
+    if _is_chat_prompt(p):
+        raise ValueError(
+            "this promptfoo prompt is a chat message list (JSON [{role, content}, "
+            "...]); muteval mutates a single prompt text and would mangle the JSON "
+            "(and send it as one user message). Point a muteval config at the "
+            "system message's text instead."
+        )
     return p
 
 
+def _is_chat_prompt(text: str) -> bool:
+    stripped = (text or "").strip()
+    if not stripped.startswith("["):
+        return False
+    import json
+
+    try:
+        data = json.loads(stripped)
+    except ValueError:
+        return False
+    return (
+        isinstance(data, list)
+        and bool(data)
+        and all(isinstance(m, dict) and "role" in m for m in data)
+    )
+
+
+# promptfoo's CSV `__expected` prefixes -> assertion type. Code / similarity
+# prefixes map to their (unsupported) types, so they're SKIPPED with a warning
+# — they used to fall through to `equals "<whole cell>"`, failing the baseline.
 _EXPECT_PREFIXES = {
-    "contains",
-    "icontains",
-    "not-contains",
-    "regex",
-    "equals",
-    "starts-with",
+    "contains": "contains",
+    "icontains": "icontains",
+    "not-contains": "not-contains",
+    "not-icontains": "not-icontains",
+    "contains-any": "contains-any",
+    "contains-all": "contains-all",
+    "icontains-any": "icontains-any",
+    "icontains-all": "icontains-all",
+    "regex": "regex",
+    "equals": "equals",
+    "not-equals": "not-equals",
+    "starts-with": "starts-with",
+    "is-json": "is-json",
+    "llm-rubric": "llm-rubric",
+    "grade": "llm-rubric",
+    "javascript": "javascript",
+    "fn": "javascript",
+    "eval": "javascript",
+    "python": "python",
+    "similar": "similar",
 }
 
 
 def _expected_to_assert(val: str) -> dict:
     """Translate a promptfoo CSV `__expected` cell into an assertion. A known
-    prefix (``contains: …``) is honored; a bare value defaults to equals."""
-    if ":" in val:
-        pre, _, rest = val.partition(":")
-        if pre.strip().lower() in _EXPECT_PREFIXES:
-            return {"type": pre.strip().lower(), "value": rest.strip()}
+    prefix (``contains: …``, ``grade: …``, bare ``is-json``) is honored; a bare
+    value defaults to equals (as in promptfoo)."""
+    cell = val.strip()
+    if cell.lower() == "is-json":
+        return {"type": "is-json"}
+    if ":" in cell:
+        pre, _, rest = cell.partition(":")
+        typ = _EXPECT_PREFIXES.get(pre.strip().lower())
+        if typ:
+            return {"type": typ, "value": rest.strip()}
     return {"type": "equals", "value": val}
 
 
@@ -251,10 +409,17 @@ def _load_external_tests(ref: str, base_dir: Path) -> list:
         for row in csv.DictReader(io.StringIO(text)):
             row = {k: v for k, v in row.items() if k is not None}
             asserts = []
-            for key in ("__expected", "expected"):
+            # __expected, __expected1, __expected2, ... (and a plain `expected`)
+            keys = [k for k in row if re.fullmatch(r"__expected\d*", k)] + (
+                ["expected"] if "expected" in row else []
+            )
+            for key in sorted(keys):
                 v = row.pop(key, None)
                 if v is not None and str(v).strip():
                     asserts.append(_expected_to_assert(str(v)))
+            # Other `__` columns (__description, __metric, __threshold, ...) are
+            # promptfoo metadata, not prompt variables.
+            row = {k: v for k, v in row.items() if not k.startswith("__")}
             t: dict = {"vars": row}
             if asserts:
                 t["assert"] = asserts
@@ -371,6 +536,56 @@ def _make_run(model, base_url=None):
     return run
 
 
+def _load_file_value(value, base_dir: Path):
+    """promptfoo loads ``file://`` values (a var, an assertion value) from disk:
+    text as-is, .json / .yaml parsed. Code references (.py/.js) are left alone —
+    they belong to javascript/python assertions, which muteval skips."""
+    if not (isinstance(value, str) and value.startswith("file://")):
+        return value
+    ref = value[len("file://") :]
+    if ref.split(":", 1)[0].lower().endswith(_CODE_EXT):
+        return value
+    fp = base_dir / ref
+    if not fp.exists():
+        raise ValueError(f"promptfoo file reference not found: {value}")
+    text = fp.read_text(encoding="utf-8")
+    low = ref.lower()
+    if low.endswith(".json"):
+        import json
+
+        return json.loads(text)
+    if low.endswith((".yaml", ".yml")):
+        import yaml
+
+        return yaml.safe_load(text)
+    return text.strip("\n")
+
+
+def _expand_vars(variables: dict) -> list:
+    """promptfoo runs a test once per combination of ARRAY-valued vars; a list
+    var used to be sent to the model as its Python repr."""
+    import itertools
+
+    keys = [k for k, v in variables.items() if isinstance(v, list)]
+    if not keys:
+        return [dict(variables)]
+    combos = []
+    for values in itertools.product(*(variables[k] for k in keys)):
+        combo = dict(variables)
+        combo.update(zip(keys, values))
+        combos.append(combo)
+    return combos
+
+
+def _provider_model(provider) -> "str | None":
+    """The model name in a promptfoo provider reference ("openai:gpt-4o",
+    {"id": "openai:chat:gpt-4o"}), else None."""
+    pid = provider.get("id") if isinstance(provider, dict) else provider
+    if not isinstance(pid, str) or ":" not in pid:
+        return None
+    return pid.split(":")[-1] or None
+
+
 def config_from_promptfoo_dict(
     data, model=None, run=None, base_url=None, base_dir=None
 ) -> MutEvalConfig:
@@ -381,8 +596,20 @@ def config_from_promptfoo_dict(
     failing closed only if nothing in the whole suite is translatable. ``model``
     is auto-read from the ``providers:`` block when not given explicitly. External
     ``tests: file://…`` (CSV/JSONL/JSON/YAML) are loaded relative to ``base_dir``.
+
+    Fidelity: ``{{var}}`` in assertion values, ``file://`` vars / values,
+    ``defaultTest.vars``, and array vars are handled as promptfoo does. What
+    muteval can NOT reproduce — output transforms, test ``threshold`` / assertion
+    ``weight`` scoring, extra prompts — is listed in one warning, never silently.
     """
     base_dir = Path(base_dir) if base_dir is not None else Path(".")
+    notes: list = []
+    prompts = data.get("prompts")
+    if isinstance(prompts, list) and len(prompts) > 1:
+        notes.append(
+            f"{len(prompts)} prompts: muteval mutates only the first (run once per "
+            "prompt to cover the others)"
+        )
     prompt = _prompt_from(data, base_dir)
 
     raw_tests = data.get("tests")
@@ -398,13 +625,62 @@ def config_from_promptfoo_dict(
     default_test = data.get("defaultTest") or {}
     if isinstance(default_test, str):  # defaultTest: file://shared/defaultTest.yaml
         default_test = _load_external_obj(default_test, base_dir, "defaultTest")
-    default_asserts = (default_test or {}).get("assert") or []
+    default_test = default_test or {}
+    default_asserts = default_test.get("assert") or []
+    default_vars = default_test.get("vars") or {}
+    default_options = default_test.get("options") or {}
+    grader_model = _provider_model(default_options.get("provider"))
+
+    transformed = weighted = thresholded = 0
     raw_cases = []
     for tst in tests:
-        case = dict(tst.get("vars") or {})
-        case["_asserts"] = list(default_asserts) + list(tst.get("assert") or [])
-        raw_cases.append(case)
+        options = {**default_options, **(tst.get("options") or {})}
+        if options.get("transform") or options.get("postprocess"):
+            # The assertions grade the TRANSFORMED output, which muteval can't
+            # compute: grading the raw output would change their meaning.
+            transformed += 1
+            continue
+        if tst.get("threshold") is not None:
+            thresholded += 1
+        merged_vars = {**default_vars, **(tst.get("vars") or {})}
+        merged_vars = {k: _load_file_value(v, base_dir) for k, v in merged_vars.items()}
+        asserts = []
+        for a in list(default_asserts) + list(tst.get("assert") or []):
+            if not isinstance(a, dict):
+                continue
+            a = dict(a)
+            if a.get("transform"):
+                a["type"] = f"{a.get('type', '')} (with transform)"  # unsupported
+            if a.get("weight") not in (None, 1):
+                weighted += 1
+            if "value" in a:
+                a["value"] = _load_file_value(a["value"], base_dir)
+            if a.get("provider") and not a.get("_grader"):
+                a["_grader"] = _provider_model(a.get("provider"))
+            asserts.append(a)
+        for combo in _expand_vars(merged_vars):
+            case = dict(combo)
+            case["_asserts"] = asserts
+            raw_cases.append(case)
+    if transformed:
+        notes.append(
+            f"{transformed} test(s) with an output transform were dropped (muteval "
+            "can't run promptfoo transforms, and the assertions grade the "
+            "transformed output)"
+        )
+    if thresholded or weighted:
+        notes.append(
+            "test `threshold` / assertion `weight` scoring is not reproduced: "
+            "muteval requires EVERY assertion to pass"
+        )
     if not raw_cases:
+        if transformed:
+            raise ValueError(
+                f"every promptfoo test ({transformed}) uses an output transform "
+                "(options.transform / postprocess), which muteval can't run — and the "
+                "assertions grade the transformed output. Remove the transform or "
+                "point a muteval config at the post-transform behavior."
+            )
         raise ValueError("promptfoo config has no `tests`")
 
     supported: set = set()
@@ -448,12 +724,18 @@ def config_from_promptfoo_dict(
             "check for those behaviors if you rely on them.",
             file=sys.stderr,
         )
+    for note in notes:
+        print(f"muteval: promptfoo fidelity — {note}.", file=sys.stderr)
 
+    resolved = _resolve_model(data, model, base_url) if run is None else model
     if run is None:
-        run = _make_run(_resolve_model(data, model, base_url), base_url)
+        run = _make_run(resolved, base_url)
+    # The llm-rubric grader: the assertion's / defaultTest's provider, else the
+    # model under test (a hard-coded gpt-4o-mini broke on a non-OpenAI base_url).
+    grader = grader_model or resolved
 
     types = sorted(supported)
-    evals = [_type_eval(t, base_url) for t in types]
+    evals = [_type_eval(t, base_url, grader) for t in types]
     names = [f"promptfoo:{t}" for t in types]
     return MutEvalConfig(
         prompt=prompt,

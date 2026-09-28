@@ -184,6 +184,20 @@ only applies when both exist:
 - **Non-prompt targets need System mode + a compatible `run()`.** Context/tool/
   model mutation only affects output if your `run(system, case)` actually consumes
   the mutated `System`.
+- **promptfoo configs are translated, not executed.** muteval reads your
+  promptfoo suite and grades with its own versions of the assertions. Handled
+  like promptfoo: `{{var}}` in prompts and assertion values (plain variable
+  references, not nunjucks logic), `file://` prompts / vars / assertion values,
+  `defaultTest` vars and asserts, array vars (one case per combination), CSV
+  `__expected` / `__expected1..N`, `equals` on objects, `is-json` with a schema
+  (full validation if `jsonschema` is installed, else its `type` / `required`),
+  and `llm-rubric` with its `threshold` and `provider`. NOT reproduced, and
+  reported in one warning when present: `javascript` / `python` / `similar` /
+  `assert-set` assertions (skipped), output `transform`s (those tests are
+  dropped — their assertions grade transformed output), test `threshold` /
+  assertion `weight` scoring (muteval requires every assertion to pass), and
+  every prompt after the first. Chat-format (JSON message list) prompts are
+  refused rather than mutated as JSON text.
 
 ## What the score does and does NOT mean
 

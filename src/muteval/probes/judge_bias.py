@@ -13,8 +13,12 @@ verdict SHOULD have stayed the same:
   verdict shouldn't move when the "own-model" label is attached. Reported as
   "not assessed" unless a self/other labeling is supplied.
 
-There is no composite score — each is a separately-interpretable rate in [0, 1],
-0 = unbiased.
+There is no composite score — each is a separately-interpretable bias in
+[0, 1], 0 = unbiased, 1 = maximally biased. Verbosity and self-preference are
+TWO-SIDED: neutral is preferring neither side (a tie, or a 50/50 split), and
+always preferring the SHORTER answer (or always the OTHER model's) is as much a
+bias as the reverse. The raw preference rates and their direction are in
+``BiasPanel.detail``.
 """
 
 from __future__ import annotations
@@ -36,11 +40,28 @@ class BiasPanel:
     detail: Dict[str, Any] = field(default_factory=dict)
 
     def ok(self, threshold: float = 0.1) -> bool:
-        """True if every ASSESSED bias is at/below threshold."""
-        return all(
-            v is None or v <= threshold
-            for v in (self.position_bias, self.verbosity_bias, self.self_preference)
-        )
+        """True unless an ASSESSED bias is above ``threshold``. The two-sided
+        lenses also need the evidence to exclude neutral: their preference
+        rate's 95% interval must not contain 0.5 — a fair coin-flip judge over
+        40 verdicts lands at 0.42 by chance alone, which is noise, not bias."""
+        if self.position_bias is not None and self.position_bias > threshold:
+            return False
+        for bias, key in (
+            (self.verbosity_bias, "prefers_longer"),
+            (self.self_preference, "prefers_own_model"),
+        ):
+            if bias is None or bias <= threshold:
+                continue
+            rate = self.detail.get(f"{key}_rate")
+            n = self.detail.get(f"{key}_n")
+            if rate is None or not n:
+                return False
+            from muteval.stats import wilson_interval
+
+            lo, hi = wilson_interval(round(rate * n), n)
+            if not lo <= 0.5 <= hi:
+                return False
+        return True
 
 
 def _winner(judge, a: str, b: str, case: Any):
@@ -68,41 +89,65 @@ def position_bias(judge, pairs: Sequence[Pair]) -> Optional[float]:
     return (flips / n) if n else None
 
 
+def _preference_rate(judge, pairs, first_label: str) -> Optional[float]:
+    """Fraction of judgements (both presentation orders) preferring the FIRST
+    element of each pair; a TIE counts as half (a fair verdict on substantively
+    equal answers). None only when there are no pairs."""
+    score = n = 0.0
+    for pair in pairs:
+        first, second, case = pair[0], pair[1], pair[2]
+        for a, b, first_is in ((first, second, WIN_A), (second, first, WIN_B)):
+            v = normalize_verdict(judge(a, b, case))
+            n += 1
+            if v == TIE:
+                score += 0.5
+            elif v == first_is:
+                score += 1
+    return (score / n) if n else None
+
+
+def _preference_n(pairs) -> int:
+    """Number of verdicts behind a preference rate (each pair, both orders)."""
+    return 2 * len(pairs) if pairs else 0
+
+
+def _two_sided(rate: Optional[float]) -> Optional[float]:
+    return None if rate is None else round(abs(rate - 0.5) * 2, 10)
+
+
+def verbosity_preference(judge, pairs: Sequence[Pair]) -> Optional[float]:
+    """Fraction of judgements preferring the LONGER answer (ties = 0.5), over
+    both orders. 0.5 is neutral; 1.0 always-longer; 0.0 always-shorter."""
+    return _preference_rate(judge, [(lg, sh, c) for sh, lg, c in pairs], "long")
+
+
 def verbosity_bias(judge, pairs: Sequence[Pair]) -> Optional[float]:
     """``pairs`` are (short, long, case) where ``long`` is ``short`` padded with
-    filler (same substance). Fraction of judgements that prefer the LONGER answer,
-    averaged over both presentation orders (so position bias cancels). 0.5 would
-    be neutral for a coin-flip judge; a strong verbosity bias approaches 1.0."""
-    prefer_long = n = 0
-    for short, long, case in pairs:
-        for a, b, long_is in ((short, long, WIN_B), (long, short, WIN_A)):
-            v = normalize_verdict(judge(a, b, case))
-            if v == TIE:
-                continue
-            n += 1
-            if v == long_is:
-                prefer_long += 1
-    return (prefer_long / n) if n else None
+    filler (same substance). TWO-SIDED bias in [0, 1]: 0 = prefers neither
+    (ties, or a 50/50 split), 1 = always prefers one side — the longer OR the
+    shorter answer. (It used to report only the longer-preference rate against a
+    0.1 threshold, so an always-SHORTER judge passed and a fair coin-flip failed.)"""
+    return _two_sided(verbosity_preference(judge, pairs))
+
+
+def own_model_preference(
+    judge, labeled_pairs: Optional[Sequence[Tuple[str, str, Any, str]]]
+) -> Optional[float]:
+    """Fraction of judgements picking the own-model answer (ties = 0.5), over
+    both orders. 0.5 neutral. None (not assessed) if no labeled pairs given."""
+    if not labeled_pairs:
+        return None
+    return _preference_rate(judge, labeled_pairs, "own")
 
 
 def self_preference(
     judge, labeled_pairs: Optional[Sequence[Tuple[str, str, Any, str]]]
 ) -> Optional[float]:
     """``labeled_pairs`` are (own_output, other_output, case, _) where the first
-    is from the judge's own model. Fraction that pick the own-model answer,
-    averaged over both orders. None (not assessed) if no labeled pairs given."""
-    if not labeled_pairs:
-        return None
-    prefer_own = n = 0
-    for own, other, case, _ in labeled_pairs:
-        for a, b, own_is in ((own, other, WIN_A), (other, own, WIN_B)):
-            v = normalize_verdict(judge(a, b, case))
-            if v == TIE:
-                continue
-            n += 1
-            if v == own_is:
-                prefer_own += 1
-    return (prefer_own / n) if n else None
+    is from the judge's own model. TWO-SIDED bias in [0, 1]: 0 = the model label
+    doesn't move the verdict, 1 = always picks one side (own OR other). None
+    (not assessed) if no labeled pairs given."""
+    return _two_sided(own_model_preference(judge, labeled_pairs))
 
 
 def run_judge_bias_panel(
@@ -115,11 +160,17 @@ def run_judge_bias_panel(
     ``verbosity_pairs`` (short,long,case) and ``self_pref_pairs`` add the other
     two lenses (else they report None = not assessed)."""
     pos = position_bias(judge, pairs)
-    verb = verbosity_bias(judge, verbosity_pairs) if verbosity_pairs else None
-    selfp = self_preference(judge, self_pref_pairs)
+    verb_rate = verbosity_preference(judge, verbosity_pairs) if verbosity_pairs else None
+    own_rate = own_model_preference(judge, self_pref_pairs)
     return BiasPanel(
         position_bias=pos,
-        verbosity_bias=verb,
-        self_preference=selfp,
-        detail={"n_pairs": len(pairs)},
+        verbosity_bias=_two_sided(verb_rate),
+        self_preference=_two_sided(own_rate),
+        detail={
+            "n_pairs": len(pairs),
+            "prefers_longer_rate": verb_rate,  # 0.5 neutral
+            "prefers_longer_n": _preference_n(verbosity_pairs),
+            "prefers_own_model_rate": own_rate,  # 0.5 neutral
+            "prefers_own_model_n": _preference_n(self_pref_pairs),
+        },
     )

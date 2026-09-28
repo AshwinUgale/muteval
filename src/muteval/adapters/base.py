@@ -52,7 +52,13 @@ def scorer_to_eval(
     def _eval(output: str, case: Any) -> EvalOutcome:
         score = float(score_fn(output, case))
         passed = score >= threshold if higher_is_better else score <= threshold
-        return EvalOutcome(passed=passed, score=score, threshold=threshold, name=name)
+        return EvalOutcome(
+            passed=passed,
+            score=score,
+            threshold=threshold,
+            name=name,
+            higher_is_better=higher_is_better,
+        )
 
     return _eval
 

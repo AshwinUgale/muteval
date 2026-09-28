@@ -115,22 +115,28 @@ def redundancy(config, max_corr: float = 0.9, method: str = "spearman") -> Probe
     if len(config.evals) < 2:
         return _na("need >= 2 evals")
 
-    vectors: dict = {}
+    # One row per case, keeping only cases EVERY eval scored: the vectors must
+    # stay aligned by case. (Appending per eval let one eval's timeout on one
+    # case shift all its later scores against the others' — two identical
+    # metrics then read as "distinct".)
+    names_all = [_eval_name(config, idx, ev) for idx, ev in enumerate(config.evals)]
+    rows = []
     for case in config.cases:
         try:
             output = config.invoke(config.system, case)
         except Exception:  # noqa: BLE001
             continue
+        row = {}
         for idx, ev in enumerate(config.evals):
-            name = _eval_name(config, idx, ev)
             try:
-                vectors.setdefault(name, []).append(_score(ev, output, case))
+                row[names_all[idx]] = _score(ev, output, case)
             except Exception:  # noqa: BLE001
-                pass
-
-    lengths = {len(v) for v in vectors.values()}
-    if not vectors or min(lengths) < 3:
-        return _na("< 3 evaluable cases")
+                break
+        else:
+            rows.append(row)
+    if len(rows) < 3:
+        return _na("< 3 cases that every eval could score")
+    vectors = {n: [r[n] for r in rows] for n in names_all}
 
     # drop constant (zero-variance) evals — nothing to correlate.
     active = {n: v for n, v in vectors.items() if _var(v) > 1e-12}

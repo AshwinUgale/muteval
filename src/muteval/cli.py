@@ -696,6 +696,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default=str(Path(".muteval") / "labels.csv"),
         help="Where to write the worksheet CSV (default: .muteval/labels.csv).",
     )
+    label.add_argument(
+        "--mutants",
+        type=_nonneg_int,
+        default=3,
+        metavar="N",
+        help="Also label N degraded (mutant) outputs, so the sheet has failing "
+        "verdicts too (default 3; each costs one model call per case).",
+    )
+    label.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing worksheet (it may hold your human labels).",
+    )
 
     lst = sub.add_parser("list", help="List available operators, checks, or probes.")
     lst.add_argument(
@@ -807,29 +820,82 @@ def _save_last_run(result) -> None:
         pass
 
 
-def _write_label_worksheet(config, out) -> int:
-    """Run the system + evals over every case and write a hand-labeling
-    worksheet CSV (one row per case×eval) with a blank human_label column."""
+def _worksheet_mutants(config, k: int):
+    """Up to ``k`` scored mutants, one per operator first (round-robin), so the
+    worksheet shows the evals FAILING as well as passing."""
+    from muteval.mutators import REGRESSION
+    from muteval.runner import select_mutants
+
+    by_op: dict = {}
+    for m in select_mutants(config):
+        if m.intent == REGRESSION:
+            by_op.setdefault(m.operator, []).append(m)
+    picked: list = []
+    while len(picked) < k and any(by_op.values()):
+        for op in list(by_op):
+            if by_op[op] and len(picked) < k:
+                picked.append(by_op[op].pop(0))
+    return picked
+
+
+def _write_label_worksheet(config, out, mutants: int = 3, force: bool = False) -> int:
+    """Run the system + evals and write a hand-labeling worksheet CSV (one row
+    per case x eval) with a blank human_label column.
+
+    Rows come from the ORIGINAL system AND ``mutants`` degraded ones: baseline
+    outputs pass by construction, so a baseline-only sheet was nearly all
+    "pass" — the degenerate case where Cohen's kappa is undefined or unstable.
+    Refuses to overwrite an existing sheet (it may hold your labels) unless
+    ``force``."""
     import csv
 
     from muteval.evals import coerce_outcome
     from muteval.runner import _eval_label
 
     out_path = Path(out)
+    if out_path.exists() and not force:
+        raise FileExistsError(
+            f"{out_path} already exists (it may hold your human labels); pass "
+            "--force to overwrite, or --out another path"
+        )
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    systems = [("original", config.system)] + [
+        (f"mutant: {m.operator}", m.system) for m in _worksheet_mutants(config, mutants)
+    ]
     n = 0
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(
-            ["case_index", "case", "output", "eval", "machine_verdict", "human_label"]
+            [
+                "case_index",
+                "source",
+                "case",
+                "output",
+                "eval",
+                "machine_verdict",
+                "human_label",
+            ]
         )
-        for ci, case in enumerate(config.cases):
-            output = config.invoke(config.system, case)
-            for idx, ev in enumerate(config.evals):
-                label = _eval_label(config, idx)
-                verdict = "pass" if coerce_outcome(ev(output, case)).passed else "fail"
-                w.writerow([ci, str(case)[:200], str(output)[:500], label, verdict, ""])
-                n += 1
+        for source, system in systems:
+            for ci, case in enumerate(config.cases):
+                output = config.invoke(system, case)
+                for idx, ev in enumerate(config.evals):
+                    label = _eval_label(config, idx)
+                    verdict = (
+                        "pass" if coerce_outcome(ev(output, case)).passed else "fail"
+                    )
+                    w.writerow(
+                        [
+                            ci,
+                            source,
+                            str(case)[:200],
+                            str(output)[:500],
+                            label,
+                            verdict,
+                            "",
+                        ]
+                    )
+                    n += 1
     return n
 
 
@@ -1250,7 +1316,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                     file=sys.stderr,
                 )
                 return 2
-        return 0 if all(r.ok for r in results) else 1
+        from muteval.report import probe_blocks
+
+        # Only a core/validity WARN fails; a hygiene WARN is a footnote (the
+        # card says so) and N/A (not assessed) never fails.
+        return 1 if any(probe_blocks(r) for r in results) else 0
 
     if args.command == "check":
         config = _load_or_die(args)
@@ -1294,7 +1364,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         if config is None:
             return 2
         try:
-            n = _write_label_worksheet(config, args.out)
+            n = _write_label_worksheet(
+                config, args.out, mutants=args.mutants, force=args.force
+            )
+        except FileExistsError as exc:
+            print(f"muteval: {exc}", file=sys.stderr)
+            return 2
         except Exception as exc:  # noqa: BLE001 - surface run/eval failures clearly
             print(redact(f"muteval: could not build worksheet: {exc}"), file=sys.stderr)
             return 2

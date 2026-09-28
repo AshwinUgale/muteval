@@ -41,14 +41,23 @@ def test_jeffreys_n1_lower_bound_is_a_real_quantile():
     assert lo0 == 0.0 and hi0 < 1.0  # k=0,n=1 computes a real upper bound < 1
 
 
-def test_unknown_confidence_falls_back_to_95_z():
-    # A confidence level not in the z-table uses the default z (== the 0.95 z),
-    # so the interval equals the 95% one. Pins the fallback branch (kills the
-    # default-z mutants: None / empty / a different constant).
+def test_any_confidence_level_is_exact():
+    # A level not in the z-table used to silently return the 95% interval. It's
+    # now exact: an 80% interval is narrower than the 95% one, and matches the
+    # normal quantile.
+    import math
+    from statistics import NormalDist
+
     from muteval.stats import interval
 
-    assert wilson_interval(5, 10, 0.80) == wilson_interval(5, 10, 0.95)
-    assert interval(5, 10, 0.80, "wilson") == wilson_interval(5, 10, 0.95)
+    lo80, hi80 = wilson_interval(5, 10, 0.80)
+    lo95, hi95 = wilson_interval(5, 10, 0.95)
+    assert lo95 < lo80 < hi80 < hi95
+    z = NormalDist().inv_cdf(0.9)
+    p, n = 0.5, 10
+    center = (p + z * z / (2 * n)) / (1 + z * z / n)
+    assert math.isclose((lo80 + hi80) / 2, center)
+    assert interval(5, 10, 0.80, "wilson") == (lo80, hi80)
 
 
 def test_interval_dispatch_selects_method():
