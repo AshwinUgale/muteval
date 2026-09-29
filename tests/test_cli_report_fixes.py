@@ -89,6 +89,9 @@ def test_config_plus_zero_config_flags_is_an_error(tmp_path, capsys):
 
 
 def test_explicit_model_reaches_promptfoo_programmatically(tmp_path):
+    # Loading a promptfoo YAML needs the optional [promptfoo] extra (PyYAML); the
+    # release workflow tests the core install without it.
+    pytest.importorskip("yaml")
     y = _write(
         tmp_path,
         "pf.yaml",
