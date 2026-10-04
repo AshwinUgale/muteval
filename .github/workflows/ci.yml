@@ -51,6 +51,23 @@ jobs:
       - name: muteval self-check (the example must produce a score)
         run: muteval run --config examples/support_bot/muteval_config.py --no-color
 
+  # The CORE install (no optional extras) — exactly what release.yml tests before
+  # publishing. Tests that need an extra must skip without it; without this job
+  # a missing importorskip only surfaced at tag time (v0.12.0's first release run).
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install package (dev extras only, like release.yml)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run tests (excluding slow simulations)
+        run: pytest -q -m "not slow"
+
   # Statistical rigor: coverage gate + reference cross-checks + Monte-Carlo
   # coverage. Runs once (heaviest job), Linux + one Python.
   verify:
